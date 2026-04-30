@@ -12,10 +12,10 @@
 - [ ] All new files syntax checked
 - [ ] Integration tests pass: `pytest tests/test_distributed_integration.py -v`
 - [ ] Existing tests still pass: `pytest tests/ -v`
-- [ ] No import errors in main_distributed.py
+- [ ] No import errors in main.py
 
 ### Configuration Review
-- [ ] Redis host/port configured correctly in main_distributed.py
+- [ ] Redis host/port configured correctly in main.py
 - [ ] Redis DB number set (default: 0 for prod, 15 for tests)
 - [ ] TTL settings appropriate for use case
 - [ ] Port 8000 (web layer) is available
@@ -32,7 +32,7 @@ redis-cli ping
 
 ### Step 2: Start Web Layer
 ```bash
-python -m uvicorn main_distributed:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
 
 ### Step 3: In Another Terminal, Start Worker
@@ -210,15 +210,15 @@ redis-cli KEYS "measurement:status:*" | wc -l
    # Status preserved in Redis
    # Simply restart web layer
    pkill -f main_distributed
-   python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
+   python -m uvicorn main:app --host 0.0.0.0 --port 8000
    ```
 
 2. **Worker Crash**
    ```bash
    # Jobs in progress stored in Redis
    # Restart worker
-   pkill -f backend_worker
-   python backend_worker.py
+   pkill -f worker
+   python worker.py
    ```
 
 3. **Redis Crash**
@@ -253,7 +253,7 @@ gunicorn main_distributed:app \
 ```bash
 # Multiple workers for job parallelism
 for i in {1..4}; do
-  python backend_worker.py &
+  python worker.py &
 done
 ```
 
@@ -362,7 +362,7 @@ redis-cli FLUSHDB  # Clear corrupted data
 
 ### If Issues Occur
 1. Check health endpoint: `curl http://localhost:8000/health`
-2. Review logs: Look in backend_worker.py output
+2. Review logs: Look in worker.py output
 3. Check Redis: `redis-cli PING`
 4. Refer to troubleshooting in `DISTRIBUTED_ARCHITECTURE.md`
 

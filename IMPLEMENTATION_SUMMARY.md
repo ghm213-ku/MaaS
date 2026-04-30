@@ -23,8 +23,8 @@ distributed, asynchronous system with:
 | `app/services/status_manager.py` | Redis-backed status storage | ✅ Complete |
 | `app/services/job_processor.py` | Thread-based job execution | ✅ Complete |
 | `app/api/routes_distributed.py` | New distributed API endpoints | ✅ Complete |
-| `main_distributed.py` | Distributed web layer entry point | ✅ Complete |
-| `backend_worker.py` | Backend worker service | ✅ Complete |
+| `main.py` | Distributed web layer entry point | ✅ Complete |
+| `worker.py` | Backend worker service | ✅ Complete |
 | `requirements.txt` | Updated with redis + rq | ✅ Updated |
 
 ### Documentation (4 files)
@@ -49,7 +49,7 @@ distributed, asynchronous system with:
 ```
 ┌─────────────────────────────────────────┐
 │          FastAPI Web Layer              │
-│  (main_distributed.py)                  │
+│  (main.py)                  │
 │  - Receives requests                    │
 │  - Validates with Pydantic              │
 │  - Enqueues jobs instantly              │
@@ -68,7 +68,7 @@ distributed, asynchronous system with:
                     ▼
 ┌─────────────────────────────────────────┐
 │  Backend Worker Process                 │
-│  (backend_worker.py)                    │
+│  (worker.py)                    │
 │  ┌─────────────────────────────────────┐│
 │  │ Thread Pool (Job Processor)         ││
 │  │ ┌───────────┐  ┌───────────┐      ││
@@ -97,7 +97,7 @@ distributed, asynchronous system with:
      "metadata": {"detector": "det_001"}
    }
 
-2. WEB LAYER (main_distributed.py)
+2. WEB LAYER (main.py)
    ├─ Validate input (Pydantic)
    ├─ Generate status_id = "550e8400-e29b-41d4-a716-446655440000"
    ├─ Create status in Redis: QUEUED
@@ -192,7 +192,7 @@ register_handler(measurement_type, handler_class)
 
 ### Distributed Routes
 
-**File**: `app/api/routes_distributed.py`
+**File**: `app/api/routes.py`
 
 **Endpoints**:
 ```
@@ -219,7 +219,7 @@ redis-server  # Start Redis
 
 ### Development (Single Process)
 ```bash
-python -m uvicorn main_distributed:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
 
 ### Production (2 Processes)
@@ -312,7 +312,7 @@ pytest tests/ -v
 ## 📝 Configuration
 
 ### Change Redis Connection
-Edit in `main_distributed.py`:
+Edit in `main.py`:
 ```python
 StatusManager(
     redis_host="redis.example.com",
@@ -328,7 +328,7 @@ ex=7200  # 2 hours instead of 1 hour
 ```
 
 ### Change Poll Interval
-Edit in `backend_worker.py`:
+Edit in `worker.py`:
 ```python
 worker.run(poll_interval=0.5)  # Check every 500ms
 ```
@@ -361,8 +361,8 @@ redis-cli KEYS "measurement:*" | xargs redis-cli DEL
 ### Restart Services
 ```bash
 # Graceful restart (status preserved in Redis)
-pkill -f "main_distributed"
-python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
+pkill -f "main"
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ---
@@ -387,7 +387,7 @@ python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
 
 ### Immediate (Ready Now)
 - ✅ Run integration tests: `pytest tests/test_distributed_integration.py`
-- ✅ Start backend worker: `python backend_worker.py`
+- ✅ Start backend worker: `python worker.py`
 - ✅ Test API endpoints with sample requests
 
 ### Short Term
@@ -447,8 +447,8 @@ redis-server
 
 ### Problem: "Jobs not processing"
 ```
-Solution: Ensure backend_worker.py is running
-python backend_worker.py
+Solution: Ensure worker.py is running
+python worker.py
 ```
 
 ### Problem: "Status not found"
@@ -460,7 +460,7 @@ Recreate the measurement
 ### Problem: "Port 8000 already in use"
 ```
 Solution: Use different port
-python -m uvicorn main_distributed:app --port 8001
+python -m uvicorn main:app --port 8001
 ```
 
 ---

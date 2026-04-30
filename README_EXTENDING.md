@@ -219,7 +219,7 @@ class EnergySpectrumHandler:
 
 ## Step 3: Register Handler with System
 
-### In main_distributed.py
+### In main.py
 
 Edit the `lifespan()` function:
 
@@ -241,7 +241,7 @@ async def lifespan(app: FastAPI):
     # ... rest of code ...
 ```
 
-### In backend_worker.py
+### In worker.py
 
 Edit the `__init__()` method:
 

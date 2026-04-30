@@ -481,7 +481,7 @@ console.log("Final results:", result.results);
 ```
 Problem: Can't connect to MaaS
 Solution: 
-  1. Ensure server is running: python -m uvicorn main_distributed:app
+  1. Ensure server is running: python -m uvicorn main:app
   2. Check correct URL: http://localhost:8000
   3. Check firewall: Port 8000 should be open
 ```

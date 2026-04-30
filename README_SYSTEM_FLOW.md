@@ -19,7 +19,7 @@ initial reception to completion and status update.
                                  ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                    FASTAPI WEB LAYER                             │
-│                  (main_distributed.py)                           │
+│                  (main.py)                           │
 │  • Receives HTTP request                                         │
 │  • Validates with Pydantic models                               │
 │  • Returns immediately with status ID                           │
@@ -41,7 +41,7 @@ initial reception to completion and status update.
                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                   BACKEND WORKER                                 │
-│                (backend_worker.py)                               │
+│                (worker.py)                               │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │          JOB PROCESSOR (Thread Pool)                       │ │
@@ -76,7 +76,7 @@ initial reception to completion and status update.
      "metadata": {"detector": "det_001"}
    }
 
-2. FASTAPI Router (routes_distributed.py)
+2. FASTAPI Router (routes.py)
    ├─ Route handler receives request
    └─ Dependency injection provides: status_manager, job_processor
 
@@ -91,7 +91,7 @@ initial reception to completion and status update.
    └─ Example: "550e8400-e29b-41d4-a716-446655440000"
 ```
 
-**Code Location**: `app/api/routes_distributed.py` lines 30-60 (start_count_rate_measurement)
+**Code Location**: `app/api/routes.py` lines 30-60 (start_count_rate_measurement)
 
 ---
 
@@ -141,7 +141,7 @@ initial reception to completion and status update.
    └─ Total time: < 10ms
 ```
 
-**Code Location**: `app/api/routes_distributed.py` lines 50-60
+**Code Location**: `app/api/routes.py` lines 50-60
 
 ---
 
@@ -271,7 +271,7 @@ initial reception to completion and status update.
 CLIENT:
   GET /api/v1/measurements/550e8400-e29b-41d4-a716-446655440000/status
 
-FASTAPI Router (routes_distributed.py):
+FASTAPI Router (routes.py):
   ├─ Extract status_id from URL
   └─ Call: status_manager.get_status(status_id)
 
@@ -293,7 +293,7 @@ RESPONSE:
 Note: Can be queried anytime, even while measurement is running
 ```
 
-**Code Location**: `app/api/routes_distributed.py` - `get_measurement_status()` method
+**Code Location**: `app/api/routes.py` - `get_measurement_status()` method
 
 ---
 
@@ -329,7 +329,7 @@ RESPONSE:
   }
 ```
 
-**Code Location**: `app/api/routes_distributed.py` - `stop_measurement()` method
+**Code Location**: `app/api/routes.py` - `stop_measurement()` method
 
 ---
 
@@ -517,7 +517,7 @@ HTTP Request
    ```
 
 3. **Check logs**
-   - Look for status_id in logs from routes_distributed.py
+   - Look for status_id in logs from routes.py
    - Look for status_id in logs from job_processor.py
    - Look for handler execution logs
 

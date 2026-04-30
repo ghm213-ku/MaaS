@@ -57,7 +57,7 @@ README_DEVELOPER_GUIDE.md       ← For Developers (Running/Debugging)
 app/
 ├── api/
 │   ├── routes.py                (LEGACY - Keep for backward compatibility)
-│   └── routes_distributed.py    (NEW - Use this)
+│   └── routes.py       (CURRENT - USE THIS)
 │
 ├── services/
 │   ├── measurement.py           (LEGACY - Keep for backward compatibility)
@@ -76,9 +76,9 @@ app/
 ### Entry Points
 
 ```
-main_distributed.py             (NEW - Web layer entry point, USE THIS)
+main.py                         (CURRENT - Web layer entry point, USE THIS)
 main.py                         (LEGACY - Keep if needed for backward compat)
-backend_worker.py              (NEW - Backend worker entry point)
+worker.py                      (CURRENT - Backend worker entry point)
 ```
 
 ### Testing

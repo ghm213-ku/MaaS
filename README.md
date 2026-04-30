@@ -24,7 +24,7 @@ pip install -r requirements.txt
 redis-server
 
 # 3. Start MaaS (in another terminal)
-python -m uvicorn main_distributed:app --reload
+python -m uvicorn main:app --reload
 
 # 4. Try it! (in a third terminal)
 curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
@@ -82,7 +82,7 @@ MaaS/
 ├── app/                          ← Application code
 │   ├── api/
 │   │   ├── routes.py            (legacy monolithic)
-│   │   └── routes_distributed.py ← Distributed API endpoints
+│   │   └── routes.py ← Distributed API endpoints
 │   ├── services/
 │   │   ├── status_manager.py    ← Redis status storage
 │   │   ├── job_processor.py     ← Thread-based job execution
@@ -96,9 +96,8 @@ MaaS/
 │   ├── test_distributed_integration.py ← Integration tests
 │   └── test_*.py                ← Unit tests
 │
-├── main_distributed.py          ← Web layer entry point
-├── backend_worker.py            ← Backend worker process
-├── main.py                      ← Legacy entry point
+├── main.py                      ← Web layer entry point
+├── worker.py                    ← Backend worker process
 │
 ├── README.md                    ← This file
 ├── README_USER_GUIDE.md         ← For users
@@ -177,7 +176,7 @@ See [README_DEVELOPER_GUIDE.md](README_DEVELOPER_GUIDE.md) for detailed debuggin
 
 1. Create Pydantic model in `app/models.py`
 2. Create handler in `app/services/my_handler.py`
-3. Register in `main_distributed.py` and `backend_worker.py`
+3. Register in `main.py` and `worker.py`
 4. Write tests in `tests/test_my_handler.py`
 
 See [README_EXTENDING.md](README_EXTENDING.md) for step-by-step guide.
@@ -189,17 +188,17 @@ See [README_EXTENDING.md](README_EXTENDING.md) for step-by-step guide.
 ### Development (Single Process)
 
 ```bash
-python -m uvicorn main_distributed:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
 
 ### Production (Separate Processes)
 
 ```bash
 # Terminal 1: Web Layer
-python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 # Terminal 2: Backend Worker (can run on different machine)
-python backend_worker.py
+python worker.py
 ```
 
 ### With Docker
@@ -212,10 +211,10 @@ RUN pip install -r requirements.txt
 COPY . .
 
 # Web layer
-CMD ["uvicorn", "main_distributed:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # Backend worker (different Dockerfile or CMD)
-# CMD ["python", "backend_worker.py"]
+# CMD ["python", "worker.py"]
 ```
 
 See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) for detailed steps.
@@ -249,7 +248,7 @@ processor.stop_job(status_id)
 ### API Routes
 FastAPI endpoints for starting measurements, querying status, stopping jobs.
 
-**Location**: `app/api/routes_distributed.py`
+**Location**: `app/api/routes.py`
 
 ```
 POST   /api/v1/measurements/count-rate

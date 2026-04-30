@@ -47,13 +47,13 @@ The application has been redesigned to use a distributed architecture with the f
 - Updates status as jobs progress
 - Handles errors and cleanup
 
-### 3. Web Layer (`app/api/routes_distributed.py`)
+### 3. Web Layer (`app/api/routes.py`)
 - FastAPI routes for starting measurements
 - Returns unique status IDs (UUIDs) instead of measurement IDs
 - Endpoints remain similar but now use enqueuing instead of direct execution
 - Status queries return information from Redis
 
-### 4. Backend Worker (`backend_worker.py`)
+### 4. Backend Worker (`worker.py`)
 - Standalone process that keeps the job processor alive
 - Monitors Redis connection health
 - Can be scaled to multiple instances
@@ -92,7 +92,7 @@ For testing and development, you can run everything in one process:
 
 ```bash
 # Run the main application with FastAPI
-python -m uvicorn main_distributed:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 This starts the web layer, and jobs are processed in background threads as they arrive.

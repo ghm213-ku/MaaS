@@ -28,7 +28,7 @@ redis-server
 
 ```bash
 # Start the application with auto-reload
-python -m uvicorn main_distributed:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 
 # Visit: http://localhost:8000/docs for API documentation
 ```
@@ -37,10 +37,10 @@ python -m uvicorn main_distributed:app --reload --port 8000
 
 ```bash
 # Terminal 1: Web Layer
-python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
-# Terminal 2: Backend Worker
-python backend_worker.py
+# Terminal 2: Backend worker
+python worker.py
 ```
 
 ---
@@ -57,7 +57,7 @@ MaaS/
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── routes.py            ← Original monolithic routes (legacy)
-│   │   └── routes_distributed.py ← NEW: Distributed API endpoints
+│   │   └── routes.py ← NEW: Distributed API endpoints
 │   │
 │   ├── services/
 │   │   ├── __init__.py
@@ -93,7 +93,7 @@ MaaS/
 
 ## Code Structure Deep Dive
 
-### Entry Point: main_distributed.py
+### Entry Point: main.py
 
 ```python
 # This is the main web layer entry point
@@ -121,7 +121,7 @@ async def lifespan(app: FastAPI):
     # Shutdown code here (optional)
 ```
 
-### API Routes: app/api/routes_distributed.py
+### API Routes: app/api/routes.py
 
 ```python
 # Each route follows this pattern:
@@ -254,7 +254,7 @@ ps aux | grep redis
 # Check specific measurement in logs:
 grep -r "550e8400-e29b-41d4-a716-446655440000" .
 
-# Backend worker logs (in terminal running backend_worker.py)
+# Backend worker logs (in terminal running worker.py)
 # Look for: handler execution, status updates, errors
 ```
 
@@ -278,7 +278,7 @@ KEYS measurement:*:550e8400-e29b-41d4-a716-446655440000
 
 ### Level 4: Add Debug Output
 
-Edit **main_distributed.py**:
+Edit **main.py**:
 ```python
 # In lifespan():
 logger.info(f"StatusManager initialized: {status_manager}")
@@ -286,7 +286,7 @@ logger.info(f"JobProcessor initialized: {job_processor}")
 logger.info(f"Handlers registered: {job_processor.handlers}")
 ```
 
-Edit **routes_distributed.py**:
+Edit **routes.py**:
 ```python
 # In start_count_rate_measurement():
 logger.debug(f"Request received: {request.dict()}")
@@ -425,7 +425,7 @@ redis-server  # Start Redis first
 redis-cli GET measurement:status:{id}
 
 # 2. Check backend worker is running
-ps aux | grep backend_worker.py
+ps aux | grep worker.py
 
 # 3. Check logs for exceptions
 
@@ -473,7 +473,7 @@ redis-cli GET measurement:status:{id}  # Check it updated
 ### Monitor Response Times
 
 ```python
-# Add timing to routes_distributed.py:
+# Add timing to routes.py:
 import time
 
 @router.post("/count-rate", ...)
@@ -622,8 +622,8 @@ def create_status(
 
 1. **Add Pydantic model** in `app/models.py`
 2. **Create handler** in `app/services/my_handler.py`
-3. **Register handler** in `main_distributed.py` and `backend_worker.py`
-4. **Add route** (optional) in `app/api/routes_distributed.py`
+3. **Register handler** in `main.py` and `worker.py`
+4. **Add route** (optional) in `app/api/routes.py`
 5. **Write tests** in `tests/test_my_handler.py`
 
 See **README_EXTENDING.md** for detailed guide.
@@ -670,8 +670,8 @@ ps aux | grep python
 ps aux | grep redis
 
 # Kill service
-pkill -f "uvicorn main_distributed"
-pkill -f "backend_worker.py"
+pkill -f "uvicorn main"
+pkill -f "worker.py"
 
 # Check port in use
 netstat -tlnp | grep 8000
@@ -724,7 +724,7 @@ netstat -tlnp | grep 8000
 pkill -f "uvicorn"
 
 # Or use different port:
-python -m uvicorn main_distributed:app --port 8001
+python -m uvicorn main:app --port 8001
 ```
 
 ### "pytest: command not found"
@@ -754,7 +754,7 @@ StatusManager(redis_host="127.0.0.1", redis_port=6379)
 
 ## Next Steps
 
-1. Read the codebase starting with `main_distributed.py`
+1. Read the codebase starting with `main.py`
 2. Run tests to understand expected behavior
 3. Try adding a new measurement type (see README_EXTENDING.md)
 4. Set up debugging in your IDE

@@ -14,7 +14,7 @@ pip install redis rq
 redis-server
 
 # 3. Run the application (combines web + worker in one process)
-python -m uvicorn main_distributed:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
 
 Open browser: http://localhost:8000/docs
@@ -28,7 +28,7 @@ python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
 
 **Terminal 2 - Backend Worker:**
 ```bash
-python backend_worker.py
+python worker.py
 ```
 
 ## Test the API
