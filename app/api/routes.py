@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, Callable
 from app.models import (
     CountRateMeasurementRequest,
+    SaveRawTagsMeasurmentRequest,
     MeasurementResponse,
     MeasurementStatusResponse,
     ErrorResponse,
@@ -72,6 +73,54 @@ async def start_count_rate_measurement(
         
     except Exception as e:
         logger.error(f"Failed to start count-rate measurement: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+    
+@router.post("/save-raw-tags", response_model=MeasurementResponse, status_code=201)
+async def start_save_raw_tags_measurement(
+    request: SaveRawTagsMeasurmentRequest,
+    service: MeasurementService = Depends(get_measurement_service),
+) -> MeasurementResponse:
+    """
+    Start a new save-raw-tags measurement request.
+    
+    Returns a unique measurement ID to be used for status queries and stopping.
+    
+    Example:
+        POST /api/v1/measurements/save-raw-tags
+        {
+            "measurement_type": "save_raw_tags",
+            "duration_seconds": 60,
+            "metadata": {
+                "channel_list": [1, 2, 3],
+                "target_file_path": "C:\\Users\\s257050\\Desktop\\"
+            }
+        }
+    """
+    logger.info(f"Received save-raw-tags measurement request: {request.dict()}")
+    
+    try:
+        # Start measurement
+        measurement_id = await service.start_measurement(
+            measurement_type=request.measurement_type.value,
+            duration_seconds=request.duration_seconds,
+            metadata=request.metadata.model_dump(),
+        )
+        
+        logger.info(f"[{measurement_id}] Save-raw-tags measurement started successfully")
+        
+        return MeasurementResponse(
+            measurement_id=measurement_id,
+            measurement_type=request.measurement_type,
+            status="active",
+            started_at=datetime.utcnow(),
+            message=f"Save-raw-tags measurement started. Use ID '{measurement_id}' to query status or stop.",
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to start save-raw-tags measurement: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=str(e),

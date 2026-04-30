@@ -1,0 +1,179 @@
+"""Job processor for backend worker service."""
+import asyncio
+import threading
+from typing import Optional, Dict, Any, Callable
+from datetime import datetime
+from app.services.status_manager import StatusManager, MeasurementStatus
+from app.utils.logger import configure_logging
+
+logger = configure_logging(__name__)
+
+
+class JobProcessor:
+    """Processes measurement jobs in separate threads."""
+    
+    def __init__(self, status_manager: StatusManager):
+        """Initialize job processor."""
+        self.status_manager = status_manager
+        self.active_jobs: Dict[str, threading.Thread] = {}
+        self.job_handlers: Dict[str, Callable] = {}
+    
+    def register_handler(self, measurement_type: str, handler_class: type) -> None:
+        """Register a handler for a measurement type."""
+        self.job_handlers[measurement_type] = handler_class
+        logger.info(f"Registered handler for measurement type: {measurement_type}")
+    
+    def process_job(
+        self,
+        status_id: str,
+        measurement_type: str,
+        duration_seconds: Optional[int] = None,
+    ) -> None:
+        """Process a measurement job in a new thread.
+        
+        This method spawns a new thread for the job and returns immediately,
+        allowing other jobs to be processed concurrently.
+        """
+        # Create and start job thread
+        job_thread = threading.Thread(
+            target=self._run_job_in_thread,
+            args=(status_id, measurement_type, duration_seconds),
+            daemon=False,
+            name=f"job-{status_id}"
+        )
+        
+        job_thread.start()
+        self.active_jobs[status_id] = job_thread
+        
+        logger.info(f"[{status_id}] Job thread started for {measurement_type}")
+    
+    def _run_job_in_thread(
+        self,
+        status_id: str,
+        measurement_type: str,
+        duration_seconds: Optional[int] = None,
+    ) -> None:
+        """Run the job in the spawned thread."""
+        try:
+            # Update status to active
+            self.status_manager.update_status(
+                status_id,
+                MeasurementStatus.ACTIVE.value,
+                f"{measurement_type} measurement started"
+            )
+            
+            # Get handler for this measurement type
+            if measurement_type not in self.job_handlers:
+                raise ValueError(f"Unknown measurement type: {measurement_type}")
+            
+            handler_class = self.job_handlers[measurement_type]
+            handler = handler_class()
+            
+            # Get metadata
+            metadata = self.status_manager.get_metadata(status_id) or {}
+            
+            # Run the handler based on measurement type
+            if measurement_type == "count_rate":
+                self._handle_count_rate(status_id, handler, duration_seconds, metadata)
+            elif measurement_type == "save_raw_tags":
+                self._handle_save_raw_tags(status_id, handler, duration_seconds, metadata)
+            else:
+                raise ValueError(f"Unknown measurement type: {measurement_type}")
+            
+            # Update status to completed
+            self.status_manager.update_status(
+                status_id,
+                MeasurementStatus.COMPLETED.value,
+                f"{measurement_type} measurement completed successfully"
+            )
+            
+            logger.info(f"[{status_id}] Job completed successfully")
+        
+        except Exception as e:
+            logger.error(f"[{status_id}] Job failed: {e}", exc_info=True)
+            self.status_manager.update_status(
+                status_id,
+                MeasurementStatus.FAILED.value,
+                f"Job failed: {str(e)}"
+            )
+        
+        finally:
+            # Clean up from active jobs
+            if status_id in self.active_jobs:
+                del self.active_jobs[status_id]
+    
+    def _handle_count_rate(
+        self,
+        status_id: str,
+        handler: Any,
+        duration_seconds: Optional[int],
+        metadata: Dict[str, Any],
+    ) -> None:
+        """Handle count-rate measurement."""
+        # Run the async handler
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                handler.start(duration_seconds, metadata)
+            )
+        finally:
+            loop.close()
+    
+    def _handle_save_raw_tags(
+        self,
+        status_id: str,
+        handler: Any,
+        duration_seconds: Optional[int],
+        metadata: Dict[str, Any],
+    ) -> None:
+        """Handle save-raw-tags measurement."""
+        if not duration_seconds:
+            raise ValueError("duration_seconds is required for save_raw_tags")
+        
+        channel_list = metadata.get("channel_list")
+        target_file_path = metadata.get("target_file_path")
+        
+        if not channel_list or not target_file_path:
+            raise ValueError("channel_list and target_file_path are required in metadata")
+        
+        # Run the async handler
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                handler.start(duration_seconds, channel_list, target_file_path)
+            )
+        finally:
+            loop.close()
+    
+    def stop_job(self, status_id: str) -> bool:
+        """Stop a running job (returns after stopping)."""
+        if status_id not in self.active_jobs:
+            logger.warning(f"[{status_id}] Job not found in active jobs")
+            return False
+        
+        job_thread = self.active_jobs[status_id]
+        
+        # Note: Python threads cannot be forcibly terminated safely.
+        # In a production system, you would implement a cancellation mechanism
+        # (e.g., setting a flag that the job checks periodically)
+        
+        logger.info(f"[{status_id}] Stop signal sent to job")
+        
+        # Update status
+        self.status_manager.update_status(
+            status_id,
+            MeasurementStatus.STOPPED.value,
+            "Measurement stopped by user"
+        )
+        
+        return True
+    
+    def get_job_status(self, status_id: str) -> Optional[Dict[str, Any]]:
+        """Get the status of a job."""
+        return self.status_manager.get_status(status_id)
+    
+    def is_job_active(self, status_id: str) -> bool:
+        """Check if a job is currently running."""
+        return status_id in self.active_jobs and self.active_jobs[status_id].is_alive()

@@ -11,6 +11,25 @@ class MeasurementType(str, Enum):
     SAVE_RAW_TAGS = "save_raw_tags"
 
 
+class SaveRawTagsMetadata(BaseModel):
+    """Metadata model for save-raw-tags measurements with required fields."""
+    
+    channel_list: list[int] = Field(
+        description="List of channels to save raw tags from. Required."
+    )
+    target_file_path: str = Field(
+        description="File path to save the raw tags data. Required."
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "channel_list": [1, 2, 3],
+                "target_file_path": "C:\\Users\\s257050\\Desktop\\fileWriter"
+            }
+        }
+
+
 class CountRateMeasurementRequest(BaseModel):
     """Request model for count-rate measurements."""
     
@@ -38,18 +57,17 @@ class SaveRawTagsMeasurmentRequest(BaseModel):
 
     measurement_type: MeasurementType = MeasurementType.SAVE_RAW_TAGS
     duration_seconds: int = Field(description="Duration in seconds to save raw tags")
-    channel_list: list[int] = Field(description="List of channels to save raw tags from")
-    target_file_path: str = Field("C:\\Users\\s257050\\", description="File path to save the raw tags data")
-    metadata: Optional[dict[str, Any]] = Field(
-        None,
-        description="Optional: custom metadata for this measurement"
-    )
+    metadata: SaveRawTagsMetadata = Field(description="Metadata containing required channel_list and target_file_path")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "measurement_type": "save_raw_tags",
-                "metadata": {"detector_id": "det_002", "source": "lab_C"}
+                "duration_seconds": 60,
+                "metadata": {
+                    "channel_list": [1, 2, 3],
+                    "target_file_path": "C:\\Users\\s257050\\Desktop\\fileWriter"
+                }
             }
         }
 

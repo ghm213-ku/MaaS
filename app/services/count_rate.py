@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from app.services.measurement import MeasurementHandler
 from app.utils.logger import configure_logging
+from Swabian import TimeTagger
 
 logger = configure_logging(__name__)
 
@@ -11,7 +12,8 @@ logger = configure_logging(__name__)
 class CountRateMeasurementHandler(MeasurementHandler):
     """Handler for count-rate measurements."""
     
-    def __init__(self):
+    def __init__(self, tagger: Optional[TimeTagger.TimeTagger] = None):
+        super().__init__(tagger)
         self._measurement_task: Optional[asyncio.Task] = None
         self._count = 0
         self._start_time: Optional[datetime] = None

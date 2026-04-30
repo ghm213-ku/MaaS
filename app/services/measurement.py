@@ -11,6 +11,10 @@ logger = configure_logging(__name__)
 
 class MeasurementHandler(ABC):
     """Abstract base class for measurement type handlers."""
+    @abstractmethod
+    def __init__(self, tagger: Optional[TimeTagger.TimeTagger] = None):
+        """Initialize the handler with optional TimeTagger instance."""
+        self._tagger = tagger
     
     @abstractmethod
     async def start(self, duration_seconds: Optional[int], metadata: Optional[Dict[str, Any]]) -> None:
@@ -18,7 +22,7 @@ class MeasurementHandler(ABC):
         pass
     
     @abstractmethod
-    async def stop(self) -> Dict[str, Any]:
+    async def stop(self) -> None:
         """Stop the measurement and return results."""
         pass
 
