@@ -205,7 +205,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         """Handler should initialize correctly with mocked tagger."""
         handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
         
-        assert handler._tagger == mock_tagger
+        assert handler.tagger == mock_tagger
         assert handler._measurement_task is None
         assert handler._start_time is None
     
@@ -225,7 +225,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
                 "target_file_path": file_path
             }
             
-            await handler.start(duration, channels, file_path)
+            await handler.start(duration, metadata)
             
             assert handler._start_time is not None
             assert isinstance(handler._start_time, datetime)
@@ -308,12 +308,12 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
         
         # Verify mock is the tagger
-        assert handler._tagger is mock_tagger
+        assert handler.tagger is mock_tagger
         
         # Verify mock methods are callable
-        assert callable(handler._tagger.startFor)
-        assert callable(handler._tagger.waitUntilFinished)
-        assert callable(handler._tagger.stop)
+        assert callable(handler.tagger.startFor)
+        assert callable(handler.tagger.waitUntilFinished)
+        assert callable(handler.tagger.stop)
     
     @pytest.mark.asyncio
     async def test_handler_metadata_extraction(self, mock_tagger):
@@ -467,7 +467,7 @@ class TestIntegrationWithMockedTaggerAndModel:
         assert duration == 60
         assert channels == [1, 2, 3]
         assert file_path == "C:\\output\\measurement.dat"
-        assert handler._tagger is mock_tagger
+        assert handler.tagger is mock_tagger
     
     def test_mocked_tagger_file_writer_interaction(self, mock_tagger, mock_file_writer):
         """Test interaction between mocked tagger and FileWriter."""

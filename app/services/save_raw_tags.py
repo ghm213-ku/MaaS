@@ -17,18 +17,21 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
         self._start_time: Optional[datetime] = None
         logger.debug("SaveRawTagsMeasurementHandler initialized")
         
-    async def start(self, duration_seconds: int, channels_list: list[int], target_file_path: str) -> None:
+    async def start(self, duration_seconds: Optional[int], metadata: Optional[Dict[str, Any]]) -> None:
         """
         Start saving raw time tags from time tagger
 
         Args:
-            duration_seconds (int): Duration for which the time tags should be saved
-            channels_list (list[int]): List of channels to save time tags from
-            target_file_path (str): Path to the file where time tags should be saved
+            duration_seconds: Auto-stop duration (managed by Measurement)
+            metadata: Measurement metadata containing 'channel_list' and 'target_file_path'
         """
+        metadata = metadata or {}
+        channels_list = metadata.get('channel_list', [])
+        target_file_path = metadata.get('target_file_path', '')
+        
         logger.info(f"Starting save raw tags measurement for {duration_seconds} seconds on channels {channels_list}")
         self._start_time = datetime.now()
-        fileWriter = TimeTagger.FileWriter(target_file_path, tagger=self._tagger, channels=channels_list)
+        fileWriter = TimeTagger.FileWriter(target_file_path, tagger=self.tagger, channels=channels_list)
         
         logger.info("Save raw tags started")
         fileWriter.startFor(int(duration_seconds*1e12)) 

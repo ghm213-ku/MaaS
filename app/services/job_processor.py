@@ -1,8 +1,10 @@
 """Job processor for backend worker service."""
 import asyncio
 import threading
+import json
 from typing import Optional, Dict, Any, Callable
 from datetime import datetime
+import redis
 from app.services.status_manager import StatusManager, MeasurementStatus
 from app.utils.logger import configure_logging
 
@@ -12,32 +14,95 @@ logger = configure_logging(__name__)
 class JobProcessor:
     """Processes measurement jobs in separate threads."""
     
-    def __init__(self, status_manager: StatusManager):
+    def __init__(self, status_manager: StatusManager, redis_client: Optional[redis.Redis] = None):
         """Initialize job processor."""
         self.status_manager = status_manager
         self.active_jobs: Dict[str, threading.Thread] = {}
         self.job_handlers: Dict[str, Callable] = {}
+        self.redis_client = redis_client or status_manager.redis_client
+        self.job_queue_key = "measurement:job_queue"
+        
+        # Expose handlers for backward compatibility
+        self.handlers = self.job_handlers
     
     def register_handler(self, measurement_type: str, handler_class: type) -> None:
         """Register a handler for a measurement type."""
         self.job_handlers[measurement_type] = handler_class
         logger.info(f"Registered handler for measurement type: {measurement_type}")
     
+    def enqueue_job(
+        self,
+        status_id: str,
+        measurement_type: str,
+        duration_seconds: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Enqueue a job to Redis for the worker to process.
+        
+        This is called by the web layer to queue jobs.
+        The worker will pick them up from the queue.
+        
+        Args:
+            status_id: Unique measurement ID
+            measurement_type: Type of measurement (e.g., 'count_rate')
+            duration_seconds: Duration for the measurement
+            metadata: Measurement metadata (detector_id, channels, etc.)
+        """
+        job_data = {
+            "status_id": status_id,
+            "measurement_type": measurement_type,
+            "duration_seconds": duration_seconds,
+            "metadata": metadata or {},
+        }
+        
+        # Push to Redis job queue
+        self.redis_client.rpush(
+            self.job_queue_key,
+            json.dumps(job_data)
+        )
+        
+        logger.info(f"[{status_id}] Job enqueued: {measurement_type}")
+    
+    def get_next_job(self) -> Optional[Dict[str, Any]]:
+        """Get the next job from the queue (blocking pop).
+        
+        This is called by the worker to retrieve jobs.
+        Returns None if timeout occurs.
+        """
+        # Blocking pop with timeout
+        result = self.redis_client.blpop(self.job_queue_key, timeout=1)
+        
+        if result:
+            # result is (key, value) tuple
+            job_json = result[1]
+            return json.loads(job_json)
+        
+        return None
+    
     def process_job(
         self,
         status_id: str,
         measurement_type: str,
         duration_seconds: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Process a measurement job in a new thread.
         
         This method spawns a new thread for the job and returns immediately,
         allowing other jobs to be processed concurrently.
+        
+        Called by the worker after retrieving from queue.
+        
+        Args:
+            status_id: Unique measurement ID
+            measurement_type: Type of measurement
+            duration_seconds: Duration for the measurement
+            metadata: Measurement metadata
         """
         # Create and start job thread
         job_thread = threading.Thread(
             target=self._run_job_in_thread,
-            args=(status_id, measurement_type, duration_seconds),
+            args=(status_id, measurement_type, duration_seconds, metadata),
             daemon=False,
             name=f"job-{status_id}"
         )
@@ -52,6 +117,7 @@ class JobProcessor:
         status_id: str,
         measurement_type: str,
         duration_seconds: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Run the job in the spawned thread."""
         try:
@@ -69,8 +135,9 @@ class JobProcessor:
             handler_class = self.job_handlers[measurement_type]
             handler = handler_class()
             
-            # Get metadata
-            metadata = self.status_manager.get_metadata(status_id) or {}
+            # Use provided metadata or fetch from status manager
+            if metadata is None:
+                metadata = self.status_manager.get_metadata(status_id) or {}
             
             # Run the handler based on measurement type
             if measurement_type == "count_rate":
@@ -149,24 +216,21 @@ class JobProcessor:
     
     def stop_job(self, status_id: str) -> bool:
         """Stop a running job (returns after stopping)."""
-        if status_id not in self.active_jobs:
-            logger.warning(f"[{status_id}] Job not found in active jobs")
-            return False
-        
-        job_thread = self.active_jobs[status_id]
-        
-        # Note: Python threads cannot be forcibly terminated safely.
-        # In a production system, you would implement a cancellation mechanism
-        # (e.g., setting a flag that the job checks periodically)
-        
-        logger.info(f"[{status_id}] Stop signal sent to job")
-        
-        # Update status
+        # Update status to stopped
         self.status_manager.update_status(
             status_id,
             MeasurementStatus.STOPPED.value,
             "Measurement stopped by user"
         )
+        
+        # Try to remove from active jobs if present
+        if status_id in self.active_jobs:
+            logger.info(f"[{status_id}] Stop signal sent to job thread")
+            # Note: Python threads cannot be forcibly terminated safely.
+            # In a production system, you would implement a cancellation mechanism
+            # (e.g., setting a flag that the job checks periodically)
+        else:
+            logger.info(f"[{status_id}] Job not in active jobs, but marked as stopped")
         
         return True
     

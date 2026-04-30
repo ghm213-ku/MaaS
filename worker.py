@@ -15,6 +15,7 @@ from app.services.count_rate import CountRateMeasurementHandler
 from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
 from app.utils.logger import configure_logging
 import time
+import json
 
 logger = configure_logging(__name__)
 
@@ -42,15 +43,11 @@ class BackendWorker:
         
         logger.info("Backend worker initialized")
     
-    def run(self, poll_interval: int = 1):
+    def run(self, poll_timeout: int = 1):
         """
         Run the backend worker.
         
-        This is a simple implementation that keeps the process alive.
-        In a production system, you would use RQ Worker or similar.
-        
-        Args:
-            poll_interval: Seconds to sleep between status checks
+        Continuously polls the job queue from Redis and processes jobs.
         """
         logger.info("Backend worker started")
         logger.info(f"Registered handlers: count_rate, save_raw_tags")
@@ -61,14 +58,30 @@ class BackendWorker:
                 # Check Redis connection health
                 if not self.status_manager.health_check():
                     logger.warning("Redis connection unhealthy, retrying...")
-                    time.sleep(poll_interval)
+                    time.sleep(poll_timeout)
                     continue
                 
-                # In this implementation, jobs are processed in separate threads
-                # when process_job() is called from the API layer
-                # The worker just keeps the process alive
+                # Get next job from queue (blocking pop with timeout)
+                job = self.job_processor.get_next_job()
                 
-                time.sleep(poll_interval)
+                if job:
+                    status_id = job.get("status_id")
+                    measurement_type = job.get("measurement_type")
+                    duration_seconds = job.get("duration_seconds")
+                    metadata = job.get("metadata")
+                    
+                    logger.info(f"[{status_id}] Processing job: {measurement_type}")
+                    
+                    try:
+                        # Process the job (spawns a thread)
+                        self.job_processor.process_job(
+                            status_id=status_id,
+                            measurement_type=measurement_type,
+                            duration_seconds=duration_seconds,
+                            metadata=metadata,
+                        )
+                    except Exception as e:
+                        logger.error(f"[{status_id}] Error processing job: {e}", exc_info=True)
         
         except KeyboardInterrupt:
             logger.info("Backend worker shutting down...")

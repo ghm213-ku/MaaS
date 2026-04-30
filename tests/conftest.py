@@ -2,10 +2,16 @@
 import pytest
 import asyncio
 import sys
+import os
 from pathlib import Path
 
-# Add the project root to the path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add the project root to the path (for safety)
+project_root = str(Path(__file__).parent.parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Also ensure we're in the right working directory
+os.chdir(project_root)
 
 
 @pytest.fixture(scope="session")

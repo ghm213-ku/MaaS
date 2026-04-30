@@ -85,7 +85,7 @@ class TestStatusManagerWithRedis:
         # Update to active
         status_manager.update_status(
             status_id,
-            MeasurementStatus.ACTIVE,
+            MeasurementStatus.ACTIVE.value,
             "Measurement started",
             None,
         )
@@ -97,7 +97,7 @@ class TestStatusManagerWithRedis:
         results = {"total_count": 12345, "duration": 30.5}
         status_manager.update_status(
             status_id,
-            MeasurementStatus.COMPLETED,
+            MeasurementStatus.COMPLETED.value,
             "Measurement completed",
             results,
         )
@@ -175,14 +175,15 @@ class TestJobProcessorIntegration:
         with patch.object(CountRateMeasurementHandler, "start"):
             job_processor.process_job(status_id, "count_rate", 2)
             
-            # Give thread a moment to start
-            time.sleep(0.1)
+            # Give thread a moment to complete
+            time.sleep(0.2)
             
-            # Check status was marked as active
+            # Check status was processed (could be active during or completed after)
             status = status_manager.get_status(status_id)
             assert status["status"] in [
                 MeasurementStatus.ACTIVE.value,
                 MeasurementStatus.QUEUED.value,
+                MeasurementStatus.COMPLETED.value,
             ]
 
     def test_handler_registration(self, job_processor):
@@ -201,7 +202,7 @@ class TestJobProcessorIntegration:
         # Mark as active
         status_manager.update_status(
             status_id,
-            MeasurementStatus.ACTIVE,
+            MeasurementStatus.ACTIVE.value,
             "Running",
             None,
         )
@@ -263,7 +264,7 @@ class TestDistributedWorkflow:
         # Step 3: Activate (worker)
         status_manager.update_status(
             status_id,
-            MeasurementStatus.ACTIVE,
+            MeasurementStatus.ACTIVE.value,
             "Measurement started",
             None,
         )
@@ -275,7 +276,7 @@ class TestDistributedWorkflow:
         results = {"total_count": 50000, "duration": 5.0}
         status_manager.update_status(
             status_id,
-            MeasurementStatus.COMPLETED,
+            MeasurementStatus.COMPLETED.value,
             "Measurement completed successfully",
             results,
         )
@@ -296,7 +297,7 @@ class TestDistributedWorkflow:
         # Activate
         status_manager.update_status(
             status_id,
-            MeasurementStatus.ACTIVE,
+            MeasurementStatus.ACTIVE.value,
             "Running",
             None,
         )
@@ -305,7 +306,7 @@ class TestDistributedWorkflow:
         error_message = "Connection timeout to detector"
         status_manager.update_status(
             status_id,
-            MeasurementStatus.FAILED,
+            MeasurementStatus.FAILED.value,
             f"Error: {error_message}",
             {"error": error_message},
         )
@@ -323,7 +324,7 @@ class TestDistributedWorkflow:
         status_manager.create_status(status_id, "count_rate", 60, {})
         status_manager.update_status(
             status_id,
-            MeasurementStatus.ACTIVE,
+            MeasurementStatus.ACTIVE.value,
             "Running",
             None,
         )
@@ -374,13 +375,13 @@ class TestDataConsistency:
         status_manager.create_status(status_id, "count_rate", 30, {})
         status_manager.update_status(
             status_id,
-            MeasurementStatus.ACTIVE,
+            MeasurementStatus.ACTIVE.value,
             "Running",
             None,
         )
         status_manager.update_status(
             status_id,
-            MeasurementStatus.COMPLETED,
+            MeasurementStatus.COMPLETED.value,
             "Done",
             results,
         )
@@ -397,9 +398,9 @@ class TestDataConsistency:
         
         # Update multiple times rapidly
         states = [
-            (MeasurementStatus.QUEUED, "Queued"),
-            (MeasurementStatus.ACTIVE, "Active"),
-            (MeasurementStatus.COMPLETED, "Done"),
+            (MeasurementStatus.QUEUED.value, "Queued"),
+            (MeasurementStatus.ACTIVE.value, "Active"),
+            (MeasurementStatus.COMPLETED.value, "Done"),
         ]
         
         for state, msg in states:

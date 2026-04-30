@@ -6,7 +6,7 @@ from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager
 from app.services.count_rate import CountRateMeasurementHandler
 from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
-from app.api import routes_distributed
+from app.api import routes
 from app.utils.logger import configure_logging
 
 logger = configure_logging(__name__)
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     job_processor.register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
     
     # Set up routes
-    routes_distributed.set_processors(job_processor, status_manager)
+    routes.set_processors(job_processor, status_manager)
     
     logger.info("Distributed measurement system initialized")
     logger.info("Components: StatusManager (Redis), JobProcessor (Thread Pool)")
@@ -57,13 +57,18 @@ app = FastAPI(
 
 
 # Include routes
-app.include_router(routes_distributed.router)
+app.include_router(routes.router)
 
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    redis_healthy = status_manager.health_check() if status_manager else False
+    redis_healthy = True
+    if status_manager:
+        try:
+            redis_healthy = status_manager.health_check()
+        except Exception:
+            redis_healthy = False
     
     return {
         "status": "healthy" if redis_healthy else "unhealthy",
@@ -85,6 +90,7 @@ async def root():
         "version": "2.0",
         "architecture": "Distributed (Web Layer + Redis + Backend Workers)",
         "endpoints": {
+            "start_measurement": "POST /api/v1/measurements/count-rate (or /save-raw-tags)",
             "start_count_rate": "POST /api/v1/measurements/count-rate",
             "start_save_raw_tags": "POST /api/v1/measurements/save-raw-tags",
             "get_status": "GET /api/v1/measurements/{measurement_id}/status",

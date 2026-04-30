@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/v1/measurements", tags=["measurements"])
 # These will be set by main.py
 _job_processor: Optional[JobProcessor] = None
 _status_manager: Optional[StatusManager] = None
+_service_provider: Optional[Callable] = None
 
 
 def set_processors(
@@ -32,6 +33,14 @@ def set_processors(
     global _job_processor, _status_manager
     _job_processor = job_processor
     _status_manager = status_manager
+
+
+def set_service_provider(service_provider: Callable) -> None:
+    """Set a service provider function (for testing with MeasurementService)."""
+    # This function allows tests to inject a custom service provider
+    # For now, we'll just store it globally for potential future use
+    global _service_provider
+    _service_provider = service_provider
 
 
 def get_job_processor() -> JobProcessor:
@@ -82,8 +91,8 @@ async def start_count_rate_measurement(
             metadata=request.metadata,
         )
         
-        # Enqueue job for backend worker
-        processor.process_job(
+        # Enqueue job for backend worker (don't process immediately)
+        processor.enqueue_job(
             status_id=status_id,
             measurement_type=request.measurement_type.value,
             duration_seconds=request.duration_seconds,
@@ -144,14 +153,13 @@ async def start_save_raw_tags_measurement(
             metadata=request.metadata.model_dump(),
         )
         
-        # Enqueue job for backend worker
-        processor.process_job(
+        # Enqueue job for backend worker (don't process immediately)
+        processor.enqueue_job(
             status_id=status_id,
             measurement_type=request.measurement_type.value,
             duration_seconds=request.duration_seconds,
+            metadata=request.metadata.model_dump(),
         )
-        
-        logger.info(f"[{status_id}] Save-raw-tags measurement enqueued successfully")
         
         return MeasurementResponse(
             measurement_id=status_id,
