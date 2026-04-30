@@ -220,10 +220,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         
         with patch("Swabian.TimeTagger.FileWriter", return_value=mock_file_writer):
             # Extract from metadata like the API would
-            metadata = {
-                "channel_list": channels,
-                "target_file_path": file_path
-            }
+            metadata = SaveRawTagsMetadata(channel_list=channels, target_file_path=file_path)
             
             await handler.start(duration, metadata)
             

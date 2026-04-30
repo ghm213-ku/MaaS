@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, Callable
 from datetime import datetime
 import redis
 from app.services.status_manager import StatusManager, MeasurementStatus
+from app.models import SaveRawTagsMetadata
 from app.utils.logger import configure_logging
 
 logger = configure_logging(__name__)
@@ -205,11 +206,15 @@ class JobProcessor:
             raise ValueError("channel_list and target_file_path are required in metadata")
         
         # Run the async handler
+        saveRawTagMetadata = SaveRawTagsMetadata(
+            channel_list=channel_list,
+            target_file_path=target_file_path
+        )
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(
-                handler.start(duration_seconds, channel_list, target_file_path)
+                handler.start(duration_seconds, saveRawTagMetadata)
             )
         finally:
             loop.close()

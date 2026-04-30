@@ -46,7 +46,7 @@ python backend_worker.py
 curl http://localhost:8000/health
 
 # Create measurement
-curl.exe -X POST http://localhost:8000/api/v1/measurements/count-rate -H "Content-Type: application/json" -d '{"duration_seconds": 5, "metadata": {}}'
+Invoke-RestMethod -Uri "http://localhost:8000/api/v1/measurements/count-rate" -Method Post -ContentType "application/json" -Body '{"duration_seconds": 5, "metadata": {}}'
 
 # Save the measurement_id from response, then:
 curl http://localhost:8000/api/v1/measurements/{measurement_id}/status

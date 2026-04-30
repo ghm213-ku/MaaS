@@ -21,7 +21,7 @@ class MeasurementHandler(ABC):
         self.is_running = False
     
     @abstractmethod
-    async def start(self, duration_seconds: float, metadata: Dict[str, Any]) -> None:
+    async def start(self, duration_seconds: float, metadata) -> None:
         """Start the measurement.
         
         Args:
