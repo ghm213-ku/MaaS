@@ -5,7 +5,7 @@
 
 ### Environment Setup
 - [ ] Python 3.10+ installed
-- [ ] Redis server available (local or remote)
+- [ ] Redis server available (Start-Service memurai)
 - [ ] All dependencies installed: `pip install -r requirements.txt`
 
 ### Code Verification
@@ -26,8 +26,7 @@
 
 ### Step 1: Verify Redis
 ```bash
-redis-cli ping
-# Should return: PONG
+Get-Service memurai
 ```
 
 ### Step 2: Start Web Layer

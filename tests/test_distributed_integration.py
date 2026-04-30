@@ -434,5 +434,172 @@ class TestErrorRecovery:
         assert metadata is None or metadata == {}
 
 
+class TestJobQueueing:
+    """Test the job queueing mechanism (enqueue_job and get_next_job)."""
+
+    def test_enqueue_job_to_redis(self, status_manager, job_processor):
+        """Test enqueuing a job to Redis queue."""
+        status_id = str(uuid.uuid4())
+        metadata = {"detector": "det_001", "location": "lab_A"}
+        
+        # Create status
+        status_manager.create_status(
+            status_id,
+            "count_rate",
+            30,
+            metadata,
+        )
+        
+        # Enqueue job to Redis (simulating what the API does)
+        job_processor.enqueue_job(
+            status_id=status_id,
+            measurement_type="count_rate",
+            duration_seconds=30,
+            metadata=metadata,
+        )
+        
+        # Retrieve the job from queue
+        job = job_processor.get_next_job()
+        assert job is not None
+        assert job["status_id"] == status_id
+        assert job["measurement_type"] == "count_rate"
+        assert job["duration_seconds"] == 30
+        assert job["metadata"] == metadata
+
+    def test_enqueue_job_without_metadata(self, status_manager, job_processor):
+        """Test enqueuing a job without metadata."""
+        status_id = str(uuid.uuid4())
+        
+        status_manager.create_status(
+            status_id,
+            "count_rate",
+            30,
+            {},
+        )
+        
+        # Enqueue without metadata parameter
+        job_processor.enqueue_job(
+            status_id=status_id,
+            measurement_type="count_rate",
+            duration_seconds=30,
+        )
+        
+        # Retrieve the job
+        job = job_processor.get_next_job()
+        assert job is not None
+        assert job["status_id"] == status_id
+        assert job["metadata"] == {}
+
+    def test_get_next_job_with_multiple_jobs(self, status_manager, job_processor):
+        """Test retrieving jobs from queue when multiple are enqueued."""
+        status_ids = [str(uuid.uuid4()) for _ in range(3)]
+        
+        # Create and enqueue multiple jobs
+        for i, status_id in enumerate(status_ids):
+            status_manager.create_status(
+                status_id,
+                "count_rate",
+                30,
+                {"job_number": i},
+            )
+            
+            job_processor.enqueue_job(
+                status_id=status_id,
+                measurement_type="count_rate",
+                duration_seconds=30,
+                metadata={"job_number": i},
+            )
+        
+        # Retrieve all jobs in order (FIFO)
+        retrieved_ids = []
+        for _ in range(3):
+            job = job_processor.get_next_job()
+            assert job is not None
+            retrieved_ids.append(job["status_id"])
+        
+        # Should retrieve in same order they were enqueued
+        assert retrieved_ids == status_ids
+
+    def test_enqueue_save_raw_tags_with_metadata(self, status_manager, job_processor):
+        """Test enqueuing save_raw_tags job with required metadata."""
+        status_id = str(uuid.uuid4())
+        metadata = {
+            "channel_list": [1, 2, 3],
+            "target_file_path": "C:\\data\\output.dat",
+        }
+        
+        status_manager.create_status(
+            status_id,
+            "save_raw_tags",
+            30,
+            metadata,
+        )
+        
+        job_processor.enqueue_job(
+            status_id=status_id,
+            measurement_type="save_raw_tags",
+            duration_seconds=30,
+            metadata=metadata,
+        )
+        
+        job = job_processor.get_next_job()
+        assert job is not None
+        assert job["metadata"]["channel_list"] == [1, 2, 3]
+        assert job["metadata"]["target_file_path"] == "C:\\data\\output.dat"
+
+    def test_get_next_job_empty_queue(self, status_manager, job_processor):
+        """Test getting next job when queue is empty."""
+        # Queue should be empty after previous tests cleanup
+        # get_next_job with timeout should return None
+        job = job_processor.get_next_job()
+        assert job is None
+
+    def test_job_queue_flow_end_to_end(self, status_manager, job_processor):
+        """Test complete flow: enqueue → retrieve → process."""
+        status_id = str(uuid.uuid4())
+        metadata = {"detector": "det_001"}
+        
+        # Step 1: API creates status
+        status_manager.create_status(
+            status_id,
+            "count_rate",
+            5,
+            metadata,
+        )
+        status = status_manager.get_status(status_id)
+        assert status["status"] == MeasurementStatus.QUEUED.value
+        
+        # Step 2: API enqueues job to Redis
+        job_processor.enqueue_job(
+            status_id=status_id,
+            measurement_type="count_rate",
+            duration_seconds=5,
+            metadata=metadata,
+        )
+        
+        # Step 3: Worker retrieves job from queue
+        job = job_processor.get_next_job()
+        assert job is not None
+        assert job["metadata"] == metadata
+        
+        # Step 4: Worker processes the job (with mocked handler)
+        with patch.object(CountRateMeasurementHandler, "start"):
+            job_processor.process_job(
+                status_id=job["status_id"],
+                measurement_type=job["measurement_type"],
+                duration_seconds=job["duration_seconds"],
+                metadata=job["metadata"],
+            )
+            
+            time.sleep(0.1)
+            
+            # Step 5: Verify job was processed
+            status = status_manager.get_status(status_id)
+            assert status["status"] in [
+                MeasurementStatus.ACTIVE.value,
+                MeasurementStatus.COMPLETED.value,
+            ]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
