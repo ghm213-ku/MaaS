@@ -235,11 +235,14 @@ status_manager.update_status(status_id, "active", "Running...", None)
 ```
 
 ### JobProcessor
-Manages job execution in separate threads. Registers and routes to handlers.
+Manages job execution in separate threads (runs in backend worker). 
+Registers and routes to measurement handlers.
 
-**Location**: `app/services/job_processor.py`
+**Location**: `app/services/job_processor.py` (core class)
+**Handler Registration**: `worker.py` (backend worker process)
 
 ```python
+# Backend Worker (worker.py)
 processor.register_handler("count_rate", CountRateMeasurementHandler)
 processor.process_job(status_id, "count_rate", duration)
 processor.stop_job(status_id)

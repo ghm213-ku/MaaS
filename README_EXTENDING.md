@@ -219,31 +219,10 @@ class EnergySpectrumHandler:
 
 ## Step 3: Register Handler with System
 
-### In main.py
+### In worker.py (Backend Worker Process Only)
 
-Edit the `lifespan()` function:
-
-```python
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage application lifecycle."""
-    global status_manager, job_processor
-    
-    # ... existing code ...
-    
-    job_processor = JobProcessor(status_manager)
-    job_processor.register_handler("count_rate", CountRateMeasurementHandler)
-    job_processor.register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
-    
-    # ADD YOUR HANDLER HERE:
-    job_processor.register_handler("energy_spectrum", EnergySpectrumHandler)
-    
-    # ... rest of code ...
-```
-
-### In worker.py
-
-Edit the `__init__()` method:
+Handler registration happens ONLY in the backend worker, not in the web layer.
+Edit the `__init__()` method of `BackendWorker` class:
 
 ```python
 def __init__(self):
@@ -257,7 +236,22 @@ def __init__(self):
     
     # ADD YOUR HANDLER HERE:
     self.job_processor.register_handler("energy_spectrum", EnergySpectrumHandler)
+    
+    logger.info("Backend worker initialized")
 ```
+
+### Architecture: Separation of Concerns
+
+The distributed architecture deliberately separates handler registration:
+
+- **main.py (Web Layer)**: Creates JobProcessor for enqueueing only (no handlers registered)
+- **worker.py (Backend)**: Registers handlers and processes jobs from queue
+
+This design provides:
+- ✅ Lightweight web layer that can scale independently
+- ✅ Backend workers own handler lifecycle
+- ✅ Clear separation of HTTP request handling vs job processing
+- ✅ Easy to add new measurement types without restarting web layer
 
 ---
 

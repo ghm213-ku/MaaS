@@ -1,6 +1,6 @@
 """API routes for measurement requests - Distributed Architecture."""
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional, Callable
+from typing import Optional
 from datetime import datetime
 import uuid
 
@@ -22,7 +22,6 @@ router = APIRouter(prefix="/api/v1/measurements", tags=["measurements"])
 # These will be set by main.py
 _job_processor: Optional[JobProcessor] = None
 _status_manager: Optional[StatusManager] = None
-_service_provider: Optional[Callable] = None
 
 
 def set_processors(
@@ -33,14 +32,6 @@ def set_processors(
     global _job_processor, _status_manager
     _job_processor = job_processor
     _status_manager = status_manager
-
-
-def set_service_provider(service_provider: Callable) -> None:
-    """Set a service provider function (for testing with MeasurementService)."""
-    # This function allows tests to inject a custom service provider
-    # For now, we'll just store it globally for potential future use
-    global _service_provider
-    _service_provider = service_provider
 
 
 def get_job_processor() -> JobProcessor:

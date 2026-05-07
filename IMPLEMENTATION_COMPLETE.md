@@ -230,14 +230,15 @@ status_manager.get_metadata(status_id)
 status_manager.get_results(status_id)
 ```
 
-### JobProcessor (Thread Execution)
+### JobProcessor (Thread Execution - Backend Worker)
 
 ```python
+# This code runs in worker.py (backend worker process)
 from app.services.job_processor import JobProcessor
 
 processor = JobProcessor(status_manager)
 
-# Register handlers
+# Register handlers (ONLY in backend worker)
 processor.register_handler("count_rate", CountRateMeasurementHandler)
 processor.register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
 

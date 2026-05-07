@@ -2,10 +2,8 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
-from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager
-from app.services.count_rate import CountRateMeasurementHandler
-from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
+from app.services.job_processor import JobProcessor
 from app.api import routes
 from app.utils.logger import configure_logging
 
@@ -24,22 +22,21 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Application starting up...")
     
-    # Initialize status manager and job processor
+    # Initialize status manager only
     status_manager = StatusManager(
         redis_host="localhost",
         redis_port=6379,
         redis_db=0,
     )
     
+    # Initialize job processor for enqueueing (handlers registered in worker only)
     job_processor = JobProcessor(status_manager)
-    job_processor.register_handler("count_rate", CountRateMeasurementHandler)
-    job_processor.register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
     
-    # Set up routes
+    # Set up routes with job processor for enqueueing
     routes.set_processors(job_processor, status_manager)
     
-    logger.info("Distributed measurement system initialized")
-    logger.info("Components: StatusManager (Redis), JobProcessor (Thread Pool)")
+    logger.info("Web API layer initialized")
+    logger.info("Job processing delegated to backend worker")
     
     yield
     

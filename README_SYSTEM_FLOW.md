@@ -358,24 +358,30 @@ Routes (routes_distributed.py)
 ### FastAPI Router ↔ Job Processor
 
 ```
-Routes (routes_distributed.py)
+Routes (routes.py - Web Layer)
    │
-   ├─→ process_job(status_id, measurement_type, duration)
-   ├─→ stop_job(status_id)
-   ├─→ get_job_status(status_id)
-   └─→ is_job_active(status_id)
+   ├─→ enqueue_job(status_id, measurement_type, duration)  ← ONLY enqueueing
+   └─→ stop_job(status_id)  ← Mark job for stopping
         │
-        └─→ Thread Operations
-            ├─ threading.Thread(target=_run_job_in_thread)
-            ├─ Store in active_jobs[status_id]
-            ├─ Set stop flag when stop requested
-            └─ Remove from active_jobs when done
+        └─→ Redis Job Queue (Message Broker)
+            ├─ Push job to measurement_job_queue
+            └─ Job awaits backend worker processing
+
+Worker (worker.py - Backend)
+   │
+   ├─→ get_next_job()  ← Pull from queue
+   ├─→ process_job()   ← Execute with registered handlers
+   └─→ Thread Operations
+       ├─ threading.Thread(target=_run_job_in_thread)
+       ├─ Store in active_jobs[status_id]
+       ├─ Set stop flag when stop requested
+       └─ Remove from active_jobs when done
 ```
 
-### Job Processor ↔ Measurement Handlers
+### Job Processor ↔ Measurement Handlers (Backend Worker Only)
 
 ```
-Job Processor
+Worker (worker.py) - Initialization Phase
    │
    ├─→ register_handler("count_rate", CountRateMeasurementHandler)
    ├─→ register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
@@ -388,6 +394,9 @@ Job Processor
              └─→ Handler executes measurement
                  ├─ CountRateMeasurementHandler.start() → counts events
                  └─ SaveRawTagsMeasurementHandler.start() → saves tags
+
+Note: Handlers are ONLY registered in worker.py, not in main.py
+      This keeps the web layer stateless and scalable
 ```
 
 ---
@@ -536,8 +545,8 @@ HTTP Request
 ## References
 
 - **Pydantic Models**: `app/models.py`
-- **Routes**: `app/api/routes_distributed.py`
+- **Routes**: `app/api/routes.py`
 - **Status Manager**: `app/services/status_manager.py`
 - **Job Processor**: `app/services/job_processor.py`
-- **Main App**: `main_distributed.py`
-- **Worker**: `backend_worker.py`
+- **Main App (Web Layer)**: `main.py`
+- **Worker (Backend)**: `worker.py`

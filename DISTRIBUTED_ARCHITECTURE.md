@@ -50,13 +50,16 @@ The application has been redesigned to use a distributed architecture with the f
 ### 3. Web Layer (`app/api/routes.py`)
 - FastAPI routes for starting measurements
 - Returns unique status IDs (UUIDs) instead of measurement IDs
-- Endpoints remain similar but now use enqueuing instead of direct execution
+- Enqueues jobs to Redis (does NOT register or execute handlers)
 - Status queries return information from Redis
+- Lightweight and scalable independently
 
 ### 4. Backend Worker (`worker.py`)
-- Standalone process that keeps the job processor alive
+- Standalone process that processes measurement jobs
+- Registers measurement handlers (only location where handlers are registered)
 - Monitors Redis connection health
-- Can be scaled to multiple instances
+- Polls job queue and spawns threads for measurements
+- Can be scaled to multiple instances for parallel processing
 
 ## Setup & Installation
 
@@ -103,11 +106,13 @@ For better isolation and scalability:
 
 ```bash
 # Terminal 1: Start the web layer
-python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
+python main.py
 
-# Terminal 2: Start the backend worker
-python backend_worker.py
+# Terminal 2: Start the backend worker (processes jobs)
+python worker.py
 ```
+
+You can run multiple worker instances for parallel processing.
 
 ## API Usage Examples
 
@@ -244,7 +249,7 @@ FAILED   → Job encountered an error
 ## Configuration
 
 ### Redis Connection
-Edit in `main_distributed.py` or `backend_worker.py`:
+Edit in `main.py` or `worker.py`:
 ```python
 StatusManager(
     redis_host="localhost",      # Change to Redis server IP
@@ -259,20 +264,25 @@ Edit in `app/services/status_manager.py`:
 self.redis_client.set(status_key, ..., ex=3600)  # 3600 seconds = 1 hour
 ```
 
-### Thread Poll Interval
-Edit in `backend_worker.py`:
+### Job Poll Interval
+Edit in `worker.py`:
 ```python
-worker.run(poll_interval=1)  # Check every 1 second
+worker.run(poll_timeout=1)  # Check every 1 second
 ```
 
-## Migration from Monolithic Architecture
+## Distributed Architecture Overview
 
-If upgrading from the old single-process architecture:
+**Web Layer** (`main.py`):
+- Receives HTTP requests
+- Creates status records in Redis
+- Enqueues jobs (via JobProcessor)
+- Returns immediately with status ID
 
-1. **Old routes** are in `app/api/routes.py`
-2. **New routes** are in `app/api/routes_distributed.py`
-3. **Old main** is in `main.py`
-4. **New main** is in `main_distributed.py`
+**Backend Worker** (`worker.py`):
+- Registers measurement handlers
+- Polls Redis job queue
+- Processes jobs in threads
+- Updates status in Redis
 
 To switch:
 - Change imports in `main_distributed.py` or rename files

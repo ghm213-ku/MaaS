@@ -241,10 +241,10 @@ EOF
 | File | Type | Purpose |
 |------|------|---------|
 | status_manager.py | Service | Redis status management |
-| job_processor.py | Service | Thread-based execution |
-| routes_distributed.py | API | HTTP endpoints |
-| main_distributed.py | Entry | Web layer startup |
-| backend_worker.py | Entry | Worker startup |
+| job_processor.py | Service | Thread-based execution & enqueueing |
+| routes.py | API | HTTP endpoints |
+| main.py | Entry | Web layer startup |
+| worker.py | Entry | Backend worker startup |
 | count_rate.py | Handler | Count-rate measurement |
 | save_raw_tags.py | Handler | Save-raw-tags measurement |
 
@@ -274,8 +274,7 @@ EOF
 
 ### Code Organization
 - ✅ Distributed system components separated
-- ✅ Legacy system preserved for compatibility
-- ✅ Clear entry points (main_distributed.py, backend_worker.py)
+- ✅ Clear entry points (main.py, worker.py)
 - ✅ Handlers easily extensible
 - ✅ Models centralized
 
@@ -292,11 +291,10 @@ EOF
 ### Immediate
 1. ✅ Documentation structure complete
 2. ✅ Core files organized
-3. ✅ Entry points clear (main_distributed.py, backend_worker.py)
+3. ✅ Entry points clear (main.py, worker.py)
 4. ✅ Tests comprehensive
 
 ### Short-term
-- [ ] Archive legacy files to `docs/legacy/` (optional)
 - [ ] Add architecture diagrams to documentation
 - [ ] Create video tutorials linking to docs
 - [ ] Set up GitHub/GitLab pages for docs
@@ -322,8 +320,8 @@ EOF
 
 1. Documentation is self-contained in README_* files
 2. Core code is in app/services/ and app/api/
-3. Entry points are clear and separate (main_distributed.py vs main.py)
-4. Legacy code preserved for backward compatibility
+3. Entry points are clear and separate (main.py for web, worker.py for backend)
+4. Handlers only registered in worker.py
 
 ### For DevOps/Infrastructure Teams
 
@@ -380,26 +378,24 @@ MaaS/                                  ← Repository root
 │
 ├── app/                               ← Application code
 │   ├── api/
-│   │   ├── routes.py                 (legacy)
-│   │   └── routes_distributed.py     (use this)
+│   │   └── routes.py                 ← Web layer routes
 │   ├── services/
-│   │   ├── status_manager.py         (NEW)
-│   │   ├── job_processor.py          (NEW)
+│   │   ├── status_manager.py         ← Redis management
+│   │   ├── job_processor.py          ← Job enqueueing & processing
 │   │   ├── count_rate.py
 │   │   ├── save_raw_tags.py
-│   │   └── measurement.py            (legacy)
+│   │   └── measurement.py
 │   ├── models.py
 │   ├── payloads.py
 │   └── utils/
 │
 ├── tests/
-│   ├── test_distributed_integration.py (NEW)
+│   ├── test_distributed_integration.py
 │   ├── test_*.py                     (various)
 │   └── conftest.py
 │
-├── main_distributed.py                ← Use this for web layer
-├── backend_worker.py                  ← Backend worker entry
-├── main.py                            ← Legacy (backward compat)
+├── main.py                            ← Web layer entry point
+├── worker.py                          ← Backend worker entry point
 │
 ├── requirements.txt
 ├── pytest.ini

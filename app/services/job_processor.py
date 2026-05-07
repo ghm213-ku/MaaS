@@ -134,7 +134,8 @@ class JobProcessor:
                 raise ValueError(f"Unknown measurement type: {measurement_type}")
             
             handler_class = self.job_handlers[measurement_type]
-            handler = handler_class()
+            # Handle both class registrations (instantiate) and instance registrations (use directly)
+            handler = handler_class() if isinstance(handler_class, type) else handler_class
             
             # Use provided metadata or fetch from status manager
             if metadata is None:

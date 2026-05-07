@@ -187,7 +187,19 @@ get_job_status(status_id)
   → Returns job info from active_jobs dict
 
 register_handler(measurement_type, handler_class)
-  → Register custom handlers
+  → Register custom handlers (backend worker only)
+```
+
+### Backend Worker
+
+**File**: `worker.py`
+
+**Responsibilities**:
+```
+- Register measurement handlers
+- Poll Redis job queue
+- Process jobs in thread pool
+- Update measurement status
 ```
 
 ### Distributed Routes
@@ -202,10 +214,11 @@ GET    /api/v1/measurements/{measurement_id}/status
 DELETE /api/v1/measurements/{measurement_id}
 ```
 
-**Key Difference from Old Routes**:
+**Key Difference from Monolithic**:
 - Returns immediately with status ID
 - Does NOT wait for job completion
 - Client queries status separately
+- Web layer doesn't register handlers
 
 ---
 
@@ -213,7 +226,7 @@ DELETE /api/v1/measurements/{measurement_id}
 
 ### Prerequisites
 ```bash
-pip install redis rq
+pip install -r requirements.txt
 redis-server  # Start Redis
 ```
 
@@ -222,13 +235,13 @@ redis-server  # Start Redis
 python -m uvicorn main:app --reload --port 8000
 ```
 
-### Production (2 Processes)
+### Production (Separate Processes - Recommended)
 ```bash
 # Terminal 1: Web Layer
-python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
+python main.py
 
-# Terminal 2: Backend Worker
-python backend_worker.py
+# Terminal 2: Backend Worker (processes jobs)
+python worker.py
 ```
 
 ### Test the API

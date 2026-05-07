@@ -36,7 +36,7 @@ python -m uvicorn main:app --reload --port 8000
 
 ### Step 3: In Another Terminal, Start Worker
 ```bash
-python backend_worker.py
+python worker.py
 ```
 
 ### Step 4: Test API
@@ -91,10 +91,10 @@ redis-cli PING
 #### 3. Start Web Layer
 ```bash
 # Option A: Direct (development)
-python -m uvicorn main_distributed:app --host 0.0.0.0 --port 8000
+python main.py
 
 # Option B: With Gunicorn (production)
-gunicorn main_distributed:app \
+gunicorn main:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000
@@ -106,12 +106,12 @@ sudo systemctl start maas-web
 #### 4. Start Backend Worker(s)
 ```bash
 # Single worker
-python backend_worker.py
+python worker.py
 
 # Multiple workers (in separate processes/servers)
-python backend_worker.py &
-python backend_worker.py &
-python backend_worker.py &
+python worker.py &
+python worker.py &
+python worker.py &
 ```
 
 #### 5. Configure Reverse Proxy (Nginx)
@@ -206,8 +206,8 @@ redis-cli KEYS "measurement:status:*" | wc -l
    ```bash
    # Status preserved in Redis
    # Simply restart web layer
-   pkill -f main_distributed
-   python -m uvicorn main:app --host 0.0.0.0 --port 8000
+   pkill -f main
+   python main.py
    ```
 
 2. **Worker Crash**
@@ -227,13 +227,6 @@ redis-cli KEYS "measurement:status:*" | wc -l
    redis-server
    ```
 
-4. **Complete Failure**
-   ```bash
-   # Revert to old monolithic system
-   pkill -f main_distributed
-   python -m uvicorn main:app --port 8000
-   ```
-
 ---
 
 ## Performance Optimization
@@ -241,7 +234,7 @@ redis-cli KEYS "measurement:status:*" | wc -l
 ### Web Layer
 ```bash
 # Increase workers for more concurrency
-gunicorn main_distributed:app \
+gunicorn main:app \
   --workers 8 \
   --worker-class uvicorn.workers.UvicornWorker
 ```
