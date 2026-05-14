@@ -550,9 +550,7 @@ async def book_channels(
         )
 
     except ValueError as e:
-        logger.warning(
-            f"[{request.booked_by}] Channel booking validation failed: {e}"
-        )
+        logger.warning(f"[{request.booked_by}] Channel booking validation failed: {e}")
         raise HTTPException(
             status_code=400 if "Invalid channel" in str(e) else 409,
             detail=str(e),
@@ -633,9 +631,7 @@ async def get_booked_by_channels(
             "total_booked": len(channels),
         }
     except Exception as e:
-        logger.error(
-            f"[{booked_by}] Failed to get booked channels: {e}", exc_info=True
-        )
+        logger.error(f"[{booked_by}] Failed to get booked channels: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=str(e),
