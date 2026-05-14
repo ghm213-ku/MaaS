@@ -83,20 +83,20 @@ class BackendWorker:
                 raise RuntimeError("Redis health check failed")
 
             logger.debug("Redis connection verified")
-
-            logger.debug("Creating JobProcessor...")
-            self.job_processor = JobProcessor(self.status_manager)
-
+            
             logger.debug("Initializing TimeTagger...")
             tagger = TimeTagger.createTimeTagger()
             tagger.setTestSignal([1, 2, 3, 4], True)
+
+            logger.debug("Creating JobProcessor...")
+            self.job_processor = JobProcessor(self.status_manager, tagger=tagger)
 
             logger.debug("Registering measurement handlers...")
             self.job_processor.register_handler(
                 "count_rate", CountRateMeasurementHandler
             )
             self.job_processor.register_handler(
-                "save_raw_tags", SaveRawTagsMeasurementHandler(tagger=tagger)
+                "save_raw_tags", SaveRawTagsMeasurementHandler
             )
 
             logger.info("Backend worker initialized successfully")
