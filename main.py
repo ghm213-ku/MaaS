@@ -31,13 +31,13 @@ async def lifespan(app: FastAPI):
     )
 
     job_processor = JobProcessor(status_manager)
-    
+
     # Set up routes with job processor for enqueueing
     routes.set_processors(job_processor, status_manager)
-    
+
     logger.info("Web API layer initialized")
     logger.info("Job processing delegated to backend worker")
-    
+
     yield
 
     # Shutdown
