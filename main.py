@@ -53,8 +53,9 @@ app = FastAPI(
 )
 
 
-# Include routes
-app.include_router(routes.router)
+# Include routers
+app.include_router(routes.measurement_router)
+app.include_router(routes.channels_router)
 
 
 @app.get("/health")
@@ -86,15 +87,20 @@ async def root():
         "service": "MaaS - Measurements as a Service",
         "version": "2.0",
         "architecture": "Distributed (Web Layer + Redis + Backend Workers)",
-        "endpoints": {
-            "start_measurement": "POST /api/v1/measurements/count-rate (or /save-raw-tags)",
+        "measurement_endpoints": {
             "start_count_rate": "POST /api/v1/measurements/count-rate",
             "start_save_raw_tags": "POST /api/v1/measurements/save-raw-tags",
             "get_status": "GET /api/v1/measurements/{measurement_id}/status",
             "stop_measurement": "DELETE /api/v1/measurements/{measurement_id}",
-            "health": "GET /health",
-            "api_docs": "GET /docs",
         },
+        "channel_endpoints": {
+            "list_channels": "GET /api/v1/channels/",
+            "list_available": "GET /api/v1/channels/available",
+            "book_channels": "POST /api/v1/channels/book",
+            "release_channels": "POST /api/v1/channels/release/{booked_by}",
+        },
+        "docs": "GET /docs",
+        "health": "GET /health",
     }
 
 

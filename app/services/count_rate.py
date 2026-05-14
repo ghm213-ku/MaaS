@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from app.services.measurement import MeasurementHandler
 from app.utils.logger import configure_logging
-# from Swabian import TimeTagger
+from Swabian import TimeTagger
 
 logger = configure_logging(__name__)
 

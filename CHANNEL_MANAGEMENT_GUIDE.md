@@ -52,59 +52,57 @@ channels:booking_time        - Hash mapping channel → booking_timestamp
 
 ## API Endpoints
 
+### ✨ NEW: Dedicated Channel Routers at `/api/v1/channels/`
+
+All channel management is now separated into dedicated routers:
+- **Measurement endpoints**: `/api/v1/measurements/*`
+- **Channel endpoints**: `/api/v1/channels/*`
+
 ### Channel Information Endpoints
 
-#### 1. **GET /api/v1/channels**
+#### 1. **GET /api/v1/channels/**
 List all channels with their current status.
 
-**Response:**
+**Endpoint**: `GET /api/v1/channels/`
+
+**Response (200):**
 ```json
 {
   "channels": [
     {
-      "channel_number": 1,
-      "status": "available"
+      "channel": 1,
+      "status": "available",
+      "booked_by": null
     },
     {
-      "channel_number": 2,
+      "channel": 2,
       "status": "booked",
-      "booked_by_measurement": "abc-123-def",
-      "booking_time": "2026-05-14T10:30:45.123456"
+      "booked_by": "measurement-abc-123"
     }
   ],
   "total_channels": 48,
-  "available_channels": 45,
-  "booked_channels": 3
+  "available_channels": 46,
+  "booked_channels": 2
 }
 ```
 
 #### 2. **GET /api/v1/channels/available**
 Get available channels and channel statistics.
 
-**Response:**
+**Endpoint**: `GET /api/v1/channels/available`
+
+**Response (200):**
 ```json
 {
   "total_channels": 48,
-  "available_channels": 45,
-  "booked_channels": 3,
-  "utilization_percent": 6.25,
+  "available_channels": 46,
+  "booked_channels": 2,
+  "utilization_percent": 4.17,
   "available_channel_numbers": [1, 3, 5, 6, 7, ...],
-  "booked_by_measurement": {
+  "booked_by_identifier": {
     "measurement-id-1": [2, 101, 102],
-    "measurement-id-2": [4, 201]
+    "measurement-id-2": [4]
   }
-}
-```
-
-#### 3. **GET /api/v1/channels/measurement/{measurement_id}**
-Get channels booked by a specific measurement.
-
-**Response:**
-```json
-{
-  "measurement_id": "abc-123-def",
-  "booked_channels": [1, 2, 3],
-  "total_booked": 3
 }
 ```
 
@@ -112,13 +110,15 @@ Get channels booked by a specific measurement.
 
 ### Channel Booking/Release Endpoints
 
-#### 4. **POST /api/v1/channels/book**
-Manually book channels for a measurement (if not auto-booked).
+#### 3. **POST /api/v1/channels/book**
+Book (reserve) channels for a measurement or user.
+
+**Endpoint**: `POST /api/v1/channels/book`
 
 **Request:**
 ```json
 {
-  "measurement_id": "abc-123-def",
+  "booked_by": "measurement-abc-123",
   "channel_numbers": [1, 2, 3]
 }
 ```
@@ -126,29 +126,47 @@ Manually book channels for a measurement (if not auto-booked).
 **Response (201):**
 ```json
 {
-  "measurement_id": "abc-123-def",
+  "booked_by": "measurement-abc-123",
   "booked_channels": [1, 2, 3],
   "booking_time": "2026-05-14T10:30:45.123456",
   "total_booked": 3
 }
 ```
 
-**Error (409) - Channel Already Booked:**
+**Error (400) - Invalid Channel:**
 ```json
 {
-  "detail": "Cannot book channels [2] - already booked for measurement other-measurement-id"
+  "detail": "Invalid channel number: 999"
 }
 ```
 
-#### 5. **POST /api/v1/channels/release/{measurement_id}**
-Manually release channels booked by a measurement.
-
-**Response:**
+**Error (409) - Channels Already Booked:**
 ```json
 {
-  "measurement_id": "abc-123-def",
+  "detail": "Channels already booked: [2, 3]"
+}
+```
+
+#### 4. **POST /api/v1/channels/release/{booked_by}**
+Release all channels booked by a measurement or user identifier.
+
+**Endpoint**: `POST /api/v1/channels/release/{booked_by}`
+
+**Response (200):**
+```json
+{
+  "booked_by": "measurement-abc-123",
   "released_channels": [1, 2, 3],
   "total_released": 3
+}
+```
+
+**Note**: If the identifier has no booked channels, returns with empty release:
+```json
+{
+  "booked_by": "unknown-id",
+  "released_channels": [],
+  "total_released": 0
 }
 ```
 
@@ -170,6 +188,8 @@ Manually release channels booked by a measurement.
    }
 
 2. System validates channels [1, 2, 3]
+   - Must exist (1-16, 101-116, 201-216)
+   - Must be available
 
 3. System books channels for this measurement_id
    - channels:available: remove 1, 2, 3
@@ -177,14 +197,21 @@ Manually release channels booked by a measurement.
    - channels:booking_time: set timestamps
 
 4. Response includes "Booked channels: [1, 2, 3]"
+   ```json
+   {
+     "measurement_id": "abc-123",
+     "status": "queued",
+     "message": "Save-raw-tags measurement queued with channels [1, 2, 3]..."
+   }
+   ```
 
 5. Job processes...
 
-6. On completion (or error):
-   - Finally block releases channels
-   - channels:available: add back 1, 2, 3
-   - channels:booked: remove 1, 2, 3
-   - channels:booking_time: remove 1, 2, 3
+6. On completion/failure/stop:
+   - Finally block automatically releases channels
+   - Channels returned to available pool
+   - Status updated to completed/failed/stopped
+   - Any client can now book those channels
 ```
 
 ### Scenario 2: Count-Rate with Optional Channels

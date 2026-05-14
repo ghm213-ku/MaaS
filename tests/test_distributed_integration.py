@@ -45,7 +45,9 @@ def status_manager(redis_client):
 @pytest.fixture
 def job_processor(status_manager):
     """Create JobProcessor instance for testing."""
-    processor = JobProcessor(status_manager)
+    from unittest.mock import Mock
+    mock_tagger = Mock()
+    processor = JobProcessor(status_manager, tagger=mock_tagger)
     processor.register_handler("count_rate", CountRateMeasurementHandler)
     processor.register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
     return processor

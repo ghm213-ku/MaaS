@@ -1,4 +1,9 @@
-"""API routes for measurement requests - Distributed Architecture."""
+"""API routes for measurement requests - Distributed Architecture.
+
+This module provides two main routers:
+- measurement_router: For /api/v1/measurements (count-rate, save-raw-tags, status, stop)
+- channels_router: For /api/v1/channels (list, book, release channel management)
+"""
 
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
@@ -24,7 +29,9 @@ from app.utils.logger import configure_logging
 
 logger = configure_logging(__name__)
 
-router = APIRouter(prefix="/api/v1/measurements", tags=["measurements"])
+# Separate routers for measurements and channels
+measurement_router = APIRouter(prefix="/api/v1/measurements", tags=["measurements"])
+channels_router = APIRouter(prefix="/api/v1/channels", tags=["channels"])
 
 # These will be set by main.py
 _job_processor: Optional[JobProcessor] = None
@@ -55,7 +62,12 @@ def get_status_manager() -> StatusManager:
     return _status_manager
 
 
-@router.post("/count-rate", response_model=MeasurementResponse, status_code=201)
+# ========== MEASUREMENT ENDPOINTS ==========
+
+
+@measurement_router.post(
+    "/count-rate", response_model=MeasurementResponse, status_code=201
+)
 async def start_count_rate_measurement(
     request: CountRateMeasurementRequest,
     processor: JobProcessor = Depends(get_job_processor),
@@ -147,7 +159,9 @@ async def start_count_rate_measurement(
         )
 
 
-@router.post("/save-raw-tags", response_model=MeasurementResponse, status_code=201)
+@measurement_router.post(
+    "/save-raw-tags", response_model=MeasurementResponse, status_code=201
+)
 async def start_save_raw_tags_measurement(
     request: SaveRawTagsMeasurmentRequest,
     processor: JobProcessor = Depends(get_job_processor),
@@ -237,7 +251,224 @@ async def start_save_raw_tags_measurement(
         )
 
 
-@router.delete("/{measurement_id}", response_model=MeasurementResponse)
+# ========== CHANNEL MANAGEMENT ENDPOINTS ==========
+
+
+@channels_router.get("/", response_model=ChannelListResponse)
+async def list_all_channels(
+    status_manager: StatusManager = Depends(get_status_manager),
+) -> ChannelListResponse:
+    """
+    Get all channels with their status (available or booked).
+
+    Endpoint: GET /api/v1/channels/
+
+    Returns:
+        List of all channels with current status and booking information.
+    """
+    logger.debug("List all channels request received")
+
+    try:
+        channels = status_manager.get_all_channels()
+        stats = status_manager.get_channel_stats()
+
+        return ChannelListResponse(
+            channels=channels,
+            total_channels=stats["total_channels"],
+            available_channels=stats["available_channels"],
+            booked_channels=stats["booked_channels"],
+        )
+    except Exception as e:
+        logger.error(f"Failed to list channels: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@channels_router.get("/available", response_model=ChannelStatsResponse)
+async def list_available_channels(
+    status_manager: StatusManager = Depends(get_status_manager),
+) -> ChannelStatsResponse:
+    """
+    Get list of available channels and channel statistics.
+
+    Endpoint: GET /api/v1/channels/available
+
+    Returns:
+        Statistics and list of currently available channel numbers.
+    """
+    logger.debug("List available channels request received")
+
+    try:
+        available = status_manager.get_available_channels()
+        booked = status_manager.get_booked_channels()
+        stats = status_manager.get_channel_stats()
+
+        # Build mapping of identifiers to channels
+        booked_by_identifier = {}
+        for channel, identifier in booked.items():
+            if identifier not in booked_by_identifier:
+                booked_by_identifier[identifier] = []
+            booked_by_identifier[identifier].append(channel)
+
+        return ChannelStatsResponse(
+            total_channels=stats["total_channels"],
+            available_channels=stats["available_channels"],
+            booked_channels=stats["booked_channels"],
+            utilization_percent=stats["utilization_percent"],
+            available_channel_numbers=available,
+            booked_by_identifier=booked_by_identifier,
+        )
+    except Exception as e:
+        logger.error(f"Failed to list available channels: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@channels_router.post(
+    "/book",
+    response_model=ChannelBookResponse,
+    status_code=201,
+)
+async def book_channels(
+    request: ChannelBookRequest,
+    status_manager: StatusManager = Depends(get_status_manager),
+) -> ChannelBookResponse:
+    """
+    Book (reserve) channels for a measurement or user.
+
+    Endpoint: POST /api/v1/channels/book
+
+    Args:
+        request: Contains booked_by identifier and list of channel_numbers to book
+
+    Returns:
+        Booking confirmation with booked channels and timestamp
+
+    Raises:
+        400: If channel numbers are invalid
+        409: If any channels are already booked
+    """
+    logger.info(
+        f"[{request.booked_by}] Channel booking request for channels: {request.channel_numbers}"
+    )
+
+    try:
+        # Validate channels
+        status_manager.validate_channels(request.channel_numbers)
+
+        # Book the channels
+        booking_result = status_manager.book_channels(
+            request.channel_numbers,
+            request.booked_by,
+        )
+
+        logger.info(f"[{request.booked_by}] Channels booked successfully")
+
+        return ChannelBookResponse(
+            booked_by=booking_result["booked_by"],
+            booked_channels=booking_result["booked_channels"],
+            booking_time=booking_result["booking_time"],
+            total_booked=booking_result["total_booked"],
+        )
+
+    except ValueError as e:
+        logger.warning(f"[{request.booked_by}] Channel booking validation failed: {e}")
+        raise HTTPException(
+            status_code=400 if "Invalid channel" in str(e) else 409,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(
+            f"[{request.booked_by}] Channel booking failed: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@channels_router.post(
+    "/release/{booked_by}",
+    response_model=ChannelReleaseResponse,
+)
+async def release_channels(
+    booked_by: str,
+    status_manager: StatusManager = Depends(get_status_manager),
+) -> ChannelReleaseResponse:
+    """
+    Release (free up) all channels booked by a measurement or user.
+
+    Endpoint: POST /api/v1/channels/release/{booked_by}
+
+    Args:
+        booked_by: The identifier (measurement_id or user) whose channels to release
+
+    Returns:
+        Release confirmation with released channels count
+
+    Note:
+        Channels are automatically released when a measurement completes, stops, or fails.
+        This endpoint allows explicit manual release if needed.
+    """
+    logger.info(f"[{booked_by}] Channel release request")
+
+    try:
+        release_result = status_manager.release_channels(booked_by)
+
+        logger.info(
+            f"[{booked_by}] Channels released successfully: {release_result['released_channels']}"
+        )
+
+        return ChannelReleaseResponse(
+            booked_by=release_result["booked_by"],
+            released_channels=release_result["released_channels"],
+            total_released=release_result["total_released"],
+        )
+
+    except Exception as e:
+        logger.error(f"[{booked_by}] Channel release failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+async def get_booked_by_channels(
+    booked_by: str,
+    status_manager: StatusManager = Depends(get_status_manager),
+) -> dict:
+    """
+    Get all channels currently booked by a specific identifier (measurement or user).
+
+    Args:
+        booked_by: The identifier (measurement_id or user)
+
+    Returns:
+        List of booked channels and count
+    """
+    logger.debug(f"[{booked_by}] Get booked channels request")
+
+    try:
+        channels = status_manager.get_booked_channels_by(booked_by)
+
+        return {
+            "booked_by": booked_by,
+            "booked_channels": channels,
+            "total_booked": len(channels),
+        }
+    except Exception as e:
+        logger.error(f"[{booked_by}] Failed to get booked channels: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@measurement_router.delete("/{measurement_id}", response_model=MeasurementResponse)
 async def stop_measurement(
     measurement_id: str,
     processor: JobProcessor = Depends(get_job_processor),
@@ -323,7 +554,9 @@ async def stop_measurement(
         )
 
 
-@router.get("/{measurement_id}/status", response_model=MeasurementStatusResponse)
+@measurement_router.get(
+    "/{measurement_id}/status", response_model=MeasurementStatusResponse
+)
 async def get_measurement_status(
     measurement_id: str,
     status_manager: StatusManager = Depends(get_status_manager),
@@ -384,7 +617,7 @@ async def get_measurement_status(
         )
 
 
-@router.get("/", response_model=dict)
+@measurement_router.get("/", response_model=dict)
 async def list_measurements(
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> dict:
@@ -404,225 +637,21 @@ async def list_measurements(
             "version": "2.0",
             "architecture": "Distributed (Web Layer + Redis + Backend Workers)",
             "redis_status": "healthy" if redis_healthy else "unhealthy",
-            "endpoints": {
+            "measurement_endpoints": {
                 "start_count_rate": "POST /api/v1/measurements/count-rate",
                 "start_save_raw_tags": "POST /api/v1/measurements/save-raw-tags",
                 "get_status": "GET /api/v1/measurements/{measurement_id}/status",
                 "stop_measurement": "DELETE /api/v1/measurements/{measurement_id}",
             },
+            "channel_endpoints": {
+                "list_channels": "GET /api/v1/channels/",
+                "list_available": "GET /api/v1/channels/available",
+                "book_channels": "POST /api/v1/channels/book",
+                "release_channels": "POST /api/v1/channels/release/{booked_by}",
+            },
         }
     except Exception as e:
         logger.error(f"Failed to get system info: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
-# ========== CHANNEL MANAGEMENT ENDPOINTS ==========
-
-
-@router.get("/channels", response_model=ChannelListResponse, tags=["channels"])
-async def list_all_channels(
-    status_manager: StatusManager = Depends(get_status_manager),
-) -> ChannelListResponse:
-    """
-    Get all channels with their status (available or booked).
-
-    Returns:
-        List of all channels with current status and booking information.
-    """
-    logger.debug("List all channels request received")
-
-    try:
-        channels = status_manager.get_all_channels()
-        stats = status_manager.get_channel_stats()
-
-        return ChannelListResponse(
-            channels=channels,
-            total_channels=stats["total_channels"],
-            available_channels=stats["available_channels"],
-            booked_channels=stats["booked_channels"],
-        )
-    except Exception as e:
-        logger.error(f"Failed to list channels: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
-@router.get(
-    "/channels/available", response_model=ChannelStatsResponse, tags=["channels"]
-)
-async def list_available_channels(
-    status_manager: StatusManager = Depends(get_status_manager),
-) -> ChannelStatsResponse:
-    """
-    Get list of available channels and channel statistics.
-
-    Returns:
-        Statistics and list of currently available channel numbers.
-    """
-    logger.debug("List available channels request received")
-
-    try:
-        available = status_manager.get_available_channels()
-        booked = status_manager.get_booked_channels()
-        stats = status_manager.get_channel_stats()
-
-        # Build mapping of identifiers to channels
-        booked_by_identifier = {}
-        for channel, identifier in booked.items():
-            if identifier not in booked_by_identifier:
-                booked_by_identifier[identifier] = []
-            booked_by_identifier[identifier].append(channel)
-
-        return ChannelStatsResponse(
-            total_channels=stats["total_channels"],
-            available_channels=stats["available_channels"],
-            booked_channels=stats["booked_channels"],
-            utilization_percent=stats["utilization_percent"],
-            available_channel_numbers=available,
-            booked_by_identifier=booked_by_identifier,
-        )
-    except Exception as e:
-        logger.error(f"Failed to list available channels: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
-@router.post(
-    "/channels/book",
-    response_model=ChannelBookResponse,
-    status_code=201,
-    tags=["channels"],
-)
-async def book_channels(
-    request: ChannelBookRequest,
-    status_manager: StatusManager = Depends(get_status_manager),
-) -> ChannelBookResponse:
-    """
-    Book (reserve) channels for a measurement or user.
-
-    Args:
-        request: Contains booked_by identifier and list of channel_numbers to book
-
-    Returns:
-        Booking confirmation with booked channels and timestamp
-
-    Raises:
-        400: If channel numbers are invalid
-        409: If any channels are already booked
-    """
-    logger.info(
-        f"[{request.booked_by}] Channel booking request for channels: {request.channel_numbers}"
-    )
-
-    try:
-        # Validate channels
-        status_manager.validate_channels(request.channel_numbers)
-
-        # Book the channels
-        booking_result = status_manager.book_channels(
-            request.channel_numbers,
-            request.booked_by,
-        )
-
-        logger.info(f"[{request.booked_by}] Channels booked successfully")
-
-        return ChannelBookResponse(
-            booked_by=booking_result["booked_by"],
-            booked_channels=booking_result["booked_channels"],
-            booking_time=booking_result["booking_time"],
-            total_booked=booking_result["total_booked"],
-        )
-
-    except ValueError as e:
-        logger.warning(f"[{request.booked_by}] Channel booking validation failed: {e}")
-        raise HTTPException(
-            status_code=400 if "Invalid channel" in str(e) else 409,
-            detail=str(e),
-        )
-    except Exception as e:
-        logger.error(
-            f"[{request.booked_by}] Channel booking failed: {e}", exc_info=True
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
-@router.post(
-    "/channels/release/{booked_by}",
-    response_model=ChannelReleaseResponse,
-    tags=["channels"],
-)
-async def release_channels(
-    booked_by: str,
-    status_manager: StatusManager = Depends(get_status_manager),
-) -> ChannelReleaseResponse:
-    """
-    Release (free up) all channels booked by a measurement or user.
-
-    Args:
-        booked_by: The identifier (measurement_id or user) whose channels to release
-
-    Returns:
-        Release confirmation with released channels count
-    """
-    logger.info(f"[{booked_by}] Channel release request")
-
-    try:
-        release_result = status_manager.release_channels(booked_by)
-
-        logger.info(
-            f"[{booked_by}] Channels released successfully: {release_result['released_channels']}"
-        )
-
-        return ChannelReleaseResponse(
-            booked_by=release_result["booked_by"],
-            released_channels=release_result["released_channels"],
-            total_released=release_result["total_released"],
-        )
-
-    except Exception as e:
-        logger.error(f"[{booked_by}] Channel release failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
-@router.get("/channels/{booked_by}", tags=["channels"])
-async def get_booked_by_channels(
-    booked_by: str,
-    status_manager: StatusManager = Depends(get_status_manager),
-) -> dict:
-    """
-    Get all channels currently booked by a specific identifier (measurement or user).
-
-    Args:
-        booked_by: The identifier (measurement_id or user)
-
-    Returns:
-        List of booked channels and count
-    """
-    logger.debug(f"[{booked_by}] Get booked channels request")
-
-    try:
-        channels = status_manager.get_booked_channels_by(booked_by)
-
-        return {
-            "booked_by": booked_by,
-            "booked_channels": channels,
-            "total_booked": len(channels),
-        }
-    except Exception as e:
-        logger.error(f"[{booked_by}] Failed to get booked channels: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=str(e),

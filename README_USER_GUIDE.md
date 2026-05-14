@@ -474,6 +474,188 @@ console.log("Final results:", result.results);
 
 ---
 
+## Channel Management
+
+MaaS includes an integrated **channel booking system** for managing exclusive channel resources.
+
+### What are Channels?
+
+- **48 Total Channels**: Numbered 1-16, 101-116, and 201-216
+- **Exclusive Access**: Only one measurement can use a channel at a time
+- **Automatic Management**: Channels are booked/released automatically with measurements
+- **Manual Control**: Optional manual booking for advanced scenarios
+
+### Channel API Endpoints
+
+All channel operations are at `/api/v1/channels/` (separate from measurements):
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/channels/` | GET | List all channels with status |
+| `/api/v1/channels/available` | GET | List available channels and statistics |
+| `/api/v1/channels/book` | POST | Manually book channels |
+| `/api/v1/channels/release/{id}` | POST | Manually release channels |
+
+### Automatic Channel Booking (Save-Raw-Tags)
+
+Channels are **required** for save-raw-tags measurements and are automatically booked:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/measurements/save-raw-tags \
+  -H "Content-Type: application/json" \
+  -d '{
+    "duration_seconds": 60,
+    "metadata": {
+      "channel_list": [1, 2, 3],
+      "target_file_path": "C:\\data\\output.dat"
+    }
+  }'
+```
+
+**Response** (channels automatically booked):
+```json
+{
+  "measurement_id": "abc-123",
+  "status": "queued",
+  "message": "Save-raw-tags measurement queued with channels [1, 2, 3]. Booked channels: [1, 2, 3]"
+}
+```
+
+When the measurement **completes, stops, or fails**, channels are **automatically released**.
+
+### Optional Channel Booking (Count-Rate)
+
+Channels are optional for count-rate measurements. Book them if needed:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "duration_seconds": 60,
+    "metadata": {
+      "detector_id": "det_001",
+      "channel_list": [101, 102, 103]
+    }
+  }'
+```
+
+If you provide a `channel_list`, those channels will be booked. If not provided, no channels are booked.
+
+### Check Available Channels
+
+```bash
+curl http://localhost:8000/api/v1/channels/available
+```
+
+**Response**:
+```json
+{
+  "total_channels": 48,
+  "available_channels": 45,
+  "booked_channels": 3,
+  "utilization_percent": 6.25,
+  "available_channel_numbers": [1, 2, 3, 4, 5, ...],
+  "booked_by_identifier": {
+    "measurement-001": [10, 11, 12]
+  }
+}
+```
+
+### List All Channels with Status
+
+```bash
+curl http://localhost:8000/api/v1/channels/
+```
+
+**Response**:
+```json
+{
+  "channels": [
+    {
+      "channel": 1,
+      "status": "available",
+      "booked_by": null
+    },
+    {
+      "channel": 2,
+      "status": "booked",
+      "booked_by": "measurement-001"
+    },
+    ...
+  ],
+  "total_channels": 48,
+  "available_channels": 46,
+  "booked_channels": 2
+}
+```
+
+### Manual Channel Management
+
+For advanced scenarios, you can manually book/release channels:
+
+**Book Channels**:
+```bash
+curl -X POST http://localhost:8000/api/v1/channels/book \
+  -H "Content-Type: application/json" \
+  -d '{
+    "booked_by": "my-user-id",
+    "channel_numbers": [5, 6, 7]
+  }'
+```
+
+**Release Channels**:
+```bash
+curl -X POST http://localhost:8000/api/v1/channels/release/my-user-id
+```
+
+### Channel Booking Errors
+
+If channels are unavailable:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "duration_seconds": 60,
+    "metadata": {
+      "detector_id": "det_001",
+      "channel_list": [1, 2, 999]
+    }
+  }'
+```
+
+**Response** (HTTP 400):
+```json
+{
+  "detail": "Invalid channel number: 999"
+}
+```
+
+If channels are already booked:
+
+**Response** (HTTP 409):
+```json
+{
+  "detail": "Channels already booked: [1, 2]"
+}
+```
+
+### Channel Management Best Practices
+
+✅ **DO**:
+- Check available channels before booking
+- Use descriptive identifiers for booked_by (e.g., measurement ID)
+- Release channels when done with measurements
+- Monitor channel utilization
+
+❌ **DON'T**:
+- Book channels you don't need
+- Forget about manually-booked channels
+- Assume all channels are always available
+- Book invalid channel numbers (must be 1-16, 101-116, or 201-216)
+
+---
+
 ## Troubleshooting
 
 ### "Connection refused" Error

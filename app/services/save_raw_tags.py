@@ -6,7 +6,7 @@ from datetime import datetime
 from app.models import SaveRawTagsMetadata
 from app.services.measurement import MeasurementHandler
 from app.utils.logger import configure_logging
-# from Swabian import TimeTagger
+from Swabian import TimeTagger
 
 logger = configure_logging(__name__)
 
