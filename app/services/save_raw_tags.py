@@ -6,7 +6,7 @@ from datetime import datetime
 from app.models import SaveRawTagsMetadata
 from app.services.measurement import MeasurementHandler
 from app.utils.logger import configure_logging
-from Swabian import TimeTagger
+# from Swabian import TimeTagger
 
 logger = configure_logging(__name__)
 
@@ -14,7 +14,7 @@ logger = configure_logging(__name__)
 class SaveRawTagsMeasurementHandler(MeasurementHandler):
     """Handler for saving raw time tags."""
 
-    def __init__(self, tagger: Optional[TimeTagger.TimeTagger] = None):
+    def __init__(self, tagger = None):
         super().__init__(tagger)
         self._measurement_task: Optional[asyncio.Task] = None
         self._start_time: Optional[datetime] = None

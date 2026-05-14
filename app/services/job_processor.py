@@ -1,5 +1,6 @@
 """Job processor for backend worker service."""
 
+
 import asyncio
 import threading
 import json
@@ -39,6 +40,7 @@ class JobProcessor:
         # Expose handlers for backward compatibility
         self.handlers = self.job_handlers
 
+
     def register_handler(self, measurement_type: str, handler_class: type) -> None:
         """Register a handler class for a measurement type.
 
@@ -51,6 +53,7 @@ class JobProcessor:
         self.job_handlers[measurement_type] = handler_class
         logger.info(f"Registered handler for measurement type: {measurement_type}")
 
+
     def enqueue_job(
         self,
         status_id: str,
@@ -60,8 +63,10 @@ class JobProcessor:
     ) -> None:
         """Enqueue a job to Redis for the worker to process.
 
+
         This is called by the web layer to queue jobs.
         The worker will pick them up from the queue.
+
 
         Args:
             status_id: Unique measurement ID
@@ -150,6 +155,7 @@ class JobProcessor:
             if measurement_type not in self.job_handlers:
                 raise ValueError(f"Unknown measurement type: {measurement_type}")
 
+
             handler_class = self.job_handlers[measurement_type]
 
             # Create fresh handler instance for this job thread
@@ -171,17 +177,24 @@ class JobProcessor:
                 self._handle_save_raw_tags(
                     status_id, handler, duration_seconds, metadata
                 )
+                self._handle_save_raw_tags(
+                    status_id, handler, duration_seconds, metadata
+                )
             else:
                 raise ValueError(f"Unknown measurement type: {measurement_type}")
+
 
             # Update status to completed
             self.status_manager.update_status(
                 status_id,
                 MeasurementStatus.COMPLETED.value,
                 f"{measurement_type} measurement completed successfully",
+                f"{measurement_type} measurement completed successfully",
             )
 
+
             logger.info(f"[{status_id}] Job completed successfully")
+
 
         except Exception as e:
             logger.error(f"[{status_id}] Job failed: {e}", exc_info=True)
@@ -190,6 +203,15 @@ class JobProcessor:
             )
 
         finally:
+            # Release channels if any were booked
+            try:
+                self.status_manager.release_channels(status_id)
+                logger.info(f"[{status_id}] Channels released after job completion")
+            except Exception as e:
+                logger.debug(
+                    f"[{status_id}] No channels to release or release failed: {e}"
+                )
+
             # Clean up from active jobs
             if status_id in self.active_jobs:
                 del self.active_jobs[status_id]

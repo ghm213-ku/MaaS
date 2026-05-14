@@ -1,4 +1,5 @@
 """Main application entry point - Distributed Architecture."""
+
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
@@ -18,18 +19,17 @@ job_processor: JobProcessor = None
 async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
     global status_manager, job_processor
-    
+
     # Startup
     logger.info("Application starting up...")
-    
-    # Initialize status manager only
+
+    # Initialize status manager (includes channel management)
     status_manager = StatusManager(
         redis_host="localhost",
         redis_port=6379,
         redis_db=0,
     )
-    
-    # Initialize job processor for enqueueing (handlers registered in worker only)
+
     job_processor = JobProcessor(status_manager)
     
     # Set up routes with job processor for enqueueing
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     logger.info("Job processing delegated to backend worker")
     
     yield
-    
+
     # Shutdown
     logger.info("Application shutting down...")
 
@@ -66,7 +66,7 @@ async def health_check():
             redis_healthy = status_manager.health_check()
         except Exception:
             redis_healthy = False
-    
+
     return {
         "status": "healthy" if redis_healthy else "unhealthy",
         "service": "MaaS",
@@ -100,7 +100,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         app,
         host="0.0.0.0",
