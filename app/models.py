@@ -35,21 +35,29 @@ class SaveRawTagsMetadata(BaseModel):
 class CountRateMeasurementRequest(BaseModel):
     """Request model for count-rate measurements."""
 
-    measurement_type: MeasurementType = MeasurementType.COUNT_RATE
-    duration_seconds: Optional[int] = Field(
-        None,
-        description="Optional: auto-stop after this many seconds. None = manual stop only",
+    channels: list[int] = Field(
+        description="List of channel numbers to measure (required). E.g., [1, 2, 3]"
     )
-    metadata: Optional[dict[str, Any]] = Field(
-        None, description="Optional: custom metadata for this measurement"
+    binwidth: int = Field(
+        default=int(1e9),
+        description="Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
+    )
+    n_values: int = Field(
+        default=1,
+        description="Number of bins in the histogram. Default: 1",
+    )
+    target_location: str = Field(
+        default="desktop/MaasData/{datetime}/{measurement-type}",
+        description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
     )
 
     class Config:
         json_schema_extra = {
             "example": {
-                "measurement_type": "count_rate",
-                "duration_seconds": 60,
-                "metadata": {"detector_id": "det_001", "source": "lab_B"},
+                "channels": [1, 2, 3],
+                "binwidth": 1000000000,
+                "n_values": 1,
+                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
             }
         }
 

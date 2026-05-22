@@ -45,11 +45,11 @@ Response shows system status:
 curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
   -H "Content-Type: application/json" \
   -d '{
-    "duration_seconds": 10,
-    "metadata": {
-      "detector": "Main Detector",
-      "source": "Lab A"
-    }
+    "channels": [1, 2, 3],
+    "binwidth": 1000000000,
+    "n_values": 1,
+    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+    "duration_seconds": 10
   }'
 ```
 
@@ -60,7 +60,7 @@ curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
   "measurement_type": "count_rate",
   "status": "queued",
   "started_at": "2026-04-30T10:00:00Z",
-  "message": "Count-rate measurement queued. Use ID '550e8400-e29b-41d4-a716-446655440000' to query status."
+  "message": "Count-rate measurement queued. Use ID '550e8400-e29b-41d4-a716-446655440000' to query status. Booked channels: [1, 2, 3]"
 }
 ```
 
@@ -114,7 +114,7 @@ curl http://localhost:8000/api/v1/measurements/550e8400-e29b-41d4-a716-446655440
 
 ### 1. Count-Rate Measurement
 
-Counts detector events over a period of time.
+Counts detector events over a period of time using specified channels.
 
 **Endpoint**: `POST /api/v1/measurements/count-rate`
 
@@ -123,25 +123,26 @@ Counts detector events over a period of time.
 curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
   -H "Content-Type: application/json" \
   -d '{
-    "duration_seconds": 60,
-    "metadata": {
-      "detector_id": "det_001",
-      "high_voltage": 1200,
-      "source": "lab_b"
-    }
+    "channels": [1, 2, 3],
+    "binwidth": 1000000000,
+    "n_values": 1,
+    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+    "duration_seconds": 60
   }'
 ```
 
-**Metadata Fields** (optional - customize as needed):
-- `detector_id`: Identifier for the detector
-- `high_voltage`: HV setting
-- `source`: Source location or identifier
-- Any other custom fields
+**Request Fields**:
+- `channels` (required): List of channel numbers to measure (e.g., `[1, 2, 3]`)
+- `binwidth` (optional): Bin width in picoseconds. Default: `1000000000` (1 second)
+- `n_values` (optional): Number of bins in histogram. Default: `1`
+- `target_location` (optional): Target file path for results. Supports `{datetime}` and `{measurement-type}` placeholders. Default: `"desktop/MaasData/{datetime}/{measurement-type}"`
+- `duration_seconds` (optional): Auto-stop after N seconds. If omitted, runs until manually stopped.
 
 **Results**: 
 - `total_count`: Total number of events detected
-- `live_time`: Live time (dead-time corrected)
-- `real_time`: Real/wall clock time
+- `count_rate_cps`: Count rate in counts per second
+- `duration_seconds`: Measurement duration
+- `stopped_at`: ISO timestamp of when measurement stopped
 
 ---
 
@@ -187,8 +188,11 @@ import time
 response = requests.post(
     "http://localhost:8000/api/v1/measurements/count-rate",
     json={
-        "duration_seconds": 60,
-        "metadata": {"detector": "main"}
+        "channels": [1, 2, 3],
+        "binwidth": 1000000000,
+        "n_values": 1,
+        "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+        "duration_seconds": 60
     }
 )
 measurement_id = response.json()["measurement_id"]
@@ -244,8 +248,11 @@ async function startMultipleMeasurements() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        duration_seconds: 30,
-        metadata: { detector: `detector_${i+1}` }
+        channels: [1 + i, 2 + i, 3 + i],
+        binwidth: 1000000000,
+        n_values: 1,
+        target_location: "desktop/MaasData/{datetime}/{measurement-type}",
+        duration_seconds: 30
       })
     });
     
@@ -523,23 +530,25 @@ curl -X POST http://localhost:8000/api/v1/measurements/save-raw-tags \
 
 When the measurement **completes, stops, or fails**, channels are **automatically released**.
 
-### Optional Channel Booking (Count-Rate)
+### Count-Rate with Custom Target Location
 
-Channels are optional for count-rate measurements. Book them if needed:
+For count-rate measurements, you can customize where results are saved:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
   -H "Content-Type: application/json" \
   -d '{
-    "duration_seconds": 60,
-    "metadata": {
-      "detector_id": "det_001",
-      "channel_list": [101, 102, 103]
-    }
+    "channels": [1, 2, 3],
+    "binwidth": 1000000000,
+    "n_values": 10,
+    "target_location": "C:\\custom\\path\\my_measurement_{datetime}.csv",
+    "duration_seconds": 60
   }'
 ```
 
-If you provide a `channel_list`, those channels will be booked. If not provided, no channels are booked.
+The `target_location` field supports these placeholders:
+- `{datetime}`: Replaced with current timestamp (e.g., `2026-05-22_14-30-45`)
+- `{measurement-type}`: Replaced with measurement type (e.g., `count_rate`)
 
 ### Check Available Channels
 

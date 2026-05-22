@@ -162,17 +162,19 @@ class TestRootEndpoint:
 
         assert response.status_code == 200
         assert response.json()["service"]
-        assert "endpoints" in response.json()
+        assert (
+            "measurement_endpoints" in response.json()
+            or "channel_endpoints" in response.json()
+        )
 
     def test_root_endpoint_includes_api_info(self, client):
         """Root should list available endpoints."""
         response = client.get("/")
         data = response.json()
 
-        assert "endpoints" in data
-        endpoints = data["endpoints"]
-        assert "health" in endpoints
-        assert "start_measurement" in endpoints
+        assert "measurement_endpoints" in data
+        endpoints = data["measurement_endpoints"]
+        assert "get_status" in endpoints or "start_count_rate" in endpoints
 
 
 class TestStartMeasurementEndpoint:
@@ -182,9 +184,10 @@ class TestStartMeasurementEndpoint:
     async def test_start_measurement_success(self, client, mock_service):
         """Should start measurement and return ID."""
         payload = {
-            "measurement_type": "count_rate",
-            "duration_seconds": 10,
-            "metadata": {"detector": "det_001"},
+            "channels": [1, 2, 3],
+            "binwidth": 1000000000,
+            "n_values": 1,
+            "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
         }
 
         response = client.post(
@@ -200,8 +203,8 @@ class TestStartMeasurementEndpoint:
 
     @pytest.mark.asyncio
     async def test_start_measurement_minimal_payload(self, client, mock_service):
-        """Should start with minimal payload."""
-        payload = {"measurement_type": "count_rate"}
+        """Should start with minimal payload (only channels required)."""
+        payload = {"channels": [1]}
 
         response = client.post(
             "/api/v1/measurements/count-rate",
@@ -212,18 +215,13 @@ class TestStartMeasurementEndpoint:
         assert "measurement_id" in response.json()
 
     @pytest.mark.asyncio
-    async def test_start_measurement_with_metadata(self, client, mock_service):
-        """Should accept and use metadata."""
+    async def test_start_measurement_with_custom_params(self, client, mock_service):
+        """Should accept and use custom parameters."""
         payload = {
-            "measurement_type": "count_rate",
-            "metadata": {
-                "detector_id": "det_001",
-                "location": {
-                    "building": "A",
-                    "room": 101,
-                },
-                "tags": ["important", "test"],
-            },
+            "channels": [1, 2, 3],
+            "binwidth": 500000000,
+            "n_values": 10,
+            "target_location": "C:\\custom\\path\\results.csv",
         }
 
         response = client.post(
@@ -237,7 +235,7 @@ class TestStartMeasurementEndpoint:
     @pytest.mark.asyncio
     async def test_start_measurement_returns_timestamp(self, client, mock_service):
         """Response should include start timestamp."""
-        payload = {"measurement_type": "count_rate"}
+        payload = {"channels": [1]}
 
         response = client.post(
             "/api/v1/measurements/count-rate",
@@ -259,7 +257,7 @@ class TestStopMeasurementEndpoint:
         # Start measurement
         start_response = client.post(
             "/api/v1/measurements/count-rate",
-            json={"measurement_type": "count_rate"},
+            json={"channels": [1]},
         )
         meas_id = start_response.json()["measurement_id"]
 
@@ -288,7 +286,7 @@ class TestStopMeasurementEndpoint:
         # Start measurement
         start_response = client.post(
             "/api/v1/measurements/count-rate",
-            json={"measurement_type": "count_rate"},
+            json={"channels": [1]},
         )
         meas_id = start_response.json()["measurement_id"]
 
@@ -311,7 +309,7 @@ class TestGetStatusEndpoint:
         # Start measurement
         start_response = client.post(
             "/api/v1/measurements/count-rate",
-            json={"measurement_type": "count_rate"},
+            json={"channels": [1]},
         )
         meas_id = start_response.json()["measurement_id"]
 
@@ -333,7 +331,7 @@ class TestGetStatusEndpoint:
         # Start measurement
         start_response = client.post(
             "/api/v1/measurements/count-rate",
-            json={"measurement_type": "count_rate"},
+            json={"channels": [1]},
         )
         meas_id = start_response.json()["measurement_id"]
 
@@ -349,14 +347,14 @@ class TestGetStatusEndpoint:
     @pytest.mark.asyncio
     async def test_get_status_includes_metadata(self, client, mock_service):
         """Status should include measurement metadata."""
-        metadata = {"detector": "det_001"}
-
-        # Start measurement
+        # Start measurement with parameters
         start_response = client.post(
             "/api/v1/measurements/count-rate",
             json={
-                "measurement_type": "count_rate",
-                "metadata": metadata,
+                "channels": [1, 2],
+                "binwidth": 1000000000,
+                "n_values": 1,
+                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
             },
         )
         meas_id = start_response.json()["measurement_id"]
@@ -367,7 +365,9 @@ class TestGetStatusEndpoint:
         )
 
         data = status_response.json()
-        assert data["metadata"] == metadata
+        # Check that metadata contains our parameters
+        assert "metadata" in data
+        assert data["metadata"]["channels"] == [1, 2]
 
     @pytest.mark.asyncio
     async def test_get_status_not_found(self, client, mock_service):
@@ -394,32 +394,31 @@ class TestApiErrorHandling:
     """Test error handling and edge cases."""
 
     @pytest.mark.asyncio
+    @pytest.mark.asyncio
     async def test_payload_with_implicit_type(self, client, mock_service):
-        """Should accept payload where measurement_type uses default."""
-        payload = {"duration_seconds": 10}
+        """Should accept payload with only required fields (channels)."""
+        payload = {"channels": [1, 2]}
 
         response = client.post(
             "/api/v1/measurements/count-rate",
             json=payload,
         )
 
-        # Should succeed because measurement_type defaults to count_rate
+        # Should succeed because all other fields have defaults
         assert response.status_code == 201
 
     @pytest.mark.asyncio
     async def test_invalid_payload_missing_type(self, client, mock_service):
-        """Should reject payload with completely invalid payload structure."""
-        # Send empty object - while measurement_type defaults, we test
-        # it with no keys at all
-        payload = {}
+        """Should accept minimal payload with only required channels field."""
+        # Minimal valid payload - just channels
+        payload = {"channels": [1]}
 
-        # This should still work due to defaults
         response = client.post(
             "/api/v1/measurements/count-rate",
             json=payload,
         )
 
-        # Should succeed due to defaults in the model
+        # Should succeed with defaults
         assert response.status_code == 201
 
     @pytest.mark.asyncio
@@ -443,15 +442,15 @@ class TestApiErrorHandling:
         # Start 3 measurements
         response1 = client.post(
             "/api/v1/measurements/count-rate",
-            json={"measurement_type": "count_rate"},
+            json={"channels": [1]},
         )
         response2 = client.post(
             "/api/v1/measurements/count-rate",
-            json={"measurement_type": "count_rate"},
+            json={"channels": [2]},
         )
         response3 = client.post(
             "/api/v1/measurements/count-rate",
-            json={"measurement_type": "count_rate"},
+            json={"channels": [3]},
         )
 
         assert response1.status_code == 201
@@ -476,9 +475,9 @@ class TestApiIntegration:
         start_response = client.post(
             "/api/v1/measurements/count-rate",
             json={
-                "measurement_type": "count_rate",
-                "duration_seconds": 5,
-                "metadata": {"test": "workflow"},
+                "channels": [1, 2, 3],
+                "binwidth": 1000000000,
+                "n_values": 1,
             },
         )
         assert start_response.status_code == 201

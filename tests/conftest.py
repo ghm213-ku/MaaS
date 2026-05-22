@@ -1,4 +1,5 @@
 """Pytest configuration and shared fixtures."""
+
 import pytest
 import asyncio
 import sys
@@ -24,9 +25,20 @@ def event_loop():
 
 @pytest.fixture(autouse=True)
 def reset_event_loop():
-    """Reset event loop between tests."""
-    # This helps prevent event loop issues in pytest
-    pass
+    """Reset event loop between tests and clean up pending tasks."""
+    yield
+
+    # After each test, ensure all pending tasks are cancelled
+    try:
+        loop = asyncio.get_event_loop()
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        # Give tasks a moment to process the cancellation
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    except Exception:
+        pass
 
 
 def pytest_configure(config):

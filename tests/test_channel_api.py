@@ -56,7 +56,7 @@ def client():
                 booked_by = booked_channels.get(ch)
                 result.append(
                     {
-                        "channel": ch,
+                        "channel_number": ch,
                         "status": status,
                         "booked_by": booked_by,
                     }
@@ -203,7 +203,7 @@ class TestListAllChannels:
         # Check channels structure
         channels = data["channels"]
         assert len(channels) == 48
-        assert all("channel" in ch and "status" in ch for ch in channels)
+        assert all("channel_number" in ch and "status" in ch for ch in channels)
 
     def test_list_channels_shows_booked_status(self, client):
         """Should show booked status for reserved channels."""
@@ -224,7 +224,7 @@ class TestListAllChannels:
 
         # Check booked channels in list
         channels = data["channels"]
-        booked_ch = [ch for ch in channels if ch["channel"] in [1, 2, 3]]
+        booked_ch = [ch for ch in channels if ch["channel_number"] in [1, 2, 3]]
         assert all(ch["status"] == "booked" for ch in booked_ch)
         assert all(ch["booked_by"] == "measurement-001" for ch in booked_ch)
 
