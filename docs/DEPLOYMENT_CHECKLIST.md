@@ -357,8 +357,8 @@ redis-cli FLUSHDB  # Clear corrupted data
 4. Refer to troubleshooting in `DISTRIBUTED_ARCHITECTURE.md`
 
 ### Documentation
-- **Quick Start**: `QUICKSTART_DISTRIBUTED.md`
-- **Full Docs**: `DISTRIBUTED_ARCHITECTURE.md`
+- **Quick Start**: See [README.md](../README.md) or [README_DEVELOPER_GUIDE.md](README_DEVELOPER_GUIDE.md)
+- **Full Docs**: [DISTRIBUTED_ARCHITECTURE.md](DISTRIBUTED_ARCHITECTURE.md)
 - **API Docs**: `http://localhost:8000/docs`
 - **Tests**: `pytest tests/test_distributed_integration.py -v`
 

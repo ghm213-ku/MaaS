@@ -498,6 +498,368 @@ MONITOR
 
 # Check memory usage
 INFO memory
+```
+
+---
+
+# Part 2: Extending MaaS with New Measurement Types
+
+## Overview
+
+This section explains how to extend MaaS to support new measurement types beyond `count_rate` and `save_raw_tags`. You'll learn:
+
+- How to create new Pydantic models
+- How to create a measurement handler
+- How to register your handler with the system
+- How to add API endpoints
+
+---
+
+## Step 1: Create Pydantic Models
+
+Models are defined in `app/models.py` and define request validation and structure.
+
+### Understanding Existing Models
+
+```python
+# From app/models.py - Example: SaveRawTagsMetadata
+
+class SaveRawTagsMetadata(BaseModel):
+    """Metadata specific to save-raw-tags measurements."""
+    channel_list: list[int]  # Required: list of channel IDs
+    target_file_path: str    # Required: where to save data
+
+
+class SaveRawTagsMeasurmentRequest(BaseModel):
+    """Request model for save-raw-tags measurements."""
+    measurement_type: MeasurementType = MeasurementType.SAVE_RAW_TAGS
+    duration_seconds: int  # Required: how long to measure
+    metadata: SaveRawTagsMetadata  # Required: specific to this measurement type
+```
+
+### Example: Add Energy Spectrum Measurement
+
+Edit `app/models.py` and add:
+
+```python
+class EnergySpectrumMetadata(BaseModel):
+    """Metadata specific to energy spectrum measurements."""
+    channel_list: list[int] = Field(
+        ..., 
+        description="Channels to measure spectrum for",
+        min_items=1,
+    )
+    bin_count: int = Field(
+        256, 
+        description="Number of energy bins",
+        ge=32,
+        le=4096,
+    )
+    calibration_data: Optional[dict] = Field(
+        None,
+        description="Energy calibration parameters",
+    )
+
+
+class EnergySpectrumRequest(BaseModel):
+    """Request model for energy spectrum measurements."""
+    measurement_type: MeasurementType = MeasurementType.ENERGY_SPECTRUM
+    duration_seconds: int = Field(
+        ...,
+        description="Measurement duration in seconds",
+        gt=0,
+        le=3600,
+    )
+    metadata: EnergySpectrumMetadata
+
+
+# Also update the MeasurementType enum:
+class MeasurementType(str, Enum):
+    """Supported measurement types."""
+    COUNT_RATE = "count_rate"
+    SAVE_RAW_TAGS = "save_raw_tags"
+    ENERGY_SPECTRUM = "energy_spectrum"  # NEW
+```
+
+### Key Model Features
+
+- **Field Validation**: Use `Field()` for constraints (gt, le, min_items, etc.)
+- **Required vs Optional**: Use `...` (Ellipsis) for required, `None` for optional
+- **Type Checking**: Pydantic automatically validates types
+- **Error Messages**: FastAPI returns HTTP 422 with descriptive validation errors
+
+---
+
+## Step 2: Create a Measurement Handler
+
+Handlers execute the actual measurement logic and live in `app/services/`.
+
+### Understanding Existing Handler
+
+```python
+# From app/services/save_raw_tags.py
+
+class SaveRawTagsMeasurementHandler:
+    """Handles save-raw-tags measurements."""
+    
+    def __init__(self):
+        """Initialize the handler."""
+        self.logger = configure_logging(__name__)
+    
+    def start(self, target_file_path: str, channels: list[int], duration: int):
+        """Execute the measurement."""
+        self.logger.info(f"Starting save-raw-tags measurement")
+        # Measurement logic here
+        self.logger.info(f"Measurement complete")
+```
+
+### Example: Create Energy Spectrum Handler
+
+Create file `app/services/energy_spectrum.py`:
+
+```python
+"""Energy spectrum measurement handler."""
+import time
+from app.utils.logger import configure_logging
+
+logger = configure_logging(__name__)
+
+
+class EnergySpectrumHandler:
+    """Handles energy spectrum measurements."""
+    
+    def __init__(self):
+        """Initialize the handler."""
+        self.logger = logger
+        self.is_running = False
+        self.histogram = {}
+    
+    def start(self, duration_seconds: int, channels: list[int], bin_count: int = 256, calibration_data: dict = None):
+        """Execute energy spectrum measurement."""
+        self.is_running = True
+        self.logger.info(
+            f"Starting energy spectrum measurement: "
+            f"duration={duration_seconds}s, channels={channels}, bins={bin_count}"
+        )
+        
+        try:
+            # Initialize histogram bins
+            self.histogram = {ch: [0] * bin_count for ch in channels}
+            
+            start_time = time.time()
+            elapsed = 0
+            
+            while elapsed < duration_seconds and self.is_running:
+                # Simulate acquiring spectrum data
+                for channel in channels:
+                    energy = int((time.time() * 1000) % bin_count)
+                    self.histogram[channel][energy] += 1
+                
+                elapsed = time.time() - start_time
+                time.sleep(0.1)
+            
+            self.logger.info(f"Energy spectrum measurement complete")
+            
+            return {
+                "measurement_type": "energy_spectrum",
+                "duration": elapsed,
+                "channels": channels,
+                "bin_count": bin_count,
+                "spectrum": self.histogram,
+                "total_counts": sum(sum(bins) for bins in self.histogram.values()),
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in energy spectrum measurement: {e}", exc_info=True)
+            raise
+        finally:
+            self.is_running = False
+    
+    def stop(self):
+        """Stop the measurement."""
+        self.logger.info("Stopping energy spectrum measurement")
+        self.is_running = False
+```
+
+### Handler Best Practices
+
+1. **Logger Setup**: Always initialize logger in `__init__`
+2. **Error Handling**: Wrap in try/except, log errors
+3. **Stop Support**: Check `self.is_running` flag for graceful shutdown
+4. **Resource Cleanup**: Use finally block for cleanup
+5. **Return Results**: Return dict with measurement results
+6. **Logging**: Log start and completion
+
+---
+
+## Step 3: Register Handler with System
+
+Handler registration happens ONLY in the backend worker (`worker.py`), not in the web layer.
+
+Edit the `__init__()` method of the worker:
+
+```python
+def __init__(self):
+    """Initialize the backend worker."""
+    self.status_manager = StatusManager(...)
+    self.job_processor = JobProcessor(self.status_manager)
+    
+    # Register handlers
+    self.job_processor.register_handler("count_rate", CountRateMeasurementHandler)
+    self.job_processor.register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
+    
+    # ADD YOUR HANDLER HERE:
+    self.job_processor.register_handler("energy_spectrum", EnergySpectrumHandler)
+    
+    logger.info("Backend worker initialized")
+```
+
+**Why this design?**
+- ✅ Lightweight web layer scales independently
+- ✅ Backend workers own handler lifecycle
+- ✅ Clear separation: HTTP vs job processing
+- ✅ Add handlers without restarting web layer
+
+---
+
+## Step 4: Add Dedicated API Endpoint
+
+Add a dedicated endpoint in `app/api/routes.py`:
+
+```python
+from app.models import EnergySpectrumRequest
+
+@router.post("/energy-spectrum", response_model=MeasurementResponse, status_code=201)
+async def start_energy_spectrum_measurement(
+    request: EnergySpectrumRequest,
+) -> MeasurementResponse:
+    """Start an energy spectrum measurement."""
+    logger.info(f"Received energy-spectrum request: {request.dict()}")
+    
+    try:
+        status_id = str(uuid.uuid4())
+        
+        # Create status in Redis
+        status_manager.create_status(
+            status_id=status_id,
+            measurement_type="energy_spectrum",
+            duration_seconds=request.duration_seconds,
+            metadata=request.metadata.model_dump(),
+        )
+        
+        # Enqueue job
+        job_processor.process_job(
+            status_id,
+            "energy_spectrum",
+            request.duration_seconds,
+        )
+        
+        return MeasurementResponse(
+            measurement_id=status_id,
+            measurement_type="energy_spectrum",
+            status="queued",
+            started_at=datetime.utcnow(),
+            message=f"Energy spectrum measurement queued. Use ID '{status_id}' to query status.",
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting energy spectrum measurement: {e}", exc_info=True)
+        raise
+```
+
+---
+
+## Step 5: Add Tests
+
+Create file `tests/test_energy_spectrum.py`:
+
+```python
+"""Tests for energy spectrum handler."""
+import pytest
+from app.services.energy_spectrum import EnergySpectrumHandler
+
+@pytest.fixture
+def handler():
+    """Fixture for EnergySpectrumHandler."""
+    return EnergySpectrumHandler()
+
+def test_energy_spectrum_basic(handler):
+    """Test basic energy spectrum measurement."""
+    result = handler.start(
+        duration_seconds=1,
+        channels=[1, 2, 3],
+        bin_count=256,
+    )
+    
+    assert result["measurement_type"] == "energy_spectrum"
+    assert result["channels"] == [1, 2, 3]
+    assert result["bin_count"] == 256
+    assert result["total_counts"] > 0
+
+def test_energy_spectrum_stop(handler):
+    """Test stopping energy spectrum measurement."""
+    import threading
+    
+    # Start in thread
+    thread = threading.Thread(
+        target=handler.start,
+        kwargs={"duration_seconds": 10, "channels": [1], "bin_count": 256}
+    )
+    thread.start()
+    
+    import time
+    time.sleep(0.2)
+    
+    # Stop it
+    handler.stop()
+    thread.join(timeout=2)
+    
+    assert not handler.is_running
+```
+
+---
+
+## Step 6: Testing Your Extension
+
+Run all tests:
+```bash
+pytest tests/ -v
+```
+
+Run your new tests:
+```bash
+pytest tests/test_energy_spectrum.py -v
+```
+
+Test the endpoint:
+```bash
+curl -X POST http://localhost:8000/api/v1/measurements/energy-spectrum \
+  -H "Content-Type: application/json" \
+  -d '{
+    "duration_seconds": 10,
+    "metadata": {
+      "channel_list": [1, 2, 3],
+      "bin_count": 512
+    }
+  }'
+```
+
+---
+
+## Checklist for Adding New Measurement Type
+
+- [ ] Added metadata model in `app/models.py`
+- [ ] Added request model in `app/models.py`
+- [ ] Updated `MeasurementType` enum in `app/models.py`
+- [ ] Created handler in `app/services/my_handler.py`
+- [ ] Handler has `start()` and `stop()` methods
+- [ ] Handler returns dict with results
+- [ ] Registered handler in `worker.py`
+- [ ] (Optional) Added API endpoint in `app/api/routes.py`
+- [ ] Created tests in `tests/test_my_handler.py`
+- [ ] All tests pass: `pytest tests/ -v`
+- [ ] Tested API endpoint manually
+- [ ] Updated documentation if needed
 
 # Check slow queries
 SLOWLOG GET 10

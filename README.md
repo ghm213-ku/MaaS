@@ -41,14 +41,15 @@ curl http://localhost:8000/api/v1/measurements/{measurement_id}/status
 
 ## 📚 Documentation
 
-MaaS has comprehensive documentation tailored to different audiences:
+Comprehensive documentation tailored to different audiences. All developer documentation is now consolidated into focused, single-purpose guides:
 
 | Document | Audience | Purpose |
 |----------|----------|---------|
-| [README_USER_GUIDE.md](README_USER_GUIDE.md) | **Users** | How to use MaaS from client perspective |
-| [README_SYSTEM_FLOW.md](README_SYSTEM_FLOW.md) | **Architects** | How HTTP requests flow through the system |
-| [README_EXTENDING.md](README_EXTENDING.md) | **Developers** | How to add new measurement types |
-| [README_DEVELOPER_GUIDE.md](README_DEVELOPER_GUIDE.md) | **Developers** | How to run, debug, and extend MaaS |
+| [docs/README_USER_GUIDE.md](docs/README_USER_GUIDE.md) | **End Users** | How to use MaaS APIs, measurement types, integration examples |
+| [docs/README_SYSTEM_FLOW.md](docs/README_SYSTEM_FLOW.md) | **Architects/DevOps** | System architecture, request flow, component interactions, timing analysis |
+| [docs/README_DEVELOPER_GUIDE.md](docs/README_DEVELOPER_GUIDE.md) | **Developers** | Setup, running locally, debugging, extending with new measurement types |
+| [docs/DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md) | **DevOps** | Pre-deployment verification, deployment steps, troubleshooting |
+| [docs/CHANNEL_MANAGEMENT_GUIDE.md](docs/CHANNEL_MANAGEMENT_GUIDE.md) | **All** | Channel booking system (48 exclusive channels), lifecycle, API endpoints |
 
 ---
 
@@ -81,32 +82,43 @@ Measurement Handler (count-rate, save-raw-tags, custom)
 MaaS/
 ├── app/                          ← Application code
 │   ├── api/
-│   │   ├── routes.py            (legacy monolithic)
-│   │   └── routes.py ← Distributed API endpoints
+│   │   └── routes.py             ← FastAPI endpoints
 │   ├── services/
-│   │   ├── status_manager.py    ← Redis status storage
-│   │   ├── job_processor.py     ← Thread-based job execution
-│   │   ├── count_rate.py        ← Count-rate handler
-│   │   ├── save_raw_tags.py     ← Save-raw-tags handler
-│   │   └── measurement.py       (legacy monolithic)
-│   ├── models.py                ← Pydantic request/response models
+│   │   ├── status_manager.py     ← Redis status storage
+│   │   ├── job_processor.py      ← Thread-based job execution
+│   │   ├── count_rate.py         ← Count-rate handler
+│   │   ├── save_raw_tags.py      ← Save-raw-tags handler
+│   │   ├── file_logger.py        ← File logging service
+│   │   └── measurement.py        ← Legacy monolithic service
+│   ├── models.py                 ← Pydantic request/response models
+│   ├── payloads.py               ← Legacy payload definitions
 │   └── utils/
+│       ├── logger.py             ← Logging configuration
+│       └── ssl_utils.py          ← SSL/TLS utilities
 │
 ├── tests/
 │   ├── test_distributed_integration.py ← Integration tests
-│   └── test_*.py                ← Unit tests
+│   ├── test_file_logger.py              ← File logging tests
+│   └── test_*.py                        ← Unit tests
 │
-├── main.py                      ← Web layer entry point
-├── worker.py                    ← Backend worker process
+├── request_logs/                 ← Log files (created at runtime)
+│   ├── channel_requests.txt      ← Channel booking/release log
+│   └── measurement_requests.txt  ← Measurement requests log
 │
-├── README.md                    ← This file
-├── README_USER_GUIDE.md         ← For users
-├── README_SYSTEM_FLOW.md        ← How requests flow through system
-├── README_EXTENDING.md          ← How to add measurement types
-├── README_DEVELOPER_GUIDE.md    ← For developers
+├── main.py                       ← Web layer entry point
+├── worker.py                     ← Backend worker process
 │
-├── requirements.txt
-└── pytest.ini
+├── README.md                     ← This file
+├── README_USER_GUIDE.md          ← For users
+├── README_SYSTEM_FLOW.md         ← How requests flow through system
+├── README_EXTENDING.md           ← How to add measurement types
+├── README_DEVELOPER_GUIDE.md     ← For developers
+├── DISTRIBUTED_ARCHITECTURE.md   ← Technical architecture reference
+├── DEPLOYMENT_CHECKLIST.md       ← Deployment verification
+├── CHANNEL_MANAGEMENT_GUIDE.md   ← Channel booking system
+│
+├── requirements.txt              ← Python dependencies
+└── pytest.ini                    ← Pytest configuration
 ```
 
 ---

@@ -755,5 +755,5 @@ A: Yes, but you won't know when they complete. Always query status to know the r
 
 - Try the quick start measurements
 - Integrate MaaS into your application
-- Read README_DEVELOPER_GUIDE.md for debugging
+- Read [README_DEVELOPER_GUIDE.md](README_DEVELOPER_GUIDE.md) for debugging
 - Contact your administrator for production setup

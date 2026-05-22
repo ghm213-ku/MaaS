@@ -1,14 +1,146 @@
 """
-# HTTP Request Routing & System Flow
+# System Architecture & HTTP Request Flow
 
 ## Overview
 
-This document describes how an HTTP request flows through the MaaS distributed system from 
-initial reception to completion and status update.
+This document describes the MaaS distributed architecture and how HTTP requests flow through 
+the system from initial reception to completion and status update.
 
 ---
 
-## System Architecture
+## Part 1: Distributed Architecture Overview
+
+### Architecture Components
+
+The application uses a distributed architecture with clear separation of concerns:
+
+1. **Web Layer (FastAPI)** - Receives requests and returns immediately with status IDs
+2. **Redis Message Broker** - Stores status and job queue
+3. **Backend Worker** - Processes jobs in separate threads using registered handlers
+4. **Measurement Handlers** - Execute actual measurement logic (count-rate, save-raw-tags, etc.)
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────┐
+│  Web Layer (FastAPI)                │
+│  - Receive measurement requests     │
+│  - Enqueue jobs to Redis            │
+│  - Return status IDs                │
+│  - Query and stop measurements      │
+└──────────────┬──────────────────────┘
+               │ (enqueue via process_job)
+               ▼
+┌─────────────────────────────────────┐
+│  Redis (Message Broker)             │
+│  - Store status objects             │
+│  - Persist metadata                 │
+│  - Store results                    │
+│  - Track active jobs                │
+└──────────────┬──────────────────────┘
+               │ (dequeue job)
+               ▼
+┌─────────────────────────────────────┐
+│  Backend Worker Process             │
+│  - Process jobs in separate threads │
+│  - Update status in Redis           │
+│  - Handle errors gracefully         │
+│  - Store results when complete      │
+└─────────────────────────────────────┘
+```
+
+### Key Components
+
+**StatusManager** (`app/services/status_manager.py`)
+- Manages measurement status in Redis
+- Creates, updates, and retrieves measurement status
+- Stores metadata and results
+- Status states: QUEUED → ACTIVE → COMPLETED/STOPPED/FAILED
+
+**JobProcessor** (`app/services/job_processor.py`)
+- Spawns a new thread for each measurement job
+- Registers handlers for different measurement types
+- Updates status as jobs progress
+- Handles errors and cleanup
+
+**Web Layer** (`app/api/routes.py`)
+- FastAPI routes for starting measurements
+- Returns unique status IDs (UUIDs)
+- Enqueues jobs to Redis (does NOT register or execute handlers)
+- Status queries return information from Redis
+- Lightweight and scalable independently
+
+**Backend Worker** (`worker.py`)
+- Standalone process that processes measurement jobs
+- Registers measurement handlers (only location where handlers are registered)
+- Monitors Redis connection health
+- Polls job queue and spawns threads for measurements
+- Can be scaled to multiple instances for parallel processing
+
+---
+
+## Setup & Installation
+
+### Prerequisites
+- Python 3.10+
+- Redis Server (local or remote)
+
+### Installation
+
+1. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+```
+
+2. **Start Redis Server** (if not already running):
+```bash
+redis-server
+# or on Windows:
+wsl redis-server
+```
+
+3. **Verify Redis is running:**
+```bash
+redis-cli ping
+# Should return: PONG
+```
+
+---
+
+## Running the Application
+
+### Option A: Development Mode (Single Process)
+
+For testing and development, you can run everything in one process:
+
+```bash
+# Run the main application with FastAPI
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+This starts the web layer, and jobs are processed in background threads as they arrive.
+
+### Option B: Production Mode (Separate Processes)
+
+For better isolation and scalability:
+
+```bash
+# Terminal 1: Start the web layer
+python main.py
+
+# Terminal 2: Start the backend worker (processes jobs)
+python worker.py
+```
+
+You can run multiple worker instances for parallel processing.
+
+---
+
+## Part 2: HTTP Request Routing & System Flow
+
+---
+
+## System Architecture (Request Flow)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
