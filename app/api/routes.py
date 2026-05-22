@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager, MeasurementStatus
+from app.services.file_logger import FileLogger
 from app.utils.logger import configure_logging
 
 logger = configure_logging(__name__)
@@ -36,16 +37,19 @@ channels_router = APIRouter(prefix="/api/v1/channels", tags=["channels"])
 # These will be set by main.py
 _job_processor: Optional[JobProcessor] = None
 _status_manager: Optional[StatusManager] = None
+_file_logger: Optional[FileLogger] = None
 
 
 def set_processors(
     job_processor: JobProcessor,
     status_manager: StatusManager,
+    file_logger: Optional[FileLogger] = None,
 ) -> None:
-    """Set the job processor and status manager."""
-    global _job_processor, _status_manager
+    """Set the job processor, status manager, and file logger."""
+    global _job_processor, _status_manager, _file_logger
     _job_processor = job_processor
     _status_manager = status_manager
+    _file_logger = file_logger
 
 
 def get_job_processor() -> JobProcessor:
@@ -62,6 +66,11 @@ def get_status_manager() -> StatusManager:
     return _status_manager
 
 
+def get_file_logger() -> Optional[FileLogger]:
+    """Dependency injection for file logger."""
+    return _file_logger
+
+
 # ========== MEASUREMENT ENDPOINTS ==========
 
 
@@ -72,6 +81,7 @@ async def start_count_rate_measurement(
     request: CountRateMeasurementRequest,
     processor: JobProcessor = Depends(get_job_processor),
     status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
 ) -> MeasurementResponse:
     """
     Start a new count-rate measurement request.
@@ -140,6 +150,27 @@ async def start_count_rate_measurement(
 
         logger.info(f"[{status_id}] Count-rate measurement enqueued successfully")
 
+        # Log measurement request to file
+        if file_logger:
+            logger.info(
+                f"[{status_id}] File logger available, writing to measurement log"
+            )
+            try:
+                file_logger.log_measurement_request(
+                    measurement_id=status_id,
+                    measurement_type=request.measurement_type.value,
+                    duration_seconds=request.duration_seconds,
+                    metadata=request.metadata,
+                    timestamp=datetime.utcnow(),
+                )
+                logger.info(f"[{status_id}] Measurement logged to file successfully")
+            except Exception as e:
+                logger.error(
+                    f"[{status_id}] Failed to log measurement: {e}", exc_info=True
+                )
+        else:
+            logger.warning(f"[{status_id}] File logger is None - skipping file logging")
+
         return MeasurementResponse(
             measurement_id=status_id,
             measurement_type=request.measurement_type,
@@ -166,6 +197,7 @@ async def start_save_raw_tags_measurement(
     request: SaveRawTagsMeasurmentRequest,
     processor: JobProcessor = Depends(get_job_processor),
     status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
 ) -> MeasurementResponse:
     """
     Start a new save-raw-tags measurement request.
@@ -232,6 +264,27 @@ async def start_save_raw_tags_measurement(
         )
 
         logger.info(f"[{status_id}] Save-raw-tags measurement enqueued successfully")
+
+        # Log measurement request to file
+        if file_logger:
+            logger.info(
+                f"[{status_id}] File logger available, writing to measurement log"
+            )
+            try:
+                file_logger.log_measurement_request(
+                    measurement_id=status_id,
+                    measurement_type=request.measurement_type.value,
+                    duration_seconds=request.duration_seconds,
+                    metadata=request.metadata.model_dump(),
+                    timestamp=datetime.utcnow(),
+                )
+                logger.info(f"[{status_id}] Measurement logged to file successfully")
+            except Exception as e:
+                logger.error(
+                    f"[{status_id}] Failed to log measurement: {e}", exc_info=True
+                )
+        else:
+            logger.warning(f"[{status_id}] File logger is None - skipping file logging")
 
         return MeasurementResponse(
             measurement_id=status_id,
@@ -336,6 +389,7 @@ async def list_available_channels(
 async def book_channels(
     request: ChannelBookRequest,
     status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
 ) -> ChannelBookResponse:
     """
     Book (reserve) channels for a measurement or user.
@@ -368,6 +422,30 @@ async def book_channels(
 
         logger.info(f"[{request.booked_by}] Channels booked successfully")
 
+        # Log channel booking request to file
+        if file_logger:
+            logger.info(
+                f"[{request.booked_by}] File logger available, writing to channel log"
+            )
+            try:
+                file_logger.log_channel_book_request(
+                    booked_by=booking_result["booked_by"],
+                    channel_numbers=booking_result["booked_channels"],
+                    timestamp=booking_result["booking_time"],
+                )
+                logger.info(
+                    f"[{request.booked_by}] Channel booking logged to file successfully"
+                )
+            except Exception as e:
+                logger.error(
+                    f"[{request.booked_by}] Failed to log channel booking: {e}",
+                    exc_info=True,
+                )
+        else:
+            logger.warning(
+                f"[{request.booked_by}] File logger is None - skipping file logging"
+            )
+
         return ChannelBookResponse(
             booked_by=booking_result["booked_by"],
             booked_channels=booking_result["booked_channels"],
@@ -398,6 +476,7 @@ async def book_channels(
 async def release_channels(
     booked_by: str,
     status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
 ) -> ChannelReleaseResponse:
     """
     Release (free up) all channels booked by a measurement or user.
@@ -422,6 +501,25 @@ async def release_channels(
         logger.info(
             f"[{booked_by}] Channels released successfully: {release_result['released_channels']}"
         )
+
+        # Log channel release request to file
+        if file_logger:
+            logger.info(f"[{booked_by}] File logger available, writing to channel log")
+            try:
+                file_logger.log_channel_release_request(
+                    booked_by=release_result["booked_by"],
+                    released_channels=release_result["released_channels"],
+                    timestamp=datetime.utcnow(),
+                )
+                logger.info(
+                    f"[{booked_by}] Channel release logged to file successfully"
+                )
+            except Exception as e:
+                logger.error(
+                    f"[{booked_by}] Failed to log channel release: {e}", exc_info=True
+                )
+        else:
+            logger.warning(f"[{booked_by}] File logger is None - skipping file logging")
 
         return ChannelReleaseResponse(
             booked_by=release_result["booked_by"],

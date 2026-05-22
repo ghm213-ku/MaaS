@@ -1,0 +1,9 @@
+================================================================================
+CHANNEL BOOKING AND RELEASE REQUESTS LOG
+================================================================================
+Booked By | Channel Numbers | Request Type | Timestamp | Details
+--------------------------------------------------------------------------------
+demo-user            | 10, 11, 12           | BOOK            | 2026-05-22 11:51:02.188   | Booked 3 channels
+user2                | 101, 102, 103        | BOOK            | 2026-05-22 11:51:52.474   | Booked 3 channels
+demo-user            | 10, 11, 12           | RELEASE         | 2026-05-22 11:52:00.713   | Released 3 channels
+abc-123              | 1, 2, 5, 6, 7        | RELEASE         | 2026-05-22 11:56:14.457   | Released 5 channels
