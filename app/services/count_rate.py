@@ -57,12 +57,10 @@ class CountRateMeasurementHandler(MeasurementHandler):
         counter.startFor(duration_seconds * 1e12)
         counter.waitUntilFinished()
         counter_data = counter.getData()
-        logger.info(f"Count-rate measurement completed with raw data: {counter_data}")
         data = np.array(counter_data)
         logger.info(
             f"Count-rate measurement finished for duration: {duration_seconds} seconds"
         )
-        logger.info(f"Data acquired: {data}")
         np.savetxt(target_location, data, delimiter=",")
         logger.info(f"Count-rate data saved to {target_location}")
 

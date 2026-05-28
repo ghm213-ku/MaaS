@@ -184,7 +184,6 @@ class JobProcessor:
                 status_id,
                 MeasurementStatus.COMPLETED.value,
                 f"{measurement_type} measurement completed successfully",
-                f"{measurement_type} measurement completed successfully",
             )
 
             logger.info(f"[{status_id}] Job completed successfully")

@@ -27,12 +27,24 @@ class StatusManager:
     ALL_CHANNELS = list(range(1, 17)) + list(range(101, 117)) + list(range(201, 217))
 
     def __init__(
-        self, redis_host: str = "localhost", redis_port: int = 6379, redis_db: int = 0
+        self,
+        redis_host: str = "localhost",
+        redis_port: int = 6379,
+        redis_db: int = 0,
+        file_logger: Optional[Any] = None,
     ):
-        """Initialize Redis connection."""
+        """Initialize Redis connection.
+
+        Args:
+            redis_host: Redis server host
+            redis_port: Redis server port
+            redis_db: Redis database number
+            file_logger: Optional FileLogger instance for logging measurement status removal
+        """
         self.redis_client = redis.Redis(
             host=redis_host, port=redis_port, db=redis_db, decode_responses=True
         )
+        self.file_logger = file_logger
         self.status_prefix = "measurement:status:"
         self.metadata_prefix = "measurement:metadata:"
         self.results_prefix = "measurement:results:"
@@ -76,6 +88,18 @@ class StatusManager:
             self.redis_client.set(metadata_key, json.dumps(metadata), ex=3600)
 
         logger.info(f"[{status_id}] Status created: {MeasurementStatus.QUEUED.value}")
+
+        # Log the initial status creation to file
+        if self.file_logger:
+            try:
+                self.file_logger.log_measurement_status_update(
+                    status_id=status_id,
+                    status_data=status_data,
+                    timestamp=datetime.utcnow(),
+                )
+            except Exception as e:
+                logger.error(f"[{status_id}] Failed to log status creation: {e}")
+
         return status_data
 
     def get_status(self, status_id: str) -> Optional[Dict[str, Any]]:
@@ -96,7 +120,12 @@ class StatusManager:
         message: str,
         results: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Update measurement status."""
+        """Update measurement status and log the change.
+
+        Status updates are logged to file on every change. The measurement
+        remains in Redis until the TTL expires. When reaching a terminal status,
+        booked channels are automatically released.
+        """
         status_key = f"{self.status_prefix}{status_id}"
         status_data = self.redis_client.get(status_key)
 
@@ -118,7 +147,7 @@ class StatusManager:
         ]:
             status_obj["completed_at"] = datetime.utcnow().isoformat()
 
-        # Store updated status
+        # Store updated status in Redis (keeps TTL)
         self.redis_client.set(status_key, json.dumps(status_obj), ex=3600)
 
         # Store results if provided
@@ -128,6 +157,29 @@ class StatusManager:
             status_obj["results"] = results
 
         logger.info(f"[{status_id}] Status updated to: {status}")
+
+        # Log the status update to file
+        if self.file_logger:
+            try:
+                self.file_logger.log_measurement_status_update(
+                    status_id=status_id,
+                    status_data=status_obj,
+                    timestamp=datetime.utcnow(),
+                )
+            except Exception as e:
+                logger.error(f"[{status_id}] Failed to log status update: {e}")
+
+        # Release channels when reaching terminal status
+        if status in [
+            MeasurementStatus.COMPLETED.value,
+            MeasurementStatus.STOPPED.value,
+            MeasurementStatus.FAILED.value,
+        ]:
+            try:
+                self.release_channels(status_id)
+            except Exception as e:
+                logger.error(f"[{status_id}] Failed to release channels: {e}")
+
         return status_obj
 
     def get_metadata(self, status_id: str) -> Optional[Dict[str, Any]]:
@@ -141,18 +193,54 @@ class StatusManager:
         return json.loads(metadata)
 
     def get_results(self, status_id: str) -> Optional[Dict[str, Any]]:
-        """Get results for a measurement."""
+        """Get results for a measurement.
+
+        Returns None if results are not a valid dictionary (handles legacy string data).
+        """
         results_key = f"{self.results_prefix}{status_id}"
         results = self.redis_client.get(results_key)
 
         if not results:
             return None
 
-        return json.loads(results)
+        try:
+            parsed = json.loads(results)
+            # Ensure it's a dictionary, not a string
+            if isinstance(parsed, dict):
+                return parsed
+            else:
+                logger.warning(
+                    f"[{status_id}] Results stored as non-dict type, returning None"
+                )
+                return None
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(
+                f"[{status_id}] Could not parse results JSON, returning None"
+            )
+            return None
 
     def delete_status(self, status_id: str) -> bool:
-        """Delete status and associated data from Redis."""
+        """Delete status and associated data from Redis.
+
+        Logs the status to file before deletion if file_logger is available.
+        """
+        # Get the status data before deleting (for logging)
         status_key = f"{self.status_prefix}{status_id}"
+        status_data = self.redis_client.get(status_key)
+
+        # Log the status removal if file_logger is available
+        if status_data and self.file_logger:
+            try:
+                status_obj = json.loads(status_data)
+                self.file_logger.log_measurement_status_removal(
+                    status_id=status_id,
+                    status_data=status_obj,
+                    timestamp=datetime.utcnow(),
+                )
+            except Exception as e:
+                logger.error(f"[{status_id}] Failed to log status removal: {e}")
+
+        # Now delete from Redis
         metadata_key = f"{self.metadata_prefix}{status_id}"
         results_key = f"{self.results_prefix}{status_id}"
 
@@ -351,3 +439,12 @@ class StatusManager:
             "booked_channels": booked,
             "utilization_percent": round((booked / total) * 100, 2) if total > 0 else 0,
         }
+
+    def close(self):
+        """Close Redis connection gracefully."""
+        try:
+            if self.redis_client:
+                self.redis_client.close()
+                logger.info("Redis connection closed")
+        except Exception as e:
+            logger.error(f"Error closing Redis connection: {e}", exc_info=True)

@@ -7,3 +7,11 @@ demo-user            | 10, 11, 12           | BOOK            | 2026-05-22 11:51
 user2                | 101, 102, 103        | BOOK            | 2026-05-22 11:51:52.474   | Booked 3 channels
 demo-user            | 10, 11, 12           | RELEASE         | 2026-05-22 11:52:00.713   | Released 3 channels
 abc-123              | 1, 2, 5, 6, 7        | RELEASE         | 2026-05-22 11:56:14.457   | Released 5 channels
+measurement-count_rate         | 1, 2                           | BOOK            | 2026-05-28 09:45:59.181   | Measurement ID: 4eceea24-8a84-4b7c-838b-2381f9ea481f
+measurement-count_rate         | 1, 2                           | BOOK            | 2026-05-28 10:06:05.489   | Measurement ID: c746705b-fc8e-4bde-ae64-9b3fcfac710d
+measurement-count_rate         | 1, 2                           | BOOK            | 2026-05-28 11:27:23.417   | Measurement ID: 67cbc292-945e-4946-aead-27e87f422a9c
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-05-28 14:21:22.801   | Measurement ID: a8070b0a-dad3-4837-b1ab-edbba26dc8e4
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-05-28 14:25:43.225   | Measurement ID: 71f0bc6c-556b-4ff6-97ca-fe9b92176afd
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-05-28 14:27:52.893   | Measurement ID: b495e604-ace1-4c8c-9bc6-afb3e0c0281c
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-05-28 14:31:52.323   | Measurement ID: 493ff007-3286-4e88-a55e-e8b903861a4d
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-05-28 14:33:37.292   | Measurement ID: fed4fa09-11b2-494d-867a-63a1c8c4bb71

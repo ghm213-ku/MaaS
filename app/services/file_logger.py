@@ -1,6 +1,7 @@
 """Service for logging channel bookings and measurements to text files."""
 
 import os
+import json
 from datetime import datetime
 from typing import Optional, List, Union
 from pathlib import Path
@@ -9,19 +10,29 @@ from pathlib import Path
 class FileLogger:
     """Logs channel booking requests and measurement requests to text files."""
 
-    def __init__(self, log_dir: str = "request_logs"):
+    def __init__(
+        self,
+        log_dir: str = "request_logs",
+        measurements_log_dir: str = "logs/measurements",
+    ):
         """
         Initialize the file logger.
 
         Args:
-            log_dir: Directory to store log files (default: 'request_logs')
+            log_dir: Directory to store request log files (default: 'request_logs')
+            measurements_log_dir: Directory to store measurement status logs (default: 'logs/measurements')
         """
         self.log_dir = log_dir
+        self.measurements_log_dir = measurements_log_dir
         self.channel_log_file = os.path.join(log_dir, "channel_requests.txt")
         self.measurement_log_file = os.path.join(log_dir, "measurement_requests.txt")
+        self.measurement_status_log_file = os.path.join(
+            measurements_log_dir, "measurement_status_log.jsonl"
+        )
 
-        # Create directory if it doesn't exist
+        # Create directories if they don't exist
         Path(log_dir).mkdir(parents=True, exist_ok=True)
+        Path(measurements_log_dir).mkdir(parents=True, exist_ok=True)
 
         # Initialize log files with headers if they don't exist
         self._initialize_log_files()
@@ -57,24 +68,29 @@ class FileLogger:
         # Channel requests log file header
         if not os.path.exists(self.channel_log_file):
             with open(self.channel_log_file, "w") as f:
-                f.write("=" * 80 + "\n")
+                f.write("=" * 100 + "\n")
                 f.write("CHANNEL BOOKING AND RELEASE REQUESTS LOG\n")
-                f.write("=" * 80 + "\n")
+                f.write("=" * 100 + "\n")
                 f.write(
                     "Booked By | Channel Numbers | Request Type | Timestamp | Details\n"
                 )
-                f.write("-" * 80 + "\n")
+                f.write("-" * 100 + "\n")
 
         # Measurement requests log file header
         if not os.path.exists(self.measurement_log_file):
             with open(self.measurement_log_file, "w") as f:
-                f.write("=" * 80 + "\n")
+                f.write("=" * 120 + "\n")
                 f.write("MEASUREMENT REQUESTS LOG\n")
-                f.write("=" * 80 + "\n")
+                f.write("=" * 120 + "\n")
                 f.write(
                     "Measurement ID | Type | Start Time | Duration (seconds) | Metadata\n"
                 )
-                f.write("-" * 80 + "\n")
+                f.write("-" * 120 + "\n")
+
+        # Measurement status log file header (JSONL format for structured logging)
+        if not os.path.exists(self.measurement_status_log_file):
+            with open(self.measurement_status_log_file, "w") as f:
+                f.write("")  # Start with empty file, will append JSONL entries
 
     def log_channel_book_request(
         self,
@@ -97,9 +113,44 @@ class FileLogger:
         timestamp_str = self._format_timestamp(timestamp)
 
         log_entry = (
-            f"{booked_by:<20} | {channels_str:<20} | "
+            f"{booked_by:<30} | {channels_str:<30} | "
             f"{'BOOK':<15} | {timestamp_str:<25} | "
             f"Booked {len(channel_numbers)} channels\n"
+        )
+
+        try:
+            with open(self.channel_log_file, "a") as f:
+                f.write(log_entry)
+        except IOError as e:
+            print(f"Error writing to channel log file: {e}")
+
+    def log_channel_booking_for_measurement(
+        self,
+        measurement_type: str,
+        measurement_id: str,
+        channel_numbers: List[int],
+        timestamp: Optional[Union[datetime, str]] = None,
+    ) -> None:
+        """
+        Log a channel booking for a measurement with measurement details.
+
+        Args:
+            measurement_type: Type of measurement (e.g., 'count_rate', 'save_raw_tags')
+            measurement_id: Unique identifier for the measurement
+            channel_numbers: List of channel numbers booked
+            timestamp: Request timestamp (uses current time if None)
+        """
+        if timestamp is None:
+            timestamp = datetime.utcnow()
+
+        booked_by = f"measurement-{measurement_type}"
+        channels_str = ", ".join(map(str, channel_numbers))
+        timestamp_str = self._format_timestamp(timestamp)
+        details = f"Measurement ID: {measurement_id}"
+
+        log_entry = (
+            f"{booked_by:<30} | {channels_str:<30} | "
+            f"{'BOOK':<15} | {timestamp_str:<25} | {details}\n"
         )
 
         try:
@@ -129,7 +180,7 @@ class FileLogger:
         timestamp_str = self._format_timestamp(timestamp)
 
         log_entry = (
-            f"{booked_by:<20} | {channels_str:<20} | "
+            f"{booked_by:<30} | {channels_str:<30} | "
             f"{'RELEASE':<15} | {timestamp_str:<25} | "
             f"Released {len(released_channels)} channels\n"
         )
@@ -178,24 +229,82 @@ class FileLogger:
         except IOError as e:
             print(f"Error writing to measurement log file: {e}")
 
+    def log_measurement_status_update(
+        self,
+        status_id: str,
+        status_data: dict,
+        timestamp: Optional[Union[datetime, str]] = None,
+    ) -> None:
+        """
+        Log measurement status update (on every status change).
+        Uses JSONL format for structured logging.
+
+        Args:
+            status_id: Unique identifier for the measurement
+            status_data: Complete status object
+            timestamp: Update timestamp (uses current time if None)
+        """
+        if timestamp is None:
+            timestamp = datetime.utcnow()
+
+        timestamp_str = self._format_timestamp(timestamp)
+
+        # Create JSONL log entry
+        log_entry = {
+            "timestamp": timestamp_str,
+            "event": "measurement_status_update",
+            "status_id": status_id,
+            "status": status_data.get("status"),
+            "message": status_data.get("message"),
+            "status_data": status_data,
+        }
+
+        try:
+            with open(self.measurement_status_log_file, "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except IOError as e:
+            print(f"Error writing to measurement status log file: {e}")
+
+    def log_measurement_status_removal(
+        self,
+        status_id: str,
+        status_data: dict,
+        timestamp: Optional[Union[datetime, str]] = None,
+    ) -> None:
+        """
+        Log measurement status removal (when status is deleted from Redis).
+        Deprecated: Use log_measurement_status_update() instead.
+        Uses JSONL format for structured logging.
+
+        Args:
+            status_id: Unique identifier for the measurement
+            status_data: Complete status object being removed
+            timestamp: Removal timestamp (uses current time if None)
+        """
+        # Delegate to the new method
+        self.log_measurement_status_update(status_id, status_data, timestamp)
+
 
 # Global instance of FileLogger
 _file_logger: Optional[FileLogger] = None
 
 
-def initialize_file_logger(log_dir: str = "request_logs") -> FileLogger:
+def initialize_file_logger(
+    log_dir: str = "request_logs", measurements_log_dir: str = "logs/measurements"
+) -> FileLogger:
     """
     Initialize the global file logger instance.
 
     Args:
-        log_dir: Directory to store log files
+        log_dir: Directory to store request log files (default: 'request_logs')
+        measurements_log_dir: Directory to store measurement status logs (default: 'logs/measurements')
 
     Returns:
         FileLogger instance
     """
     global _file_logger
     if _file_logger is None:
-        _file_logger = FileLogger(log_dir)
+        _file_logger = FileLogger(log_dir, measurements_log_dir)
     return _file_logger
 
 

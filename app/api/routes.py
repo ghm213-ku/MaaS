@@ -123,6 +123,15 @@ async def start_count_rate_measurement(
             logger.info(
                 f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
             )
+
+            # Log channel booking with measurement info
+            if file_logger:
+                file_logger.log_channel_booking_for_measurement(
+                    measurement_type=request.measurement_type.value,
+                    measurement_id=status_id,
+                    channel_numbers=booking_result["booked_channels"],
+                    timestamp=datetime.utcnow(),
+                )
         except ValueError as e:
             logger.error(f"[{status_id}] Channel booking failed: {e}")
             raise HTTPException(
@@ -237,6 +246,15 @@ async def start_save_raw_tags_measurement(
             logger.info(
                 f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
             )
+
+            # Log channel booking with measurement info
+            if file_logger:
+                file_logger.log_channel_booking_for_measurement(
+                    measurement_type=request.measurement_type.value,
+                    measurement_id=status_id,
+                    channel_numbers=booking_result["booked_channels"],
+                    timestamp=datetime.utcnow(),
+                )
         except ValueError as e:
             logger.error(f"[{status_id}] Channel booking failed: {e}")
             raise HTTPException(

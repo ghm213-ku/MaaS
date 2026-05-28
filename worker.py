@@ -20,11 +20,12 @@ from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager
 from app.services.count_rate import CountRateMeasurementHandler
 from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
+from app.services.file_logger import FileLogger
 from app.utils.logger import configure_logging
 import time
 from Swabian import TimeTagger
 
-logger = configure_logging(__name__)
+logger = configure_logging(__name__, log_file="logs/services/worker.log")
 
 
 class BackendWorker:
@@ -71,11 +72,15 @@ class BackendWorker:
     def _initialize_services(self):
         """Initialize StatusManager and JobProcessor with error handling."""
         try:
+            logger.debug("Creating FileLogger...")
+            file_logger = FileLogger()
+
             logger.debug("Creating StatusManager...")
             self.status_manager = StatusManager(
                 redis_host=self.redis_host,
                 redis_port=self.redis_port,
                 redis_db=self.redis_db,
+                file_logger=file_logger,
             )
 
             logger.debug("Verifying Redis connection...")
@@ -83,7 +88,7 @@ class BackendWorker:
                 raise RuntimeError("Redis health check failed")
 
             logger.debug("Redis connection verified")
-            
+
             logger.debug("Initializing TimeTagger...")
             tagger = TimeTagger.createTimeTagger()
             tagger.setTestSignal([1, 2, 3, 4], True)
@@ -234,8 +239,19 @@ class BackendWorker:
         logger.info(f"  Success rate: {self._calculate_success_rate():.1f}%")
         logger.info("=" * 70)
 
+        # Close Redis connection
+        try:
+            if self.status_manager:
+                logger.debug("Closing Redis connection...")
+                self.status_manager.close()
+                logger.info("Redis connection closed")
+        except Exception as e:
+            logger.error(f"Error closing Redis connection: {e}", exc_info=True)
+
         self.is_running = False
+        logger.info("=" * 70)
         logger.info("Backend worker stopped")
+        logger.info("=" * 70)
 
     def _calculate_success_rate(self) -> float:
         """Calculate job success rate."""
