@@ -1,8 +1,10 @@
 """Count-rate measurement handler implementation."""
 
 import asyncio
+import numpy as np
 from typing import Optional, Dict, Any
 from datetime import datetime
+from app.models import CountRateMetadata
 from app.services.measurement import MeasurementHandler
 from app.utils.logger import configure_logging
 from Swabian import TimeTagger
@@ -20,16 +22,14 @@ class CountRateMeasurementHandler(MeasurementHandler):
         self._start_time: Optional[datetime] = None
         logger.debug("CountRateMeasurementHandler initialized")
 
-    async def start(
-        self, duration_seconds: Optional[int], metadata: Optional[Dict[str, Any]]
-    ) -> None:
+    async def start(self, duration_seconds: float, metadata: CountRateMetadata) -> None:
         """
         Start count-rate measurement.
 
         Args:
-            duration_seconds: Auto-stop duration (managed by Measurement, not used here)
+            duration_seconds: Auto-stop duration in seconds
             metadata: Measurement metadata containing:
-                - channels: List of channel numbers to measure
+                - channels: List of channel numbers to measure (required)
                 - binwidth: Bin width in picoseconds (default: 1e9)
                 - n_values: Number of bins (default: 1)
                 - target_location: Target file path (default: desktop/MaasData/{datetime}/{measurement-type})
@@ -39,39 +39,32 @@ class CountRateMeasurementHandler(MeasurementHandler):
         self._count = 0
 
         # Extract parameters from metadata
-        if metadata:
-            channels = metadata.get("channels", [])
-            binwidth = metadata.get("binwidth", int(1e9))
-            n_values = metadata.get("n_values", 1)
-            target_location = metadata.get(
-                "target_location", "desktop/MaasData/{datetime}/{measurement-type}"
-            )
-            logger.debug(
-                f"Count-rate params - channels: {channels}, binwidth: {binwidth}, n_values: {n_values}, target: {target_location}"
-            )
+        channels = metadata.channels
+        binwidth = metadata.binwidth
+        n_values = metadata.n_values
+        target_location = metadata.target_location
+        logger.debug(
+            f"Count-rate params - channels: {channels}, binwidth: {binwidth}, n_values: {n_values}, target: {target_location}"
+        )
+        
+        self.tagger.setTestSignal(1, True)
+        self.tagger.setTestSignal(2, True)
 
         # Start the counting task
-        self._measurement_task = asyncio.create_task(self._count_rate_loop())
-        logger.info("Count-rate measurement loop started")
-
-    async def _count_rate_loop(self) -> None:
-        """
-        Simulate count-rate measurement loop.
-        This is a placeholder - replace with actual count-rate measurement logic.
-        """
-        try:
-            while True:
-                # Simulate counting events
-                # Replace this with actual count-rate measurement implementation
-                self._count += 1
-                logger.debug(f"Count-rate update: {self._count} counts")
-
-                # Simulate a measurement interval (e.g., every 100ms)
-                await asyncio.sleep(0.1)
-
-        except asyncio.CancelledError:
-            logger.debug("Count-rate measurement loop cancelled")
-            raise
+        counter = TimeTagger.Counter(
+            tagger=self.tagger, channels=channels, binwidth=binwidth, n_values=n_values
+        )
+        counter.startFor(duration_seconds * 1e12)
+        counter.waitUntilFinished()
+        counter_data = counter.getData()
+        logger.info(f"Count-rate measurement completed with raw data: {counter_data}")
+        data = np.array(counter_data)
+        logger.info(
+            f"Count-rate measurement finished for duration: {duration_seconds} seconds"
+        )
+        logger.info(f"Data acquired: {data}")
+        np.savetxt(target_location, data, delimiter=",")
+        logger.info(f"Count-rate data saved to {target_location}")
 
     async def stop(self) -> Dict[str, Any]:
         """

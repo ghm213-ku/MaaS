@@ -13,6 +13,36 @@ class MeasurementType(str, Enum):
     SAVE_RAW_TAGS = "save_raw_tags"
 
 
+class CountRateMetadata(BaseModel):
+    """Metadata model for count-rate measurements with required and optional fields."""
+
+    channels: list[int] = Field(
+        description="List of channel numbers to measure. Required."
+    )
+    binwidth: int = Field(
+        default=int(1e9),
+        description="Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
+    )
+    n_values: int = Field(
+        default=100,
+        description="Number of bins in the histogram. Default: 1",
+    )
+    target_location: str = Field(
+        default="desktop/MaasData/{datetime}/{measurement-type}",
+        description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "channels": [1, 2, 3],
+                "binwidth": 1000000000,
+                "n_values": 1,
+                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            }
+        }
+
+
 class SaveRawTagsMetadata(BaseModel):
     """Metadata model for save-raw-tags measurements with required fields."""
 
@@ -35,29 +65,25 @@ class SaveRawTagsMetadata(BaseModel):
 class CountRateMeasurementRequest(BaseModel):
     """Request model for count-rate measurements."""
 
-    channels: list[int] = Field(
-        description="List of channel numbers to measure (required). E.g., [1, 2, 3]"
+    measurement_type: MeasurementType = MeasurementType.COUNT_RATE
+    duration_seconds: int = Field(
+        description="Duration in seconds for the count-rate measurement"
     )
-    binwidth: int = Field(
-        default=int(1e9),
-        description="Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
-    )
-    n_values: int = Field(
-        default=1,
-        description="Number of bins in the histogram. Default: 1",
-    )
-    target_location: str = Field(
-        default="desktop/MaasData/{datetime}/{measurement-type}",
-        description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
+    metadata: CountRateMetadata = Field(
+        description="Metadata containing channels, binwidth, n_values, and target_location"
     )
 
     class Config:
         json_schema_extra = {
             "example": {
-                "channels": [1, 2, 3],
-                "binwidth": 1000000000,
-                "n_values": 1,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                "measurement_type": "count_rate",
+                "duration_seconds": 60,
+                "metadata": {
+                    "channels": [1, 2, 3],
+                    "binwidth": 1000000000,
+                    "n_values": 1,
+                    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                },
             }
         }
 

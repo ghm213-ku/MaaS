@@ -1,6 +1,5 @@
 """Job processor for backend worker service."""
 
-
 import asyncio
 import threading
 import json
@@ -8,7 +7,7 @@ from typing import Optional, Dict, Any, Callable
 from datetime import datetime
 import redis
 from app.services.status_manager import StatusManager, MeasurementStatus
-from app.models import SaveRawTagsMetadata
+from app.models import SaveRawTagsMetadata, CountRateMetadata
 from app.utils.logger import configure_logging
 
 logger = configure_logging(__name__)
@@ -40,7 +39,6 @@ class JobProcessor:
         # Expose handlers for backward compatibility
         self.handlers = self.job_handlers
 
-
     def register_handler(self, measurement_type: str, handler_class: type) -> None:
         """Register a handler class for a measurement type.
 
@@ -52,7 +50,6 @@ class JobProcessor:
         """
         self.job_handlers[measurement_type] = handler_class
         logger.info(f"Registered handler for measurement type: {measurement_type}")
-
 
     def enqueue_job(
         self,
@@ -155,7 +152,6 @@ class JobProcessor:
             if measurement_type not in self.job_handlers:
                 raise ValueError(f"Unknown measurement type: {measurement_type}")
 
-
             handler_class = self.job_handlers[measurement_type]
 
             # Create fresh handler instance for this job thread
@@ -183,7 +179,6 @@ class JobProcessor:
             else:
                 raise ValueError(f"Unknown measurement type: {measurement_type}")
 
-
             # Update status to completed
             self.status_manager.update_status(
                 status_id,
@@ -192,9 +187,7 @@ class JobProcessor:
                 f"{measurement_type} measurement completed successfully",
             )
 
-
             logger.info(f"[{status_id}] Job completed successfully")
-
 
         except Exception as e:
             logger.error(f"[{status_id}] Job failed: {e}", exc_info=True)
@@ -224,11 +217,34 @@ class JobProcessor:
         metadata: Dict[str, Any],
     ) -> None:
         """Handle count-rate measurement."""
+        if not duration_seconds:
+            raise ValueError("duration_seconds is required for count_rate")
+
+        channels = metadata.get("channels")
+        if not channels:
+            raise ValueError("channels are required in metadata")
+
+        # Create CountRateMetadata from dict
+        binwidth = metadata.get("binwidth", int(1e9))
+        n_values = metadata.get("n_values", 1)
+        target_location = metadata.get(
+            "target_location", "desktop/MaasData/{datetime}/{measurement-type}"
+        )
+
+        count_rate_metadata = CountRateMetadata(
+            channels=channels,
+            binwidth=binwidth,
+            n_values=n_values,
+            target_location=target_location,
+        )
+
         # Run the async handler
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(handler.start(duration_seconds, metadata))
+            loop.run_until_complete(
+                handler.start(duration_seconds, count_rate_metadata)
+            )
         finally:
             loop.close()
 

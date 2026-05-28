@@ -45,11 +45,14 @@ Response shows system status:
 curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
   -H "Content-Type: application/json" \
   -d '{
-    "channels": [1, 2, 3],
-    "binwidth": 1000000000,
-    "n_values": 1,
-    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
-    "duration_seconds": 10
+    "measurement_type": "count_rate",
+    "duration_seconds": 10,
+    "metadata": {
+      "channels": [1, 2, 3],
+      "binwidth": 1000000000,
+      "n_values": 1,
+      "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+    }
   }'
 ```
 
@@ -60,7 +63,7 @@ curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
   "measurement_type": "count_rate",
   "status": "queued",
   "started_at": "2026-04-30T10:00:00Z",
-  "message": "Count-rate measurement queued. Use ID '550e8400-e29b-41d4-a716-446655440000' to query status. Booked channels: [1, 2, 3]"
+  "message": "Count-rate measurement queued with channels [1, 2, 3]. Use ID '550e8400-e29b-41d4-a716-446655440000' to query status or stop."
 }
 ```
 

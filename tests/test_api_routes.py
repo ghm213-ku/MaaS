@@ -184,10 +184,14 @@ class TestStartMeasurementEndpoint:
     async def test_start_measurement_success(self, client, mock_service):
         """Should start measurement and return ID."""
         payload = {
-            "channels": [1, 2, 3],
-            "binwidth": 1000000000,
-            "n_values": 1,
-            "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            "measurement_type": "count_rate",
+            "duration_seconds": 60,
+            "metadata": {
+                "channels": [1, 2, 3],
+                "binwidth": 1000000000,
+                "n_values": 1,
+                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            },
         }
 
         response = client.post(
@@ -203,8 +207,12 @@ class TestStartMeasurementEndpoint:
 
     @pytest.mark.asyncio
     async def test_start_measurement_minimal_payload(self, client, mock_service):
-        """Should start with minimal payload (only channels required)."""
-        payload = {"channels": [1]}
+        """Should start with minimal payload (only channels required in metadata)."""
+        payload = {
+            "measurement_type": "count_rate",
+            "duration_seconds": 60,
+            "metadata": {"channels": [1]},
+        }
 
         response = client.post(
             "/api/v1/measurements/count-rate",
@@ -218,10 +226,14 @@ class TestStartMeasurementEndpoint:
     async def test_start_measurement_with_custom_params(self, client, mock_service):
         """Should accept and use custom parameters."""
         payload = {
-            "channels": [1, 2, 3],
-            "binwidth": 500000000,
-            "n_values": 10,
-            "target_location": "C:\\custom\\path\\results.csv",
+            "measurement_type": "count_rate",
+            "duration_seconds": 120,
+            "metadata": {
+                "channels": [1, 2, 3],
+                "binwidth": 500000000,
+                "n_values": 10,
+                "target_location": "C:\\custom\\path\\results.csv",
+            },
         }
 
         response = client.post(
@@ -235,7 +247,11 @@ class TestStartMeasurementEndpoint:
     @pytest.mark.asyncio
     async def test_start_measurement_returns_timestamp(self, client, mock_service):
         """Response should include start timestamp."""
-        payload = {"channels": [1]}
+        payload = {
+            "measurement_type": "count_rate",
+            "duration_seconds": 60,
+            "metadata": {"channels": [1]},
+        }
 
         response = client.post(
             "/api/v1/measurements/count-rate",
@@ -257,7 +273,11 @@ class TestStopMeasurementEndpoint:
         # Start measurement
         start_response = client.post(
             "/api/v1/measurements/count-rate",
-            json={"channels": [1]},
+            json={
+                "measurement_type": "count_rate",
+                "duration_seconds": 60,
+                "metadata": {"channels": [1]},
+            },
         )
         meas_id = start_response.json()["measurement_id"]
 
@@ -286,7 +306,11 @@ class TestStopMeasurementEndpoint:
         # Start measurement
         start_response = client.post(
             "/api/v1/measurements/count-rate",
-            json={"channels": [1]},
+            json={
+                "measurement_type": "count_rate",
+                "duration_seconds": 60,
+                "metadata": {"channels": [1]},
+            },
         )
         meas_id = start_response.json()["measurement_id"]
 

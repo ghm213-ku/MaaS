@@ -204,8 +204,14 @@ You can run multiple worker instances for parallel processing.
 1. CLIENT sends HTTP request
    POST /api/v1/measurements/count-rate
    {
+     "measurement_type": "count_rate",
      "duration_seconds": 30,
-     "metadata": {"detector": "det_001"}
+     "metadata": {
+       "channels": [1, 2, 3],
+       "binwidth": 1000000000,
+       "n_values": 1,
+       "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+     }
    }
 
 2. FASTAPI Router (routes.py)
@@ -214,7 +220,8 @@ You can run multiple worker instances for parallel processing.
 
 3. PYDANTIC VALIDATION
    ├─ Validate request model (CountRateMeasurementRequest)
-   ├─ Check required fields
+   ├─ Check required fields (measurement_type, duration_seconds, metadata)
+   ├─ Validate metadata structure (CountRateMetadata)
    ├─ Check field types
    └─ If invalid → Return HTTP 422 (Unprocessable Entity)
 

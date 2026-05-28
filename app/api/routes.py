@@ -95,10 +95,14 @@ async def start_count_rate_measurement(
     Example:
         POST /api/v1/measurements/count-rate
         {
-            "channels": [1, 2, 3],
-            "binwidth": 1000000000,
-            "n_values": 1,
-            "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+            "measurement_type": "count_rate",
+            "duration_seconds": 60,
+            "metadata": {
+                "channels": [1, 2, 3],
+                "binwidth": 1000000000,
+                "n_values": 1,
+                "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+            }
         }
     """
     try:
@@ -109,43 +113,41 @@ async def start_count_rate_measurement(
             f"[{status_id}] Received count-rate measurement request: {request.dict()}"
         )
 
-        # Prepare metadata for storage
-        metadata_for_storage = {
-            "channels": request.channels,
-            "binwidth": request.binwidth,
-            "n_values": request.n_values,
-            "target_location": request.target_location,
-        }
+        # Extract channel list from metadata
+        channels = request.metadata.channels
 
-        # Create status in Redis
-        status_manager.create_status(
-            status_id=status_id,
-            measurement_type=MeasurementType.COUNT_RATE.value,
-            duration_seconds=None,
-            metadata=metadata_for_storage,
-        )
-
-        # Book channels
-        booked_channels = []
+        # Validate and book channels
         try:
-            status_manager.validate_channels(request.channels)
-            booking_result = status_manager.book_channels(request.channels, status_id)
-            booked_channels = booking_result["booked_channels"]
-            logger.info(f"[{status_id}] Channels booked: {booked_channels}")
-            # Store booking info in metadata
-            metadata_for_storage["booked_channels"] = booked_channels
-            metadata_for_storage["booking_time"] = booking_result["booking_time"]
+            status_manager.validate_channels(channels)
+            booking_result = status_manager.book_channels(channels, status_id)
+            logger.info(
+                f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
+            )
         except ValueError as e:
             logger.error(f"[{status_id}] Channel booking failed: {e}")
             raise HTTPException(
                 status_code=409, detail=f"Channel booking failed: {str(e)}"
             )
 
+        # Prepare metadata with booking info
+        metadata_dict = request.metadata.model_dump()
+        metadata_dict["booked_channels"] = booking_result["booked_channels"]
+        metadata_dict["booking_time"] = booking_result["booking_time"]
+
+        # Create status in Redis
+        status_manager.create_status(
+            status_id=status_id,
+            measurement_type=request.measurement_type.value,
+            duration_seconds=request.duration_seconds,
+            metadata=metadata_dict,
+        )
+
         # Enqueue job for backend worker (don't process immediately)
         processor.enqueue_job(
             status_id=status_id,
-            measurement_type=MeasurementType.COUNT_RATE.value,
-            duration_seconds=None,
+            measurement_type=request.measurement_type.value,
+            duration_seconds=request.duration_seconds,
+            metadata=metadata_dict,
         )
 
         logger.info(f"[{status_id}] Count-rate measurement enqueued successfully")
@@ -158,9 +160,9 @@ async def start_count_rate_measurement(
             try:
                 file_logger.log_measurement_request(
                     measurement_id=status_id,
-                    measurement_type=MeasurementType.COUNT_RATE.value,
-                    duration_seconds=None,
-                    metadata=metadata_for_storage,
+                    measurement_type=request.measurement_type.value,
+                    duration_seconds=request.duration_seconds,
+                    metadata=request.metadata.model_dump(),
                     timestamp=datetime.utcnow(),
                 )
                 logger.info(f"[{status_id}] Measurement logged to file successfully")
@@ -173,11 +175,10 @@ async def start_count_rate_measurement(
 
         return MeasurementResponse(
             measurement_id=status_id,
-            measurement_type=MeasurementType.COUNT_RATE,
+            measurement_type=request.measurement_type,
             status=MeasurementStatus.QUEUED.value,
             started_at=datetime.utcnow(),
-            message=f"Count-rate measurement queued. Use ID '{status_id}' to query status or stop."
-            + (f" Booked channels: {booked_channels}" if booked_channels else ""),
+            message=f"Count-rate measurement queued with channels {channels}. Use ID '{status_id}' to query status or stop.",
         )
 
     except HTTPException:
