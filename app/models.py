@@ -11,6 +11,7 @@ class MeasurementType(str, Enum):
 
     COUNT_RATE = "count_rate"
     SAVE_RAW_TAGS = "save_raw_tags"
+    CORRELATION = "correlation"
 
 
 class CountRateMetadata(BaseModel):
@@ -38,6 +39,36 @@ class CountRateMetadata(BaseModel):
                 "channels": [1, 2, 3],
                 "binwidth": 1000000000,
                 "n_values": 1,
+                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            }
+        }
+
+
+class CorrelationMetadata(BaseModel):
+    """Metadata model for correlation measurements with required and optional fields."""
+
+    channel1: int = Field(description="First channel number to correlate. Required.")
+    channel2: int = Field(description="Second channel number to correlate. Required.")
+    binwidth: int = Field(
+        default=int(1e3),
+        description="Bin width in picoseconds for histogram. Default: 1e3 (1 millisecond)",
+    )
+    n_values: int = Field(
+        default=1000,
+        description="Number of bins in the histogram. Default: 1000",
+    )
+    target_location: str = Field(
+        default="desktop/MaasData/{datetime}/{measurement-type}",
+        description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "channel1": 1,
+                "channel2": 2,
+                "binwidth": 1000000000,
+                "n_values": 100,
                 "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
             }
         }
@@ -82,6 +113,33 @@ class CountRateMeasurementRequest(BaseModel):
                     "channels": [1, 2, 3],
                     "binwidth": 1000000000,
                     "n_values": 1,
+                    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                },
+            }
+        }
+
+
+class CorrelationMeasurementRequest(BaseModel):
+    """Request model for correlation measurements."""
+
+    measurement_type: MeasurementType = MeasurementType.CORRELATION
+    duration_seconds: int = Field(
+        description="Duration in seconds for the correlation measurement"
+    )
+    metadata: CorrelationMetadata = Field(
+        description="Metadata containing channel1, channel2, binwidth, n_values, and target_location"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "measurement_type": "correlation",
+                "duration_seconds": 60,
+                "metadata": {
+                    "channel1": 1,
+                    "channel2": 2,
+                    "binwidth": 1000000000,
+                    "n_values": 100,
                     "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
                 },
             }

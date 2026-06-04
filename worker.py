@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager
 from app.services.count_rate import CountRateMeasurementHandler
+from app.services.correlation import CorrelationMeasurementHandler
 from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
 from app.services.file_logger import FileLogger
 from app.utils.logger import configure_logging
@@ -101,11 +102,14 @@ class BackendWorker:
                 "count_rate", CountRateMeasurementHandler
             )
             self.job_processor.register_handler(
+                "correlation", CorrelationMeasurementHandler
+            )
+            self.job_processor.register_handler(
                 "save_raw_tags", SaveRawTagsMeasurementHandler
             )
 
             logger.info("Backend worker initialized successfully")
-            logger.info("  Handlers registered: count_rate, save_raw_tags")
+            logger.info("  Handlers registered: count_rate, correlation, save_raw_tags")
             self.retry_count = 0
             self.current_retry_delay = 1.0
 

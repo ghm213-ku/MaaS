@@ -15,3 +15,13 @@ measurement-count_rate         | 1, 2, 3                        | BOOK          
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-05-28 14:27:52.893   | Measurement ID: b495e604-ace1-4c8c-9bc6-afb3e0c0281c
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-05-28 14:31:52.323   | Measurement ID: 493ff007-3286-4e88-a55e-e8b903861a4d
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-05-28 14:33:37.292   | Measurement ID: fed4fa09-11b2-494d-867a-63a1c8c4bb71
+abc-123                        | 5, 6, 7                        | BOOK            | 2026-06-04 14:07:38.949   | Booked 3 channels
+abc-123                        | 5, 6, 7                        | RELEASE         | 2026-06-04 14:08:01.472   | Released 3 channels
+measurement-count_rate         | 1, 2                           | BOOK            | 2026-06-04 14:22:48.807   | Measurement ID: 10eb2f6f-b5fb-4c0a-8680-be5ca7760573
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-04 14:41:17.661   | Measurement ID: cc3b5f78-7116-45f4-9d49-4f4d9ea147c8
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-04 14:41:56.602   | Measurement ID: 6d86e334-bc37-49b7-8d2f-15bec56efffc
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-04 14:42:50.069   | Measurement ID: 7276c64b-5c40-4de8-ab19-cd435f13b43e
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-04 14:45:50.689   | Measurement ID: 5e401aef-6507-4fde-8d94-b0ec3f343c23
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-04 14:47:04.127   | Measurement ID: b3b2bf8b-8aae-4347-9d6a-2b168ac32e6b
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-04 14:47:42.394   | Measurement ID: d0110336-1ffb-4956-8d7a-cb4fda6e873b
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-04 14:49:40.365   | Measurement ID: dc979016-70d8-4dbc-9f44-6fe47c12d789
