@@ -178,6 +178,8 @@ async def root():
         "architecture": "Distributed (Web Layer + Redis + Backend Workers)",
         "measurement_endpoints": {
             "start_count_rate": "POST /api/v1/measurements/count-rate",
+            "start_correlation": "POST /api/v1/measurements/correlation",
+            "start_coincidences": "POST /api/v1/measurements/coincidences",
             "start_save_raw_tags": "POST /api/v1/measurements/save-raw-tags",
             "get_status": "GET /api/v1/measurements/{measurement_id}/status",
             "stop_measurement": "DELETE /api/v1/measurements/{measurement_id}",
