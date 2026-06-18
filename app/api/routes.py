@@ -13,6 +13,7 @@ import uuid
 from app.models import (
     CountRateMeasurementRequest,
     CorrelationMeasurementRequest,
+    CoincidencesMeasurementRequest,
     SaveRawTagsMeasurmentRequest,
     MeasurementResponse,
     MeasurementStatusResponse,
@@ -444,6 +445,131 @@ async def start_correlation_measurement(
         raise
     except Exception as e:
         logger.error(f"Failed to enqueue correlation measurement: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@measurement_router.post(
+    "/coincidences", response_model=MeasurementResponse, status_code=201
+)
+async def start_coincidences_measurement(
+    request: CoincidencesMeasurementRequest,
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """
+    Start a new coincidences measurement request.
+
+    Returns a unique measurement ID (status ID) to be used for status queries and stopping.
+    The job is enqueued for processing by the backend worker.
+
+    Automatically books the specified channels.
+
+    Example:
+        POST /api/v1/measurements/coincidences
+        {
+            "measurement_type": "coincidences",
+            "duration_seconds": 60,
+            "metadata": {
+                "channels": [1, 2, 3],
+                "binwidth": 1000000000,
+                "n_values": 1,
+                "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+            }
+        }
+    """
+    try:
+        # Generate unique status ID
+        status_id = str(uuid.uuid4())
+
+        logger.info(
+            f"[{status_id}] Received coincidences measurement request: {request.dict()}"
+        )
+
+        # Extract channel list from metadata
+        channels = request.metadata.channels
+
+        # Validate and book channels
+        try:
+            status_manager.validate_channels(channels)
+            booking_result = status_manager.book_channels(channels, status_id)
+            logger.info(
+                f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
+            )
+
+            # Log channel booking with measurement info
+            if file_logger:
+                file_logger.log_channel_booking_for_measurement(
+                    measurement_type=request.measurement_type.value,
+                    measurement_id=status_id,
+                    channel_numbers=booking_result["booked_channels"],
+                    timestamp=datetime.utcnow(),
+                )
+        except ValueError as e:
+            logger.error(f"[{status_id}] Channel booking failed: {e}")
+            raise HTTPException(
+                status_code=409, detail=f"Channel booking failed: {str(e)}"
+            )
+
+        # Prepare metadata with booking info
+        metadata_dict = request.metadata.model_dump()
+        metadata_dict["booked_channels"] = booking_result["booked_channels"]
+        metadata_dict["booking_time"] = booking_result["booking_time"]
+
+        # Create status in Redis
+        status_manager.create_status(
+            status_id=status_id,
+            measurement_type=request.measurement_type.value,
+            duration_seconds=request.duration_seconds,
+            metadata=metadata_dict,
+        )
+
+        # Enqueue job for backend worker (don't process immediately)
+        processor.enqueue_job(
+            status_id=status_id,
+            measurement_type=request.measurement_type.value,
+            duration_seconds=request.duration_seconds,
+            metadata=metadata_dict,
+        )
+
+        logger.info(f"[{status_id}] Coincidences measurement enqueued successfully")
+
+        # Log measurement request to file
+        if file_logger:
+            logger.info(
+                f"[{status_id}] File logger available, writing to measurement log"
+            )
+            try:
+                file_logger.log_measurement_request(
+                    measurement_id=status_id,
+                    measurement_type=request.measurement_type.value,
+                    duration_seconds=request.duration_seconds,
+                    metadata=request.metadata.model_dump(),
+                    timestamp=datetime.utcnow(),
+                )
+                logger.info(f"[{status_id}] Measurement logged to file successfully")
+            except Exception as e:
+                logger.error(
+                    f"[{status_id}] Failed to log measurement: {e}", exc_info=True
+                )
+        else:
+            logger.warning(f"[{status_id}] File logger is None - skipping file logging")
+
+        return MeasurementResponse(
+            measurement_id=status_id,
+            measurement_type=request.measurement_type,
+            status=MeasurementStatus.QUEUED.value,
+            started_at=datetime.utcnow(),
+            message=f"Coincidences measurement queued with channels {channels}. Use ID '{status_id}' to query status or stop.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to enqueue coincidences measurement: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=str(e),

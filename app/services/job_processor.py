@@ -7,7 +7,12 @@ from typing import Optional, Dict, Any, Callable
 from datetime import datetime
 import redis
 from app.services.status_manager import StatusManager, MeasurementStatus
-from app.models import SaveRawTagsMetadata, CountRateMetadata, CorrelationMetadata
+from app.models import (
+    SaveRawTagsMetadata,
+    CountRateMetadata,
+    CorrelationMetadata,
+    CoincidencesMetadata,
+)
 from app.utils.logger import configure_logging
 
 logger = configure_logging(__name__)
@@ -171,6 +176,8 @@ class JobProcessor:
                 self._handle_count_rate(handler, duration_seconds, metadata)
             elif measurement_type == "correlation":
                 self._handle_correlation(handler, duration_seconds, metadata)
+            elif measurement_type == "coincidences":
+                self._handle_coincidences(handler, duration_seconds, metadata)
             elif measurement_type == "save_raw_tags":
                 self._handle_save_raw_tags(handler, duration_seconds, metadata)
             else:
@@ -309,6 +316,44 @@ class JobProcessor:
             asyncio.set_event_loop(loop)
             loop.run_until_complete(
                 handler.start(duration_seconds, correlation_metadata)
+            )
+        finally:
+            loop.close()
+
+    def _handle_coincidences(
+        self,
+        handler: Any,
+        duration_seconds: Optional[int],
+        metadata: Dict[str, Any],
+    ) -> None:
+        """Handle coincidences measurement."""
+        if not duration_seconds:
+            raise ValueError("duration_seconds is required for coincidences")
+
+        channels = metadata.get("channels")
+        if not channels:
+            raise ValueError("channels are required in metadata")
+
+        # Create CoincidencesMetadata from dict
+        binwidth = metadata.get("binwidth", int(1e9))
+        n_values = metadata.get("n_values", 1)
+        target_location = metadata.get(
+            "target_location", "desktop/MaasData/{datetime}/{measurement-type}"
+        )
+
+        coincidences_metadata = CoincidencesMetadata(
+            channels=channels,
+            binwidth=binwidth,
+            n_values=n_values,
+            target_location=target_location,
+        )
+
+        # Run the async handler
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                handler.start(duration_seconds, coincidences_metadata)
             )
         finally:
             loop.close()
