@@ -20,6 +20,8 @@ class CountRateMeasurementHandler(MeasurementHandler):
         self._measurement_task: Optional[asyncio.Task] = None
         self._count = 0
         self._start_time: Optional[datetime] = None
+        self._counter: Optional[Any] = None
+        self._target_location: Optional[str] = None
         logger.debug("CountRateMeasurementHandler initialized")
 
     async def start(self, duration_seconds: float, metadata: CountRateMetadata) -> None:
@@ -43,6 +45,7 @@ class CountRateMeasurementHandler(MeasurementHandler):
         binwidth = metadata.binwidth
         n_values = metadata.n_values
         target_location = metadata.target_location
+        self._target_location = target_location
         logger.debug(
             f"Count-rate params - channels: {channels}, binwidth: {binwidth}, n_values: {n_values}, target: {target_location}"
         )
@@ -54,8 +57,15 @@ class CountRateMeasurementHandler(MeasurementHandler):
         counter = TimeTagger.Counter(
             tagger=self.tagger, channels=channels, binwidth=binwidth, n_values=n_values
         )
+        self._counter = counter
         counter.startFor(duration_seconds * 1e12)
         counter.waitUntilFinished()
+
+        # If the measurement was stopped, discard any data instead of saving it
+        if self._stopped:
+            logger.info("Count-rate measurement was stopped; skipping data save")
+            return
+
         counter_data = counter.getData()
         data = np.array(counter_data)
         logger.info(
@@ -72,6 +82,14 @@ class CountRateMeasurementHandler(MeasurementHandler):
             Dictionary with measurement results
         """
         logger.info("Stopping count-rate measurement")
+        self._stopped = True
+
+        # Stop the underlying hardware counter so the running measurement ends
+        if self._counter is not None:
+            try:
+                self._counter.stop()
+            except Exception as e:
+                logger.error(f"Failed to stop count-rate counter: {e}")
 
         if self._measurement_task and not self._measurement_task.done():
             self._measurement_task.cancel()
@@ -80,23 +98,24 @@ class CountRateMeasurementHandler(MeasurementHandler):
             except asyncio.CancelledError:
                 pass
 
+        # Delete any data file that was already written for this measurement
+        self._delete_output_file(self._target_location)
+
         if self._start_time is None:
             logger.warning("Measurement was never started")
             return {"error": "Measurement was never started"}
 
         duration = (datetime.utcnow() - self._start_time).total_seconds()
-        count_rate = self._count / duration if duration > 0 else 0
 
         results = {
-            "total_count": self._count,
+            "status": "stopped",
             "duration_seconds": duration,
-            "count_rate_cps": count_rate,  # counts per second
             "stopped_at": datetime.utcnow().isoformat(),
+            "message": "Count-rate measurement stopped and data file deleted",
         }
 
         logger.info(
-            f"Count-rate measurement stopped - "
-            f"total_count={self._count}, count_rate={count_rate:.2f} cps"
+            f"Count-rate measurement stopped after {duration:.2f}s; data file deleted"
         )
 
         return results
