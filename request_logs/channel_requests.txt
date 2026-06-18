@@ -25,3 +25,10 @@ measurement-count_rate         | 1, 2, 3                        | BOOK          
 measurement-correlation        | 1, 2                           | BOOK            | 2026-06-04 14:47:04.127   | Measurement ID: b3b2bf8b-8aae-4347-9d6a-2b168ac32e6b
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-04 14:47:42.394   | Measurement ID: d0110336-1ffb-4956-8d7a-cb4fda6e873b
 measurement-correlation        | 1, 2                           | BOOK            | 2026-06-04 14:49:40.365   | Measurement ID: dc979016-70d8-4dbc-9f44-6fe47c12d789
+abc-123                        | 5, 6, 7                        | BOOK            | 2026-06-18 08:21:25.336   | Booked 3 channels
+abc-123                        | 5, 6, 7                        | RELEASE         | 2026-06-18 08:21:51.103   | Released 3 channels
+abc-123                        | 5, 6, 7                        | BOOK            | 2026-06-18 08:22:23.116   | Booked 3 channels
+abc-123                        | 5, 6, 7                        | RELEASE         | 2026-06-18 08:23:03.260   | Released 3 channels
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-18 08:58:00.479   | Measurement ID: 10e799a2-4dab-4d45-a345-30d9b5ad3bbb
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-18 10:01:38.349   | Measurement ID: 2048dd11-47d1-4c20-801e-bb8a92555dac
+measurement-count_rate         | 3, 4                           | BOOK            | 2026-06-18 10:01:52.362   | Measurement ID: f26532a5-ce0a-4b65-a5f6-77da7767d7ca

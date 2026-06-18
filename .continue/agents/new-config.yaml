@@ -1,0 +1,25 @@
+# This is an example configuration file
+# To learn more, see the full config.yaml reference: https://docs.continue.dev/reference
+
+name: Gemini Cloud Setup
+version: 0.0.1
+schema: v1
+
+models:
+  # This larger model acts as your agent for complex chat, refactoring, and multi-file edits.
+  - name: Gemini Pro (Chat & Agent)
+    provider: gemini
+    apiKey: "AQ.Ab8RN6KRRgePezLmeb6pL-XpyHCiN0A_khvTXgW2F5WOTgdsQg"
+    model: gemini-2.5-pro # Fallback to gemini-1.5-pro if the 2.5 endpoint is restricted on your account
+    roles:
+      - chat
+      - edit
+      - apply
+
+  # This smaller, highly efficient model runs your inline autocomplete as you type.
+  - name: Gemini Flash (Autocomplete)
+    provider: gemini
+    apiKey: "AQ.Ab8RN6KRRgePezLmeb6pL-XpyHCiN0A_khvTXgW2F5WOTgdsQg"
+    model: gemini-2.5-flash # Fallback to gemini-1.5-flash if needed
+    roles:
+      - autocomplete
