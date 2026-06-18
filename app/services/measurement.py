@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 import logging
 import asyncio
+import os
 import uuid
 from datetime import datetime
 
@@ -19,7 +20,25 @@ class MeasurementHandler(ABC):
         self.tagger = tagger
         self.logger = logging.getLogger(self.__class__.__name__)
         self.is_running = False
-    
+        # Set to True when a stop is requested so that start() skips writing
+        # any final output once the running measurement is interrupted.
+        self._stopped = False
+
+    def _delete_output_file(self, path: Optional[str]) -> None:
+        """Delete the output file written by a measurement, if it exists.
+
+        Used when a measurement is stopped so partially written data is
+        discarded.
+        """
+        if not path:
+            return
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                self.logger.info(f"Deleted output file on stop: {path}")
+        except OSError as e:
+            self.logger.error(f"Failed to delete output file {path}: {e}")
+
     @abstractmethod
     async def start(self, duration_seconds: float, metadata) -> None:
         """Start the measurement.

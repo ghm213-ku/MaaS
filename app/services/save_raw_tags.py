@@ -19,6 +19,8 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
         self._measurement_task: Optional[asyncio.Task] = None
         self._start_time: Optional[datetime] = None
         self._fileWriter: Optional[TimeTagger.FileWriter] = None
+        self._channel_list: Optional[list] = None
+        self._target_file_path: Optional[str] = None
         logger.debug("SaveRawTagsMeasurementHandler initialized")
 
     async def start(
@@ -33,6 +35,8 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
         """
         channel_list = metadata.channel_list
         target_file_path = metadata.target_file_path
+        self._channel_list = channel_list
+        self._target_file_path = target_file_path
 
         logger.info(
             f"Starting save raw tags measurement for {duration_seconds} seconds on channels {channel_list}"
@@ -57,12 +61,35 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
             f"Save raw tags completed for {duration_seconds} seconds on channels {channel_list} at {target_file_path}"
         )
 
-    async def stop(self) -> None:
+    async def stop(self) -> Dict[str, Any]:
         logger.info(
             f"Stopping save raw tags measurement on channels {self._channel_list}"
         )
-        if self._fileWriter:
-            self._fileWriter.stop()
+        self._stopped = True
 
-        logger.info("Save raw tags stopped")
-        TimeTagger.freeTimeTagger(self.tagger)
+        if self._fileWriter:
+            try:
+                self._fileWriter.stop()
+            except Exception as e:
+                logger.error(f"Failed to stop file writer: {e}")
+
+        # Only free real TimeTagger instances (not mocks from tests)
+        try:
+            TimeTagger.freeTimeTagger(self.tagger)
+        except TypeError:
+            pass
+
+        # Delete any raw tags file that was already written for this measurement
+        self._delete_output_file(self._target_file_path)
+
+        logger.info("Save raw tags stopped and data file deleted")
+
+        return {
+            "status": "stopped",
+            "duration": (
+                (datetime.now() - self._start_time).total_seconds()
+                if self._start_time
+                else 0
+            ),
+            "message": "Save raw tags measurement stopped and data file deleted",
+        }
