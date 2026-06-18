@@ -12,6 +12,7 @@ class MeasurementType(str, Enum):
     COUNT_RATE = "count_rate"
     SAVE_RAW_TAGS = "save_raw_tags"
     CORRELATION = "correlation"
+    COINCIDENCES = "coincidences"
 
 
 class CountRateMetadata(BaseModel):
@@ -69,6 +70,36 @@ class CorrelationMetadata(BaseModel):
                 "channel2": 2,
                 "binwidth": 1000000000,
                 "n_values": 100,
+                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            }
+        }
+
+
+class CoincidencesMetadata(BaseModel):
+    """Metadata model for coincidences measurements with required and optional fields."""
+
+    channels: list[int] = Field(
+        description="List of channel numbers to measure. Required."
+    )
+    binwidth: int = Field(
+        default=int(1e9),
+        description="Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
+    )
+    n_values: int = Field(
+        default=100,
+        description="Number of bins in the histogram. Default: 1",
+    )
+    target_location: str = Field(
+        default="desktop/MaasData/{datetime}/{measurement-type}",
+        description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "channels": [1, 2, 3],
+                "binwidth": 1000000000,
+                "n_values": 1,
                 "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
             }
         }
@@ -140,6 +171,32 @@ class CorrelationMeasurementRequest(BaseModel):
                     "channel2": 2,
                     "binwidth": 1000000000,
                     "n_values": 100,
+                    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                },
+            }
+        }
+
+
+class CoincidencesMeasurementRequest(BaseModel):
+    """Request model for coincidences measurements."""
+
+    measurement_type: MeasurementType = MeasurementType.COINCIDENCES
+    duration_seconds: int = Field(
+        description="Duration in seconds for the coincidences measurement"
+    )
+    metadata: CoincidencesMetadata = Field(
+        description="Metadata containing channels, binwidth, n_values, and target_location"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "measurement_type": "coincidences",
+                "duration_seconds": 60,
+                "metadata": {
+                    "channels": [1, 2, 3],
+                    "binwidth": 1000000000,
+                    "n_values": 1,
                     "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
                 },
             }

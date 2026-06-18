@@ -3,7 +3,11 @@
 from typing import Dict, Type, Any
 from enum import Enum
 from pydantic import BaseModel, Field
-from app.models import CountRateMeasurementRequest, CorrelationMeasurementRequest
+from app.models import (
+    CountRateMeasurementRequest,
+    CorrelationMeasurementRequest,
+    CoincidencesMeasurementRequest,
+)
 
 # ============================================================================
 # Payload Schemas (JSON definitions)
@@ -81,10 +85,43 @@ class MeasurementPayloadSchemas:
         },
     }
 
+    COINCIDENCES_SCHEMA = {
+        "type": "object",
+        "title": "Coincidences Measurement Payload",
+        "description": "Payload for starting a coincidences measurement",
+        "properties": {
+            "channels": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "List of channel numbers to measure (required). E.g., [1, 2, 3]",
+            },
+            "binwidth": {
+                "type": "integer",
+                "description": "Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
+            },
+            "n_values": {
+                "type": "integer",
+                "description": "Number of bins in the histogram. Default: 1",
+            },
+            "target_location": {
+                "type": "string",
+                "description": "Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
+            },
+        },
+        "required": ["channels"],
+        "example": {
+            "channels": [1, 2, 3],
+            "binwidth": 1000000000,
+            "n_values": 1,
+            "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+        },
+    }
+
     # Map of measurement type to schema
     SCHEMAS: Dict[str, Dict[str, Any]] = {
         "count_rate": COUNT_RATE_SCHEMA,
         "correlation": CORRELATION_SCHEMA,
+        "coincidences": COINCIDENCES_SCHEMA,
     }
 
 
@@ -100,6 +137,7 @@ class MeasurementPayloadMapper:
     _PAYLOAD_MODELS: Dict[str, Type[BaseModel]] = {
         "count_rate": CountRateMeasurementRequest,
         "correlation": CorrelationMeasurementRequest,
+        "coincidences": CoincidencesMeasurementRequest,
     }
 
     @classmethod
