@@ -845,7 +845,10 @@ async def stop_measurement(
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> MeasurementResponse:
     """
-    Stop an active measurement request and release its channels.
+    Stop an active measurement request, delete its data file, and release channels.
+
+    Stops the running measurement, deletes any data file that has already been
+    written for it, and releases its booked channels.
 
     Args:
         measurement_id: The unique status ID returned when starting the measurement
