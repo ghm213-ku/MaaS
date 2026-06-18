@@ -17,6 +17,8 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
         super().__init__(tagger)
         self._measurement_task: Optional[asyncio.Task] = None
         self._start_time: Optional[datetime] = None
+        self._counter: Optional[Any] = None
+        self._target_location: Optional[str] = None
         logger.debug("CoincidencesMeasurementHandler initialized")
 
     async def start(
@@ -35,6 +37,7 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
         """
         logger.info("Starting coincidences measurement")
         self._start_time = datetime.utcnow()
+        self._target_location = metadata.target_location
 
         # TODO: Implement coincidences measurement business logic.
         # This will configure the tagger and collect coincidence data.
@@ -48,16 +51,24 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
             Dictionary with measurement results
         """
         logger.info("Stopping coincidences measurement")
+        self._stopped = True
 
-        # TODO: Implement coincidences measurement results collection.
-        # Placeholder for future implementation.
+        # Stop the underlying hardware measurement so the running job ends
+        if self._counter is not None:
+            try:
+                self._counter.stop()
+            except Exception as e:
+                logger.error(f"Failed to stop coincidences measurement: {e}")
+
+        # Delete any data file that was already written for this measurement
+        self._delete_output_file(self._target_location)
 
         return {
-            "status": "completed",
+            "status": "stopped",
             "duration": (
                 (datetime.utcnow() - self._start_time).total_seconds()
                 if self._start_time
                 else 0
             ),
-            "message": "Coincidences measurement stopped",
+            "message": "Coincidences measurement stopped and data file deleted",
         }

@@ -36,6 +36,8 @@ class JobProcessor:
         """
         self.status_manager = status_manager
         self.active_jobs: Dict[str, threading.Thread] = {}
+        # Live handler instances keyed by status_id, used to stop a running job
+        self.active_handlers: Dict[str, Any] = {}
         self.job_handlers: Dict[str, type] = {}  # Store handler classes only
         self.redis_client = redis_client or status_manager.redis_client
         self.job_queue_key = "measurement:job_queue"
@@ -146,6 +148,14 @@ class JobProcessor:
     ) -> None:
         """Run the job in the spawned thread."""
         try:
+            # If the measurement was stopped while still queued, skip running it
+            existing = self.status_manager.get_status(status_id)
+            if existing and existing.get("status") == MeasurementStatus.STOPPED.value:
+                logger.info(
+                    f"[{status_id}] Job was stopped before starting; skipping execution"
+                )
+                return
+
             # Update status to active
             self.status_manager.update_status(
                 status_id,
@@ -167,6 +177,9 @@ class JobProcessor:
                 )
             handler = handler_class(tagger=self.tagger)
 
+            # Track the live handler instance so a stop request can reach it
+            self.active_handlers[status_id] = handler
+
             # Use provided metadata or fetch from status manager
             if metadata is None:
                 metadata = self.status_manager.get_metadata(status_id) or {}
@@ -183,14 +196,20 @@ class JobProcessor:
             else:
                 raise ValueError(f"Unknown measurement type: {measurement_type}")
 
-            # Update status to completed
-            self.status_manager.update_status(
-                status_id,
-                MeasurementStatus.COMPLETED.value,
-                f"{measurement_type} measurement completed successfully",
-            )
+            # If the job was stopped by the user, don't overwrite the STOPPED
+            # status with COMPLETED.
+            current = self.status_manager.get_status(status_id)
+            if current and current.get("status") == MeasurementStatus.STOPPED.value:
+                logger.info(f"[{status_id}] Job was stopped by user; not marking completed")
+            else:
+                # Update status to completed
+                self.status_manager.update_status(
+                    status_id,
+                    MeasurementStatus.COMPLETED.value,
+                    f"{measurement_type} measurement completed successfully",
+                )
 
-            logger.info(f"[{status_id}] Job completed successfully")
+                logger.info(f"[{status_id}] Job completed successfully")
 
         except Exception as e:
             logger.error(f"[{status_id}] Job failed: {e}", exc_info=True)
@@ -208,9 +227,11 @@ class JobProcessor:
                     f"[{status_id}] No channels to release or release failed: {e}"
                 )
 
-            # Clean up from active jobs
+            # Clean up from active jobs and handlers
             if status_id in self.active_jobs:
                 del self.active_jobs[status_id]
+            if status_id in self.active_handlers:
+                del self.active_handlers[status_id]
 
     def _handle_count_rate(
         self,
@@ -359,20 +380,35 @@ class JobProcessor:
             loop.close()
 
     def stop_job(self, status_id: str) -> bool:
-        """Stop a running job (returns after stopping)."""
-        # Update status to stopped
+        """Stop a running job, stopping the measurement and deleting its data file.
+
+        Signals the live handler to stop the underlying hardware measurement and
+        delete any data file it has already written, then marks the measurement
+        as stopped.
+        """
+        # Update status to stopped first so the running job thread does not
+        # overwrite it with COMPLETED once the measurement is interrupted.
         self.status_manager.update_status(
             status_id, MeasurementStatus.STOPPED.value, "Measurement stopped by user"
         )
 
-        # Try to remove from active jobs if present
-        if status_id in self.active_jobs:
-            logger.info(f"[{status_id}] Stop signal sent to job thread")
-            # Note: Python threads cannot be forcibly terminated safely.
-            # In a production system, you would implement a cancellation mechanism
-            # (e.g., setting a flag that the job checks periodically)
+        # Stop the live handler if one is running for this measurement
+        handler = self.active_handlers.get(status_id)
+        if handler is not None:
+            logger.info(f"[{status_id}] Stopping handler and deleting data file")
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(handler.stop())
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(
+                    f"[{status_id}] Error while stopping handler: {e}", exc_info=True
+                )
         else:
-            logger.info(f"[{status_id}] Job not in active jobs, but marked as stopped")
+            logger.info(f"[{status_id}] No active handler; marked as stopped")
 
         return True
 
