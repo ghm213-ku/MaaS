@@ -477,7 +477,7 @@ RESPONSE:
 ### FastAPI Router ↔ Status Manager
 
 ```
-Routes (routes_distributed.py)
+Routes (routes.py)
    │
    ├─→ create_status(status_id, type, duration, metadata)
    ├─→ get_status(status_id)

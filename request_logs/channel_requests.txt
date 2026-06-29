@@ -53,3 +53,4 @@ measurement-correlation        | 1, 2                           | BOOK          
 measurement-correlation        | 1, 2                           | BOOK            | 2026-06-29 07:54:04.047   | Measurement ID: abf1bd34-119b-4aa5-b6d8-908e590cfe42
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-29 07:55:13.667   | Measurement ID: 951b17b6-bd16-48c0-ba0e-4b4f6525bcef
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-29 07:56:29.780   | Measurement ID: 0511042f-1086-43a0-a423-6071918da5bb
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-29 11:51:01.461   | Measurement ID: 97d4d319-8de0-4834-bfc7-2e5f31dc7143

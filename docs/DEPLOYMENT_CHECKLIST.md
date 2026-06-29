@@ -45,7 +45,7 @@ python worker.py
 curl http://localhost:8000/health
 
 # Create measurement
-Invoke-RestMethod -Uri "http://localhost:8000/api/v1/measurements/count-rate" -Method Post -ContentType "application/json" -Body '{"channels": [1, 2, 3], "binwidth": 1000000000, "n_values": 1, "target_location": "desktop/MaasData/{datetime}/{measurement-type}", "duration_seconds": 5}'
+Invoke-RestMethod -Uri "http://localhost:8000/api/v1/measurements/count-rate" -Method Post -ContentType "application/json" -Body '{"duration_seconds": 5, "metadata": {"channels": [1, 2, 3], "binwidth": 1000000000, "n_values": 1, "target_location": "desktop/MaasData/{datetime}/{measurement-type}"}}'
 
 # Save the measurement_id from response, then:
 curl http://localhost:8000/api/v1/measurements/{measurement_id}/status

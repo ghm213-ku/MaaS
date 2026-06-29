@@ -427,3 +427,51 @@ class TestIntegrationWithMockedTaggerAndModel:
             # FileWriter would be created like this in the handler
             assert channels == [1, 2, 3]
             assert file_path == "C:\\test.dat"
+
+
+class TestSaveRawTagsMeasurementHandlerStop:
+    """Test stop method in SaveRawTagsMeasurementHandler."""
+    
+    @pytest.mark.asyncio
+    async def test_stop_sets_stop_event(self, mock_tagger):
+        handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
+        handler._stop_event = MagicMock()
+        handler._fileWriter = MagicMock()
+        handler._target_file_path = "test.dat"
+        handler._channel_list = [1, 2]
+        handler._start_time = datetime.now()
+        
+        with patch.object(handler, '_delete_output_file') as mock_delete:
+            res = await handler.stop()
+            
+            assert handler._stopped is True
+            handler._stop_event.set.assert_called_once()
+            assert res["status"] == "stopped"
+
+    @pytest.mark.asyncio
+    async def test_stop_stops_file_writer_and_handles_exception(self, mock_tagger):
+        handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
+        handler._fileWriter = MagicMock()
+        handler._fileWriter.stop.side_effect = Exception("Writer error")
+        handler._target_file_path = "test.dat"
+        
+        with patch('app.services.save_raw_tags.logger.error') as mock_logger_error:
+            with patch.object(handler, '_delete_output_file') as mock_delete:
+                await handler.stop()
+                mock_logger_error.assert_called_with("Failed to stop file writer: Writer error")
+
+    @pytest.mark.asyncio
+    async def test_stop_frees_tagger(self, mock_tagger):
+        handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
+        handler._target_file_path = "test.dat"
+        
+        with patch('Swabian.TimeTagger.freeTimeTagger') as mock_free:
+            # First test successful free
+            with patch.object(handler, '_delete_output_file'):
+                await handler.stop()
+                mock_free.assert_called_with(mock_tagger)
+                
+            # Now test type error handling
+            mock_free.side_effect = TypeError("Mock tagger")
+            with patch.object(handler, '_delete_output_file'):
+                await handler.stop()  # Should not raise exception

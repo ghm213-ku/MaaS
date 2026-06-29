@@ -10,6 +10,8 @@ from app.api import routes
 from app.api.routes import start_count_rate_measurement
 from app.services.status_manager import StatusManager, MeasurementStatus
 from app.services.measurement import MeasurementHandler
+from app.services.file_logger import FileLogger
+from app.utils.path_utils import format_target_location
 from app.services.job_processor import JobProcessor
 from app.models import MeasurementType, CountRateMeasurementRequest, CountRateMetadata, CoincidencesMetadata
 
@@ -247,38 +249,50 @@ class MockCoincidencesHandler(MeasurementHandler):
         return {}
 
 def test_job_processor_handle_coincidences():
-    """Test the _handle_coincidences execution block."""
+    """Test the coincidences execution block."""
     processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
     processor.redis_client = MagicMock()
     handler = MockCoincidencesHandler(tagger=MagicMock())
+    processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
     
     # Missing duration
-    with pytest.raises(ValueError, match="duration_seconds is required"):
-        processor._handle_coincidences(handler, 0.0, {}, "id1")
+    processor._run_job_in_thread("id1", "coincidences", 0.0, {})
+    args = processor.status_manager.update_status.call_args_list[-1].args
+    assert args[1] == "failed" and "duration_seconds is required" in args[2]
         
     # Missing channels
-    with pytest.raises(ValueError, match="channels are required"):
-        processor._handle_coincidences(handler, 10.0, {}, "id1")
+    processor._run_job_in_thread("id1", "coincidences", 10.0, {})
+    args = processor.status_manager.update_status.call_args_list[-1].args
+    assert args[1] == "failed" and "channels" in args[2] and "Field required" in args[2]
         
     # Valid
-    processor._handle_coincidences(handler, 10.0, {"channels": [1,2]}, "id1")
+    processor._run_job_in_thread("id1", "coincidences", 10.0, {"channels": [1,2]})
+    # Should complete
+    args = processor.status_manager.update_status.call_args_list[-1].args
+    assert args[1] == "completed"
 
 def test_job_processor_handle_save_raw_tags():
-    """Test the _handle_save_raw_tags execution block."""
+    """Test the save_raw_tags execution block."""
     processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
     processor.redis_client = MagicMock()
     handler = MockCoincidencesHandler(tagger=MagicMock())  # using this as a dummy handler
+    processor.job_handlers["save_raw_tags"] = MagicMock(return_value=handler)
     
     # Missing duration
-    with pytest.raises(ValueError, match="duration_seconds is required"):
-        processor._handle_save_raw_tags(handler, 0.0, {}, "id1")
+    processor._run_job_in_thread("id1", "save_raw_tags", 0.0, {})
+    args = processor.status_manager.update_status.call_args_list[-1].args
+    assert args[1] == "failed" and "duration_seconds is required" in args[2]
         
     # Missing channel list
-    with pytest.raises(ValueError, match="channel_list and target_file_path are required"):
-        processor._handle_save_raw_tags(handler, 10.0, {"target_file_path": "path"}, "id1")
+    processor._run_job_in_thread("id1", "save_raw_tags", 10.0, {"target_file_path": "path"})
+    args = processor.status_manager.update_status.call_args_list[-1].args
+    assert args[1] == "failed" and "channel_list" in args[2] and "Field required" in args[2]
         
     # Valid
-    processor._handle_save_raw_tags(handler, 10.0, {"channel_list": [1,2], "target_file_path": "test.txt"}, "id1")
+    processor._run_job_in_thread("id1", "save_raw_tags", 10.0, {"channel_list": [1,2], "target_file_path": "test.txt"})
+    # Should complete
+    args = processor.status_manager.update_status.call_args_list[-1].args
+    assert args[1] == "completed"
 
 def test_job_processor_pubsub_listener():
     """Test the pubsub listener block."""
@@ -315,3 +329,278 @@ def test_job_processor_pubsub_listener():
             if handler_info is not None:
                 # Mock execution
                 pass
+import tempfile
+
+def test_job_processor_run_job_skip_stopped():
+    sm_mock = MagicMock()
+    sm_mock.get_status.return_value = {"status": MeasurementStatus.STOPPED.value}
+    
+    processor = JobProcessor(status_manager=sm_mock, tagger=MagicMock())
+    processor.redis_client = MagicMock()
+    
+    processor._run_job_in_thread("id123", "count_rate", 10.0, {})
+    # Should return early, not call update_status
+    sm_mock.update_status.assert_not_called()
+
+def test_job_processor_run_job_cancelled_error():
+    sm_mock = MagicMock()
+    sm_mock.get_status.return_value = {"status": "queued"}
+    
+    processor = JobProcessor(status_manager=sm_mock, tagger=MagicMock())
+    processor.redis_client = MagicMock()
+    
+    handler = MockCoincidencesHandler(tagger=MagicMock())
+    handler.start = AsyncMock(side_effect=asyncio.CancelledError())
+    processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
+    
+    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [1,2]})
+    # Should catch CancelledError and not update_status to FAILED
+    sm_mock.update_status.assert_called_with("id123", "active", "coincidences measurement started")
+
+def test_job_processor_run_job_release_channels_exception():
+    sm_mock = MagicMock()
+    sm_mock.get_status.return_value = {"status": "queued"}
+    sm_mock.release_channels.side_effect = Exception("Release error")
+    
+    processor = JobProcessor(status_manager=sm_mock, tagger=MagicMock())
+    processor.redis_client = MagicMock()
+    
+    handler = MockCoincidencesHandler(tagger=MagicMock())
+    handler.start = AsyncMock()
+    processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
+    
+    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [1,2]})
+    # Should catch the exception and log debug silently
+    sm_mock.release_channels.assert_called_with("id123")
+
+def test_job_processor_format_target_location_empty():
+    processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
+    res = processor._format_target_location("", "count_rate")
+    assert res == ""
+
+def test_job_processor_format_target_location_directory():
+    processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
+    with tempfile.TemporaryDirectory() as temp_dir:
+        res = processor._format_target_location(temp_dir, "count_rate")
+        assert res.endswith(".csv")
+        assert "count_rate" in res
+        
+        res_raw = processor._format_target_location(temp_dir, "save_raw_tags")
+        assert res_raw.endswith(".tags")
+        assert "save_raw_tags" in res_raw
+
+def test_job_processor_is_job_active():
+    processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
+    mock_thread = MagicMock()
+    mock_thread.is_alive.return_value = True
+    processor.active_jobs["id1"] = mock_thread
+    
+    assert processor.is_job_active("id1") is True
+    assert processor.is_job_active("id2") is False
+
+def test_job_processor_listen_for_stops_new_loop():
+    processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
+    processor.redis_client = MagicMock()
+    
+    mock_handler = MagicMock()
+    mock_handler.stop = AsyncMock()
+    processor.active_handlers["id123"] = mock_handler # no loop provided
+    
+    mock_pubsub = MagicMock()
+    mock_pubsub.listen.return_value = [{"type": "message", "data": b"id123"}]
+    processor._pubsub = mock_pubsub
+    
+    def mock_listen():
+        yield {"type": "message", "data": b"id123"}
+        
+    mock_pubsub.listen = mock_listen
+    
+    processor._listen_for_stops()
+    mock_handler.stop.assert_called()
+
+def test_status_manager_update_status_file_logger_exception():
+    redis_mock = MagicMock()
+    redis_mock.get.return_value = '{"status": "queued"}'
+    file_logger_mock = MagicMock()
+    file_logger_mock.log_measurement_status_update.side_effect = Exception("Write error")
+    
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    manager.file_logger = file_logger_mock
+    
+    # Should catch exception and not raise
+    manager.update_status("id1", "active", "Started")
+
+def test_status_manager_update_status_release_channels_exception():
+    redis_mock = MagicMock()
+    redis_mock.get.return_value = '{"status": "queued"}'
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    manager.file_logger = MagicMock()
+    
+    # Mock release_channels to raise
+    manager.release_channels = MagicMock(side_effect=Exception("Release failed"))
+    
+    # Should catch release_channels exception when status is completed
+    manager.update_status("id1", MeasurementStatus.COMPLETED.value, "Done")
+
+def test_status_manager_get_results_invalid_json():
+    redis_mock = MagicMock()
+    redis_mock.get.return_value = "invalid json"
+    manager = StatusManager()
+import tempfile
+
+def test_job_processor_run_job_skip_stopped():
+    sm_mock = MagicMock()
+    sm_mock.get_status.return_value = {"status": MeasurementStatus.STOPPED.value}
+    
+    processor = JobProcessor(status_manager=sm_mock, tagger=MagicMock())
+    processor.redis_client = MagicMock()
+    
+    processor._run_job_in_thread("id123", "count_rate", 10.0, {})
+    # Should return early, not call update_status
+    sm_mock.update_status.assert_not_called()
+
+def test_job_processor_run_job_cancelled_error():
+    sm_mock = MagicMock()
+    sm_mock.get_status.return_value = {"status": "queued"}
+    
+    processor = JobProcessor(status_manager=sm_mock, tagger=MagicMock())
+    processor.redis_client = MagicMock()
+    
+    handler = MockCoincidencesHandler(tagger=MagicMock())
+    handler.start = AsyncMock(side_effect=asyncio.CancelledError())
+    processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
+    
+    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [1,2]})
+    # Should catch CancelledError and not update_status to FAILED
+    sm_mock.update_status.assert_called_with("id123", "active", "coincidences measurement started")
+
+def test_job_processor_run_job_release_channels_exception():
+    sm_mock = MagicMock()
+    sm_mock.get_status.return_value = {"status": "queued"}
+    sm_mock.release_channels.side_effect = Exception("Release error")
+    
+    processor = JobProcessor(status_manager=sm_mock, tagger=MagicMock())
+    processor.redis_client = MagicMock()
+    
+    handler = MockCoincidencesHandler(tagger=MagicMock())
+    handler.start = AsyncMock()
+    processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
+    
+    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [1,2]})
+    # Should catch the exception and log debug silently
+    sm_mock.release_channels.assert_called_with("id123")
+
+def test_job_processor_format_target_location_empty():
+    res = format_target_location("", "count_rate")
+    assert res == ""
+
+def test_job_processor_format_target_location_directory():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        res = format_target_location(temp_dir, "count_rate")
+        assert res.endswith(".csv")
+        assert "count_rate" in res
+        
+        res_raw = format_target_location(temp_dir, "save_raw_tags")
+        assert res_raw.endswith(".tags")
+        assert "save_raw_tags" in res_raw
+
+def test_job_processor_is_job_active():
+    processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
+    mock_thread = MagicMock()
+    mock_thread.is_alive.return_value = True
+    processor.active_jobs["id1"] = mock_thread
+    
+    assert processor.is_job_active("id1") is True
+    assert processor.is_job_active("id2") is False
+
+def test_job_processor_listen_for_stops_new_loop():
+    processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
+    processor.redis_client = MagicMock()
+    
+    mock_handler = MagicMock()
+    mock_handler.stop = AsyncMock()
+    processor.active_handlers["id123"] = mock_handler # no loop provided
+    
+    mock_pubsub = MagicMock()
+    mock_pubsub.listen.return_value = [{"type": "message", "data": b"id123"}]
+    processor._pubsub = mock_pubsub
+    
+    def mock_listen():
+        yield {"type": "message", "data": b"id123"}
+        
+    mock_pubsub.listen = mock_listen
+    
+    processor._listen_for_stops()
+    mock_handler.stop.assert_called()
+
+def test_status_manager_update_status_file_logger_exception():
+    redis_mock = MagicMock()
+    redis_mock.get.return_value = '{"status": "queued"}'
+    file_logger_mock = MagicMock()
+    file_logger_mock.log_measurement_status_update.side_effect = Exception("Write error")
+    
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    manager.file_logger = file_logger_mock
+    
+    # Should catch exception and not raise
+    manager.update_status("id1", "active", "Started")
+
+def test_status_manager_update_status_release_channels_exception():
+    redis_mock = MagicMock()
+    redis_mock.get.return_value = '{"status": "queued"}'
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    manager.file_logger = MagicMock()
+    
+    # Mock release_channels to raise
+    manager.release_channels = MagicMock(side_effect=Exception("Release failed"))
+    
+    # Should catch release_channels exception when status is completed
+    manager.update_status("id1", MeasurementStatus.COMPLETED.value, "Done")
+
+def test_status_manager_get_results_invalid_json():
+    redis_mock = MagicMock()
+    redis_mock.get.return_value = "invalid json"
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    
+    res = manager.get_results("id1")
+    assert res is None
+
+def test_status_manager_delete_status_file_logger_exception():
+    redis_mock = MagicMock()
+    redis_mock.get.return_value = '{"status": "completed"}'
+    redis_mock.delete.return_value = 1
+    file_logger_mock = MagicMock()
+    file_logger_mock.log_measurement_status_removal.side_effect = Exception("Write error")
+    
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    manager.file_logger = file_logger_mock
+    
+    manager.delete_status("id1")
+    # Exception caught and handled silently
+    assert redis_mock.delete.called
+
+def test_status_manager_health_check_exception():
+    redis_mock = MagicMock()
+    redis_mock.ping.side_effect = Exception("Redis down")
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    
+    res = manager.health_check()
+    assert res is False
+
+def test_status_manager_get_all_channels():
+    manager = StatusManager()
+    channels = manager.get_all_channels()
+    assert len(channels) == len(manager.ALL_CHANNELS)
+    assert set(c["channel_number"] for c in channels) == set(manager.ALL_CHANNELS)
+
+def test_status_manager_validate_channels_true():
+    manager = StatusManager()
+    # Should not raise exception
+    manager.validate_channels([1, 16])

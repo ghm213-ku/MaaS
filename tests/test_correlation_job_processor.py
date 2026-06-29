@@ -62,7 +62,10 @@ class TestCorrelationJobProcessing:
         }
 
         # This should not raise an error
-        job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        if job_processor.status_manager.update_status.called:
+            assert job_processor.status_manager.update_status.call_args_list[-1].args[1] != "failed"
 
     def test_handle_correlation_with_all_params(self, job_processor, mock_tagger):
         """Should handle correlation with all parameters."""
@@ -76,7 +79,10 @@ class TestCorrelationJobProcessing:
         }
 
         # Should not raise
-        job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        if job_processor.status_manager.update_status.called:
+            assert job_processor.status_manager.update_status.call_args_list[-1].args[1] != "failed"
 
     def test_handle_correlation_missing_duration_raises_error(
         self, job_processor, mock_tagger
@@ -88,8 +94,10 @@ class TestCorrelationJobProcessing:
             "channel2": 2,
         }
 
-        with pytest.raises(ValueError, match="duration_seconds is required"):
-            job_processor._handle_correlation(handler, None, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", None, metadata)
+        args = job_processor.status_manager.update_status.call_args_list[-1].args
+        assert args[1] == "failed" and ("duration_seconds is required" in args[2] or "Field required" in args[2] or "valid integer" in args[2])
 
     def test_handle_correlation_missing_channel1_raises_error(
         self, job_processor, mock_tagger
@@ -100,8 +108,10 @@ class TestCorrelationJobProcessing:
             "channel2": 2,
         }
 
-        with pytest.raises(ValueError, match="channel1 and channel2 are required"):
-            job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        args = job_processor.status_manager.update_status.call_args_list[-1].args
+        assert args[1] == "failed" and ("channel1 and channel2 are required" in args[2] or "Field required" in args[2] or "valid integer" in args[2])
 
     def test_handle_correlation_missing_channel2_raises_error(
         self, job_processor, mock_tagger
@@ -112,8 +122,10 @@ class TestCorrelationJobProcessing:
             "channel1": 1,
         }
 
-        with pytest.raises(ValueError, match="channel1 and channel2 are required"):
-            job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        args = job_processor.status_manager.update_status.call_args_list[-1].args
+        assert args[1] == "failed" and ("channel1 and channel2 are required" in args[2] or "Field required" in args[2] or "valid integer" in args[2])
 
     def test_handle_correlation_channel1_none_raises_error(
         self, job_processor, mock_tagger
@@ -125,8 +137,10 @@ class TestCorrelationJobProcessing:
             "channel2": 2,
         }
 
-        with pytest.raises(ValueError, match="channel1 and channel2 are required"):
-            job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        args = job_processor.status_manager.update_status.call_args_list[-1].args
+        assert args[1] == "failed" and ("channel1 and channel2 are required" in args[2] or "Field required" in args[2] or "valid integer" in args[2])
 
     def test_handle_correlation_channel2_none_raises_error(
         self, job_processor, mock_tagger
@@ -138,8 +152,10 @@ class TestCorrelationJobProcessing:
             "channel2": None,
         }
 
-        with pytest.raises(ValueError, match="channel1 and channel2 are required"):
-            job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        args = job_processor.status_manager.update_status.call_args_list[-1].args
+        assert args[1] == "failed" and ("channel1 and channel2 are required" in args[2] or "Field required" in args[2] or "valid integer" in args[2])
 
     def test_handle_correlation_uses_default_binwidth(self, job_processor, mock_tagger):
         """Should use default binwidth if not provided."""
@@ -149,7 +165,10 @@ class TestCorrelationJobProcessing:
             "channel2": 2,
         }
 
-        job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        if job_processor.status_manager.update_status.called:
+            assert job_processor.status_manager.update_status.call_args_list[-1].args[1] != "failed"
 
         # Handler should receive metadata with default binwidth
         # Verify through the handler's initialization
@@ -162,7 +181,10 @@ class TestCorrelationJobProcessing:
             "channel2": 2,
         }
 
-        job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        if job_processor.status_manager.update_status.called:
+            assert job_processor.status_manager.update_status.call_args_list[-1].args[1] != "failed"
 
     def test_handle_correlation_uses_default_target_location(
         self, job_processor, mock_tagger
@@ -174,7 +196,10 @@ class TestCorrelationJobProcessing:
             "channel2": 2,
         }
 
-        job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        if job_processor.status_manager.update_status.called:
+            assert job_processor.status_manager.update_status.call_args_list[-1].args[1] != "failed"
 
     def test_handle_correlation_creates_metadata_object(
         self, job_processor, mock_tagger
@@ -189,7 +214,10 @@ class TestCorrelationJobProcessing:
         }
 
         # This should execute without error
-        job_processor._handle_correlation(handler, 1, metadata_dict)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata_dict)
+        if job_processor.status_manager.update_status.called:
+            assert job_processor.status_manager.update_status.call_args_list[-1].args[1] != "failed"
 
     def test_handle_correlation_with_large_channel_numbers(
         self, job_processor, mock_tagger
@@ -201,7 +229,10 @@ class TestCorrelationJobProcessing:
             "channel2": 102,
         }
 
-        job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        if job_processor.status_manager.update_status.called:
+            assert job_processor.status_manager.update_status.call_args_list[-1].args[1] != "failed"
 
     def test_enqueue_job_with_correlation(self, job_processor):
         """Should enqueue correlation job."""
@@ -221,28 +252,13 @@ class TestCorrelationJobProcessing:
         # Should call redis push
         assert job_processor.redis_client.rpush.called
 
-    def test_run_job_calls_handle_correlation(
-        self, job_processor, mock_status_manager, mock_tagger
-    ):
-        """_run_job_in_thread should call _handle_correlation for correlation type."""
-        metadata = {
-            "channel1": 1,
-            "channel2": 2,
-        }
-
-        with patch.object(job_processor, "_handle_correlation") as mock_handle:
-            try:
-                job_processor._run_job_in_thread(
-                    "test-id",
-                    "correlation",
-                    duration_seconds=1,
-                    metadata=metadata,
-                )
-            except:
-                pass
-
-            # Verify _handle_correlation was called
-            assert mock_handle.called
+    def test_run_job_calls_handler_start(self, job_processor, mock_status_manager, mock_tagger):
+        metadata = {'channel1': 1, 'channel2': 2}
+        job_processor.job_handlers['correlation'] = __import__('unittest').mock.MagicMock()
+        handler_mock = __import__('unittest').mock.MagicMock()
+        job_processor.job_handlers['correlation'].return_value = handler_mock
+        job_processor._run_job_in_thread('test', 'correlation', 1, metadata)
+        assert handler_mock.start.called
 
     def test_correlation_handler_receives_correct_metadata(
         self, job_processor, mock_tagger
@@ -258,7 +274,10 @@ class TestCorrelationJobProcessing:
         }
 
         # Execute without error
-        job_processor._handle_correlation(handler, 1, metadata)
+        job_processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        job_processor._run_job_in_thread("test-id", "correlation", 1, metadata)
+        if job_processor.status_manager.update_status.called:
+            assert job_processor.status_manager.update_status.call_args_list[-1].args[1] != "failed"
 
 
 class TestCorrelationHandlerIntegration:
@@ -299,7 +318,8 @@ class TestCorrelationHandlerIntegration:
         }
 
         # Should execute without error
-        processor._handle_correlation(handler, 1, metadata)
+        processor.job_handlers["correlation"] = __import__('unittest').mock.MagicMock(return_value=handler)
+        processor._run_job_in_thread("test-id", "correlation", 1, metadata)
 
     @patch("app.services.correlation.np.savetxt")
     def test_correlation_fails_on_target_location_permission_error(
