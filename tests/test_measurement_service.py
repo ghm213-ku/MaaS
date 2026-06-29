@@ -20,7 +20,7 @@ class MockMeasurementHandler(MeasurementHandler):
         self.start_calls = 0
         self.stop_calls = 0
     
-    async def start(self, duration_seconds, metadata):
+    async def start(self, duration_seconds, metadata, stop_checker=None):
         self.started = True
         self.start_calls += 1
     
@@ -323,7 +323,7 @@ class TestMeasurementErrorHandling:
     class FailingHandler(MeasurementHandler):
         """Handler that fails on start."""
         
-        async def start(self, duration_seconds, metadata):
+        async def start(self, duration_seconds, metadata, stop_checker=None):
             raise RuntimeError("Start failed")
         
         async def stop(self):

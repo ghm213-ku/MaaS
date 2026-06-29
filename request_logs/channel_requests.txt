@@ -32,3 +32,24 @@ abc-123                        | 5, 6, 7                        | RELEASE       
 measurement-correlation        | 1, 2                           | BOOK            | 2026-06-18 08:58:00.479   | Measurement ID: 10e799a2-4dab-4d45-a345-30d9b5ad3bbb
 measurement-correlation        | 1, 2                           | BOOK            | 2026-06-18 10:01:38.349   | Measurement ID: 2048dd11-47d1-4c20-801e-bb8a92555dac
 measurement-count_rate         | 3, 4                           | BOOK            | 2026-06-18 10:01:52.362   | Measurement ID: f26532a5-ce0a-4b65-a5f6-77da7767d7ca
+measurement-count_rate         | 3, 4                           | BOOK            | 2026-06-18 13:57:05.378   | Measurement ID: f7295f95-3bad-4853-9032-087b49050a62
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-18 14:33:20.466   | Measurement ID: 7ae9baf1-26f2-4cde-9123-c475a739421d
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-18 14:34:46.839   | Measurement ID: b481bd32-fd83-4104-bfbf-099d2a16d531
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-18 14:39:08.417   | Measurement ID: f1e831ea-b97e-4fd2-9cbe-0e334776ef3d
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-18 14:40:23.963   | Measurement ID: 31a7a3f6-e96b-43bf-b320-a5a90f9c683d
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 08:41:01.575   | Measurement ID: 8b71644e-e533-4802-b824-c8f69e28684f
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 08:51:45.141   | Measurement ID: b1e97eee-ed6b-4cd7-ac69-5799cb1bc015
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 09:06:24.839   | Measurement ID: 8ae38e47-db70-4f92-a3a9-00c835af24cf
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-25 09:24:17.218   | Measurement ID: 63d675d7-41a2-4ddc-a7a9-dfb5d40dbfe1
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 11:58:37.757   | Measurement ID: f5426902-1499-4177-984b-809d2ff38de3
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 12:08:11.649   | Measurement ID: 4df51060-e593-4494-8001-e1e27dd74915
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 12:09:26.278   | Measurement ID: bdaf9c7b-1e46-4819-ad4f-7797ec09a92f
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 13:41:25.039   | Measurement ID: 32be63dc-0feb-4b5c-bd62-c9e6c7f1efee
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 13:42:01.012   | Measurement ID: ec84af44-e8ed-42b4-80f7-9ce4ab0d01b4
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 14:16:36.207   | Measurement ID: 75508d24-a567-44aa-8a90-ceefa4908fa6
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 14:21:45.906   | Measurement ID: 647bae3f-4240-4275-9d83-5c5ac4bb91ae
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-25 14:27:33.934   | Measurement ID: 3234984f-aedb-46fc-a67d-5e89270108aa
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-29 07:53:26.502   | Measurement ID: ea814e1d-faf2-4d9b-9e29-651936529665
+measurement-correlation        | 1, 2                           | BOOK            | 2026-06-29 07:54:04.047   | Measurement ID: abf1bd34-119b-4aa5-b6d8-908e590cfe42
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-29 07:55:13.667   | Measurement ID: 951b17b6-bd16-48c0-ba0e-4b4f6525bcef
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-29 07:56:29.780   | Measurement ID: 0511042f-1086-43a0-a423-6071918da5bb

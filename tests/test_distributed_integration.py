@@ -8,7 +8,7 @@ import asyncio
 import json
 import time
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 import redis
@@ -255,11 +255,11 @@ class TestJobProcessorIntegration:
             status_id,
             "count_rate",
             2,  # 2 second measurement
-            {"detector": "test"},
+            {"detector": "test", "channels": [1, 2]},
         )
 
         # Process job (should update status)
-        with patch.object(CountRateMeasurementHandler, "start"):
+        with patch.object(CountRateMeasurementHandler, "start", new_callable=AsyncMock):
             job_processor.process_job(status_id, "count_rate", 2)
 
             # Give thread a moment to complete
@@ -311,11 +311,11 @@ class TestJobProcessorIntegration:
                 status_id,
                 "count_rate",
                 1,  # 1 second each
-                {"job": i},
+                {"job": i, "channels": [1, 2]},
             )
 
         # Start all jobs
-        with patch.object(CountRateMeasurementHandler, "start"):
+        with patch.object(CountRateMeasurementHandler, "start", new_callable=AsyncMock):
             for status_id in status_ids:
                 job_processor.process_job(status_id, "count_rate", 1)
 
@@ -644,7 +644,7 @@ class TestJobQueueing:
     def test_job_queue_flow_end_to_end(self, status_manager, job_processor):
         """Test complete flow: enqueue → retrieve → process."""
         status_id = str(uuid.uuid4())
-        metadata = {"detector": "det_001"}
+        metadata = {"detector": "det_001", "channels": [1, 2]}
 
         # Step 1: API creates status
         status_manager.create_status(
@@ -670,7 +670,7 @@ class TestJobQueueing:
         assert job["metadata"] == metadata
 
         # Step 4: Worker processes the job (with mocked handler)
-        with patch.object(CountRateMeasurementHandler, "start"):
+        with patch.object(CountRateMeasurementHandler, "start", new_callable=AsyncMock):
             job_processor.process_job(
                 status_id=job["status_id"],
                 measurement_type=job["measurement_type"],

@@ -138,83 +138,63 @@ class TestCorrelationMeasurementAPI:
         data = response.json()
         assert data["measurement_type"] == "correlation"
 
-    def test_post_correlation_measurement_missing_channel1(self, test_client):
-        """Should reject if channel1 is missing."""
+    import pytest
+
+    @pytest.mark.parametrize(
+        "invalid_payload, expected_error_field",
+        [
+            (
+                {
+                    "measurement_type": "correlation",
+                    "duration_seconds": 60,
+                    "metadata": {"channel2": 2},
+                },
+                "channel1",
+            ),
+            (
+                {
+                    "measurement_type": "correlation",
+                    "duration_seconds": 60,
+                    "metadata": {"channel1": 1},
+                },
+                "channel2",
+            ),
+            (
+                {
+                    "measurement_type": "correlation",
+                    "duration_seconds": 60,
+                    "metadata": {"channel1": "not_int", "channel2": 2},
+                },
+                "channel1",
+            ),
+            (
+                {
+                    "measurement_type": "correlation",
+                    "metadata": {"channel1": 1, "channel2": 2},
+                },
+                "duration_seconds",
+            ),
+            (
+                {
+                    "measurement_type": "correlation",
+                    "duration_seconds": 60,
+                },
+                "metadata",
+            ),
+        ],
+    )
+    def test_post_correlation_measurement_validation_errors(
+        self, test_client, invalid_payload, expected_error_field
+    ):
+        """Should reject payload with missing or invalid required fields."""
         client, _, _ = test_client
 
-        payload = {
-            "measurement_type": "correlation",
-            "duration_seconds": 60,
-            "metadata": {
-                "channel2": 2,
-            },
-        }
-
-        response = client.post("/api/v1/measurements/correlation", json=payload)
+        response = client.post("/api/v1/measurements/correlation", json=invalid_payload)
 
         assert response.status_code == 422
-
-    def test_post_correlation_measurement_missing_channel2(self, test_client):
-        """Should reject if channel2 is missing."""
-        client, _, _ = test_client
-
-        payload = {
-            "measurement_type": "correlation",
-            "duration_seconds": 60,
-            "metadata": {
-                "channel1": 1,
-            },
-        }
-
-        response = client.post("/api/v1/measurements/correlation", json=payload)
-
-        assert response.status_code == 422
-
-    def test_post_correlation_measurement_invalid_channel1_type(self, test_client):
-        """Should reject if channel1 is not integer."""
-        client, _, _ = test_client
-
-        payload = {
-            "measurement_type": "correlation",
-            "duration_seconds": 60,
-            "metadata": {
-                "channel1": "not_int",
-                "channel2": 2,
-            },
-        }
-
-        response = client.post("/api/v1/measurements/correlation", json=payload)
-
-        assert response.status_code == 422
-
-    def test_post_correlation_measurement_missing_duration(self, test_client):
-        """Should reject if duration_seconds is missing."""
-        client, _, _ = test_client
-
-        payload = {
-            "measurement_type": "correlation",
-            "metadata": {
-                "channel1": 1,
-                "channel2": 2,
-            },
-        }
-
-        response = client.post("/api/v1/measurements/correlation", json=payload)
-
-        assert response.status_code == 422
-
-    def test_post_correlation_measurement_missing_metadata(self, test_client):
-        """Should reject if metadata is missing."""
-        client, _, _ = test_client
-
-        payload = {
-            "measurement_type": "correlation",
-            "duration_seconds": 60,
-        }
-
-        response = client.post("/api/v1/measurements/correlation", json=payload)
-
-        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+        assert any(expected_error_field in str(error) for error in data["detail"])
 
     def test_post_correlation_measurement_enqueues_job(self, test_client):
         """Should enqueue job for backend processing."""
@@ -279,7 +259,7 @@ class TestCorrelationMeasurementAPI:
         """Should return unique measurement_id."""
         client, _, _ = test_client
 
-        payload = {
+        payload1 = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
             "metadata": {
@@ -288,8 +268,17 @@ class TestCorrelationMeasurementAPI:
             },
         }
 
-        response1 = client.post("/api/v1/measurements/correlation", json=payload)
-        response2 = client.post("/api/v1/measurements/correlation", json=payload)
+        payload2 = {
+            "measurement_type": "correlation",
+            "duration_seconds": 60,
+            "metadata": {
+                "channel1": 3,
+                "channel2": 4,
+            },
+        }
+
+        response1 = client.post("/api/v1/measurements/correlation", json=payload1)
+        response2 = client.post("/api/v1/measurements/correlation", json=payload2)
 
         id1 = response1.json()["measurement_id"]
         id2 = response2.json()["measurement_id"]

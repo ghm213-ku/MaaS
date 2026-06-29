@@ -46,3 +46,23 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "asyncio: mark test as async (deselect with '-m \"not asyncio\"')"
     )
+
+
+@pytest.fixture(autouse=True)
+def mock_timetagger_classes():
+    """Globally mock TimeTagger Counter and Correlation classes for unit tests."""
+    from unittest.mock import MagicMock, patch
+
+    mock_counter = MagicMock()
+    mock_counter.getData.return_value = [[100, 200]]
+    mock_counter.isFinished.return_value = False
+    mock_counter.isRunning.return_value = True
+
+    mock_correlation = MagicMock()
+    mock_correlation.getData.return_value = [[0.1, 0.2]]
+    mock_correlation.isFinished.return_value = False
+    mock_correlation.isRunning.return_value = True
+
+    with patch("Swabian.TimeTagger.Counter", return_value=mock_counter), \
+         patch("TimeTagger.Correlation", return_value=mock_correlation):
+        yield

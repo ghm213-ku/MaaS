@@ -1,6 +1,7 @@
 """Job processor for backend worker service."""
 
 import asyncio
+import os
 import threading
 import json
 from typing import Optional, Dict, Any, Callable
@@ -42,9 +43,54 @@ class JobProcessor:
         self.redis_client = redis_client or status_manager.redis_client
         self.job_queue_key = "measurement:job_queue"
         self.tagger = tagger  # Store tagger for creating handler instances
+        self.stop_channel_key = "measurement:stop_channel"
+
+        if self.tagger is not None:
+            self._start_stop_listener()
 
         # Expose handlers for backward compatibility
         self.handlers = self.job_handlers
+
+    def _start_stop_listener(self):
+        """Start a background thread to listen for stop events via Redis Pub/Sub."""
+        self._pubsub = self.redis_client.pubsub()
+        self._pubsub.subscribe(self.stop_channel_key)
+        self._pubsub_thread = threading.Thread(
+            target=self._listen_for_stops, daemon=True, name="pubsub_listener"
+        )
+        self._pubsub_thread.start()
+        logger.info("Started Redis Pub/Sub listener for stop events")
+
+    def _listen_for_stops(self):
+        """Listen for stop events and halt the corresponding active handlers."""
+        for message in self._pubsub.listen():
+            if message["type"] == "message":
+                status_id = message["data"]
+                if isinstance(status_id, bytes):
+                    status_id = status_id.decode("utf-8")
+                handler_info = self.active_handlers.get(status_id)
+                if handler_info is not None:
+                    logger.info(f"[{status_id}] Stop event received via Pub/Sub, stopping handler")
+                    if isinstance(handler_info, tuple):
+                        handler, loop = handler_info
+                    else:
+                        handler, loop = handler_info, None
+                    
+                    try:
+                        if loop is not None and loop.is_running():
+                            future = asyncio.run_coroutine_threadsafe(handler.stop(), loop)
+                            def _log_exception(f):
+                                try:
+                                    f.result()
+                                except Exception as inner_e:
+                                    logger.error(f"[{status_id}] Exception inside handler.stop(): {inner_e}", exc_info=True)
+                            future.add_done_callback(_log_exception)
+                        else:
+                            new_loop = asyncio.new_event_loop()
+                            new_loop.run_until_complete(handler.stop())
+                            new_loop.close()
+                    except Exception as e:
+                        logger.error(f"[{status_id}] Error stopping handler from Pub/Sub listener: {e}", exc_info=True)
 
     def register_handler(self, measurement_type: str, handler_class: type) -> None:
         """Register a handler class for a measurement type.
@@ -186,13 +232,13 @@ class JobProcessor:
 
             # Run the handler based on measurement type
             if measurement_type == "count_rate":
-                self._handle_count_rate(handler, duration_seconds, metadata)
+                self._handle_count_rate(handler, duration_seconds, metadata, status_id)
             elif measurement_type == "correlation":
-                self._handle_correlation(handler, duration_seconds, metadata)
+                self._handle_correlation(handler, duration_seconds, metadata, status_id)
             elif measurement_type == "coincidences":
-                self._handle_coincidences(handler, duration_seconds, metadata)
+                self._handle_coincidences(handler, duration_seconds, metadata, status_id)
             elif measurement_type == "save_raw_tags":
-                self._handle_save_raw_tags(handler, duration_seconds, metadata)
+                self._handle_save_raw_tags(handler, duration_seconds, metadata, status_id)
             else:
                 raise ValueError(f"Unknown measurement type: {measurement_type}")
 
@@ -211,6 +257,9 @@ class JobProcessor:
 
                 logger.info(f"[{status_id}] Job completed successfully")
 
+        except asyncio.CancelledError:
+            # Task was cancelled due to a stop request, no error logging needed
+            pass
         except Exception as e:
             logger.error(f"[{status_id}] Job failed: {e}", exc_info=True)
             self.status_manager.update_status(
@@ -233,11 +282,28 @@ class JobProcessor:
             if status_id in self.active_handlers:
                 del self.active_handlers[status_id]
 
+    def _format_target_location(self, target_location: str, measurement_type: str) -> str:
+        """Format the target location, replacing placeholders and ensuring it's a file path."""
+        if not target_location:
+            return target_location
+            
+        dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        formatted = target_location.replace("{datetime}", dt_str)
+        formatted = formatted.replace("{measurement-type}", measurement_type)
+        
+        # If the path represents an existing directory or ends with a slash, append a default filename
+        if os.path.isdir(formatted) or formatted.endswith(('/', '\\')):
+            ext = ".tags" if measurement_type == "save_raw_tags" else ".csv"
+            formatted = os.path.join(formatted, f"{measurement_type}_{dt_str}{ext}")
+            
+        return formatted
+
     def _handle_count_rate(
         self,
         handler: Any,
         duration_seconds: Optional[int],
         metadata: Dict[str, Any],
+        status_id: Optional[str] = None,
     ) -> None:
         """Handle count-rate measurement."""
         if not duration_seconds:
@@ -251,8 +317,9 @@ class JobProcessor:
         binwidth = metadata.get("binwidth", int(1e9))
         n_values = metadata.get("n_values", 1)
         target_location = metadata.get(
-            "target_location", "desktop/MaasData/{datetime}/{measurement-type}"
+            "target_location", os.path.expanduser("~/Desktop/MaasData/{datetime}/{measurement-type}")
         )
+        target_location = self._format_target_location(target_location, "count_rate")
 
         count_rate_metadata = CountRateMetadata(
             channels=channels,
@@ -261,10 +328,13 @@ class JobProcessor:
             target_location=target_location,
         )
 
+
         # Run the async handler
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            if status_id:
+                self.active_handlers[status_id] = (handler, loop)
             loop.run_until_complete(
                 handler.start(duration_seconds, count_rate_metadata)
             )
@@ -276,6 +346,7 @@ class JobProcessor:
         handler: Any,
         duration_seconds: Optional[int],
         metadata: Dict[str, Any],
+        status_id: Optional[str] = None,
     ) -> None:
         """Handle save-raw-tags measurement."""
         if not duration_seconds:
@@ -283,20 +354,26 @@ class JobProcessor:
 
         channel_list = metadata.get("channel_list")
         target_file_path = metadata.get("target_file_path")
-
+        
         if not channel_list or not target_file_path:
             raise ValueError(
                 "channel_list and target_file_path are required in metadata"
             )
+            
+        target_file_path = self._format_target_location(target_file_path, "save_raw_tags")
 
         # Run the async handler
         saveRawTagMetadata = SaveRawTagsMetadata(
             channel_list=channel_list, target_file_path=target_file_path
         )
+
+
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(handler.start(duration_seconds, saveRawTagMetadata))
+            loop.run_until_complete(
+                handler.start(duration_seconds, saveRawTagMetadata)
+            )
         finally:
             loop.close()
 
@@ -305,6 +382,7 @@ class JobProcessor:
         handler: Any,
         duration_seconds: Optional[int],
         metadata: Dict[str, Any],
+        status_id: Optional[str] = None,
     ) -> None:
         """Handle correlation measurement."""
         if not duration_seconds:
@@ -320,8 +398,9 @@ class JobProcessor:
         binwidth = metadata.get("binwidth", int(1e9))
         n_values = metadata.get("n_values", 100)
         target_location = metadata.get(
-            "target_location", "desktop/MaasData/{datetime}/{measurement-type}"
+            "target_location", os.path.expanduser("~/Desktop/MaasData/{datetime}/{measurement-type}")
         )
+        target_location = self._format_target_location(target_location, "correlation")
 
         correlation_metadata = CorrelationMetadata(
             channel1=channel1,
@@ -331,10 +410,13 @@ class JobProcessor:
             target_location=target_location,
         )
 
+
         # Run the async handler
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            if status_id:
+                self.active_handlers[status_id] = (handler, loop)
             loop.run_until_complete(
                 handler.start(duration_seconds, correlation_metadata)
             )
@@ -346,6 +428,7 @@ class JobProcessor:
         handler: Any,
         duration_seconds: Optional[int],
         metadata: Dict[str, Any],
+        status_id: Optional[str] = None,
     ) -> None:
         """Handle coincidences measurement."""
         if not duration_seconds:
@@ -359,8 +442,9 @@ class JobProcessor:
         binwidth = metadata.get("binwidth", int(1e9))
         n_values = metadata.get("n_values", 1)
         target_location = metadata.get(
-            "target_location", "desktop/MaasData/{datetime}/{measurement-type}"
+            "target_location", os.path.expanduser("~/Desktop/MaasData/{datetime}/{measurement-type}")
         )
+        target_location = self._format_target_location(target_location, "coincidences")
 
         coincidences_metadata = CoincidencesMetadata(
             channels=channels,
@@ -369,10 +453,13 @@ class JobProcessor:
             target_location=target_location,
         )
 
+
         # Run the async handler
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            if status_id:
+                self.active_handlers[status_id] = (handler, loop)
             loop.run_until_complete(
                 handler.start(duration_seconds, coincidences_metadata)
             )
@@ -382,9 +469,8 @@ class JobProcessor:
     def stop_job(self, status_id: str) -> bool:
         """Stop a running job, stopping the measurement and deleting its data file.
 
-        Signals the live handler to stop the underlying hardware measurement and
-        delete any data file it has already written, then marks the measurement
-        as stopped.
+        Publishes a stop event via Redis Pub/Sub, which is intercepted by the worker
+        to gracefully halt the active measurement.
         """
         # Update status to stopped first so the running job thread does not
         # overwrite it with COMPLETED once the measurement is interrupted.
@@ -392,24 +478,9 @@ class JobProcessor:
             status_id, MeasurementStatus.STOPPED.value, "Measurement stopped by user"
         )
 
-        # Stop the live handler if one is running for this measurement
-        handler = self.active_handlers.get(status_id)
-        if handler is not None:
-            logger.info(f"[{status_id}] Stopping handler and deleting data file")
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(handler.stop())
-                finally:
-                    loop.close()
-            except Exception as e:
-                logger.error(
-                    f"[{status_id}] Error while stopping handler: {e}", exc_info=True
-                )
-        else:
-            logger.info(f"[{status_id}] No active handler; marked as stopped")
-
+        logger.info(f"[{status_id}] Publishing stop event via Redis Pub/Sub")
+        self.redis_client.publish(self.stop_channel_key, status_id)
+        
         return True
 
     def get_job_status(self, status_id: str) -> Optional[Dict[str, Any]]:
