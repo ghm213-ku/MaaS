@@ -88,12 +88,15 @@ MaaS/
 │   │   ├── job_processor.py      ← Thread-based job execution
 │   │   ├── count_rate.py         ← Count-rate handler
 │   │   ├── save_raw_tags.py      ← Save-raw-tags handler
+│   │   ├── coincidences.py       ← Coincidences handler
+│   │   ├── correlation.py        ← Correlation handler
 │   │   ├── file_logger.py        ← File logging service
-│   │   └── measurement.py        ← Legacy monolithic service
+│   │   └── measurement.py        ← Original monolithic service (legacy)
 │   ├── models.py                 ← Pydantic request/response models
-│   ├── payloads.py               ← Legacy payload definitions
+│   ├── payloads.py               ← Measurement payload mapping and schemas
 │   └── utils/
 │       ├── logger.py             ← Logging configuration
+│       ├── path_utils.py         ← Path formatting utilities
 │       └── ssl_utils.py          ← SSL/TLS utilities
 │
 ├── tests/

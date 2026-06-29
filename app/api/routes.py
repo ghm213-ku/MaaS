@@ -76,6 +76,105 @@ def get_file_logger() -> Optional[FileLogger]:
 
 # ========== MEASUREMENT ENDPOINTS ==========
 
+def _handle_measurement_request(
+    request_name: str,
+    measurement_type: MeasurementType,
+    duration_seconds: Optional[int],
+    metadata_dump: dict,
+    channels: list[int],
+    processor: JobProcessor,
+    status_manager: StatusManager,
+    file_logger: Optional[FileLogger],
+) -> MeasurementResponse:
+    try:
+        # Generate unique status ID
+        status_id = str(uuid.uuid4())
+
+        logger.info(f"[{status_id}] Received {request_name} measurement request: {metadata_dump}")
+
+        # Validate and book channels
+        try:
+            status_manager.validate_channels(channels)
+            booking_result = status_manager.book_channels(channels, status_id)
+            logger.info(
+                f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
+            )
+
+            # Log channel booking with measurement info
+            if file_logger:
+                file_logger.log_channel_booking_for_measurement(
+                    measurement_type=measurement_type.value,
+                    measurement_id=status_id,
+                    channel_numbers=booking_result["booked_channels"],
+                    timestamp=datetime.utcnow(),
+                )
+        except ValueError as e:
+            logger.error(f"[{status_id}] Channel booking failed: {e}")
+            raise HTTPException(
+                status_code=409, detail=f"Channel booking failed: {str(e)}"
+            )
+
+        # Prepare metadata with booking info
+        metadata_dict = metadata_dump.copy()
+        metadata_dict["booked_channels"] = booking_result["booked_channels"]
+        metadata_dict["booking_time"] = booking_result["booking_time"]
+
+        # Create status in Redis
+        status_manager.create_status(
+            status_id=status_id,
+            measurement_type=measurement_type.value,
+            duration_seconds=duration_seconds,
+            metadata=metadata_dict,
+        )
+
+        # Enqueue job for backend worker (don't process immediately)
+        processor.enqueue_job(
+            status_id=status_id,
+            measurement_type=measurement_type.value,
+            duration_seconds=duration_seconds,
+            metadata=metadata_dict,
+        )
+
+        logger.info(f"[{status_id}] {request_name.capitalize()} measurement enqueued successfully")
+
+        # Log measurement request to file
+        if file_logger:
+            logger.info(
+                f"[{status_id}] File logger available, writing to measurement log"
+            )
+            try:
+                file_logger.log_measurement_request(
+                    measurement_id=status_id,
+                    measurement_type=measurement_type.value,
+                    duration_seconds=duration_seconds,
+                    metadata=metadata_dump,
+                    timestamp=datetime.utcnow(),
+                )
+                logger.info(f"[{status_id}] Measurement logged to file successfully")
+            except Exception as e:
+                logger.error(
+                    f"[{status_id}] Failed to log measurement: {e}", exc_info=True
+                )
+        else:
+            logger.warning(f"[{status_id}] File logger is None - skipping file logging")
+
+        return MeasurementResponse(
+            measurement_id=status_id,
+            measurement_type=measurement_type,
+            status=MeasurementStatus.QUEUED.value,
+            started_at=datetime.utcnow(),
+            message=f"{request_name.capitalize()} measurement queued with channels {channels}. Use ID '{status_id}' to query status or stop.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to enqueue {request_name} measurement: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
 
 @measurement_router.post(
     "/count-rate", response_model=MeasurementResponse, status_code=201
@@ -93,113 +192,17 @@ async def start_count_rate_measurement(
     The job is enqueued for processing by the backend worker.
 
     Automatically books the specified channels.
-
-    Example:
-        POST /api/v1/measurements/count-rate
-        {
-            "measurement_type": "count_rate",
-            "duration_seconds": 60,
-            "metadata": {
-                "channels": [1, 2, 3],
-                "binwidth": 1000000000,
-                "n_values": 1,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
-            }
-        }
     """
-    try:
-        # Generate unique status ID
-        status_id = str(uuid.uuid4())
-
-        logger.info(
-            f"[{status_id}] Received count-rate measurement request: {request.dict()}"
-        )
-
-        # Extract channel list from metadata
-        channels = request.metadata.channels
-
-        # Validate and book channels
-        try:
-            status_manager.validate_channels(channels)
-            booking_result = status_manager.book_channels(channels, status_id)
-            logger.info(
-                f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
-            )
-
-            # Log channel booking with measurement info
-            if file_logger:
-                file_logger.log_channel_booking_for_measurement(
-                    measurement_type=request.measurement_type.value,
-                    measurement_id=status_id,
-                    channel_numbers=booking_result["booked_channels"],
-                    timestamp=datetime.utcnow(),
-                )
-        except ValueError as e:
-            logger.error(f"[{status_id}] Channel booking failed: {e}")
-            raise HTTPException(
-                status_code=409, detail=f"Channel booking failed: {str(e)}"
-            )
-
-        # Prepare metadata with booking info
-        metadata_dict = request.metadata.model_dump()
-        metadata_dict["booked_channels"] = booking_result["booked_channels"]
-        metadata_dict["booking_time"] = booking_result["booking_time"]
-
-        # Create status in Redis
-        status_manager.create_status(
-            status_id=status_id,
-            measurement_type=request.measurement_type.value,
-            duration_seconds=request.duration_seconds,
-            metadata=metadata_dict,
-        )
-
-        # Enqueue job for backend worker (don't process immediately)
-        processor.enqueue_job(
-            status_id=status_id,
-            measurement_type=request.measurement_type.value,
-            duration_seconds=request.duration_seconds,
-            metadata=metadata_dict,
-        )
-
-        logger.info(f"[{status_id}] Count-rate measurement enqueued successfully")
-
-        # Log measurement request to file
-        if file_logger:
-            logger.info(
-                f"[{status_id}] File logger available, writing to measurement log"
-            )
-            try:
-                file_logger.log_measurement_request(
-                    measurement_id=status_id,
-                    measurement_type=request.measurement_type.value,
-                    duration_seconds=request.duration_seconds,
-                    metadata=request.metadata.model_dump(),
-                    timestamp=datetime.utcnow(),
-                )
-                logger.info(f"[{status_id}] Measurement logged to file successfully")
-            except Exception as e:
-                logger.error(
-                    f"[{status_id}] Failed to log measurement: {e}", exc_info=True
-                )
-        else:
-            logger.warning(f"[{status_id}] File logger is None - skipping file logging")
-
-        return MeasurementResponse(
-            measurement_id=status_id,
-            measurement_type=request.measurement_type,
-            status=MeasurementStatus.QUEUED.value,
-            started_at=datetime.utcnow(),
-            message=f"Count-rate measurement queued with channels {channels}. Use ID '{status_id}' to query status or stop.",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to enqueue count-rate measurement: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
+    return _handle_measurement_request(
+        request_name="count-rate",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.metadata.channels,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+    )
 
 
 @measurement_router.post(
@@ -218,111 +221,17 @@ async def start_save_raw_tags_measurement(
     The job is enqueued for processing by the backend worker.
 
     Automatically books the channels specified in the channel_list.
-
-    Example:
-        POST /api/v1/measurements/save-raw-tags
-        {
-            "measurement_type": "save_raw_tags",
-            "duration_seconds": 60,
-            "metadata": {
-                "channel_list": [1, 2, 3],
-                "target_file_path": "C:\\Users\\s257050\\Desktop\\"
-            }
-        }
     """
-    try:
-        # Generate unique status ID
-        status_id = str(uuid.uuid4())
-
-        logger.info(
-            f"[{status_id}] Received save-raw-tags measurement request: {request.dict()}"
-        )
-
-        # Extract channel list from metadata
-        channels = request.metadata.channel_list
-
-        # Validate and book channels
-        try:
-            status_manager.validate_channels(channels)
-            booking_result = status_manager.book_channels(channels, status_id)
-            logger.info(
-                f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
-            )
-
-            # Log channel booking with measurement info
-            if file_logger:
-                file_logger.log_channel_booking_for_measurement(
-                    measurement_type=request.measurement_type.value,
-                    measurement_id=status_id,
-                    channel_numbers=booking_result["booked_channels"],
-                    timestamp=datetime.utcnow(),
-                )
-        except ValueError as e:
-            logger.error(f"[{status_id}] Channel booking failed: {e}")
-            raise HTTPException(
-                status_code=409, detail=f"Channel booking failed: {str(e)}"
-            )
-
-        # Prepare metadata with booking info
-        metadata_dict = request.metadata.model_dump()
-        metadata_dict["booked_channels"] = booking_result["booked_channels"]
-        metadata_dict["booking_time"] = booking_result["booking_time"]
-
-        # Create status in Redis
-        status_manager.create_status(
-            status_id=status_id,
-            measurement_type=request.measurement_type.value,
-            duration_seconds=request.duration_seconds,
-            metadata=metadata_dict,
-        )
-
-        # Enqueue job for backend worker (don't process immediately)
-        processor.enqueue_job(
-            status_id=status_id,
-            measurement_type=request.measurement_type.value,
-            duration_seconds=request.duration_seconds,
-            metadata=metadata_dict,
-        )
-
-        logger.info(f"[{status_id}] Save-raw-tags measurement enqueued successfully")
-
-        # Log measurement request to file
-        if file_logger:
-            logger.info(
-                f"[{status_id}] File logger available, writing to measurement log"
-            )
-            try:
-                file_logger.log_measurement_request(
-                    measurement_id=status_id,
-                    measurement_type=request.measurement_type.value,
-                    duration_seconds=request.duration_seconds,
-                    metadata=request.metadata.model_dump(),
-                    timestamp=datetime.utcnow(),
-                )
-                logger.info(f"[{status_id}] Measurement logged to file successfully")
-            except Exception as e:
-                logger.error(
-                    f"[{status_id}] Failed to log measurement: {e}", exc_info=True
-                )
-        else:
-            logger.warning(f"[{status_id}] File logger is None - skipping file logging")
-
-        return MeasurementResponse(
-            measurement_id=status_id,
-            measurement_type=request.measurement_type,
-            status=MeasurementStatus.QUEUED.value,
-            started_at=datetime.utcnow(),
-            message=f"Save-raw-tags measurement queued with channels {channels}. Use ID '{status_id}' to query status or stop.",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to enqueue save-raw-tags measurement: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
+    return _handle_measurement_request(
+        request_name="save-raw-tags",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.metadata.channel_list,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+    )
 
 
 @measurement_router.post(
@@ -341,114 +250,17 @@ async def start_correlation_measurement(
     The job is enqueued for processing by the backend worker.
 
     Automatically books the specified channels (channel1 and channel2).
-
-    Example:
-        POST /api/v1/measurements/correlation
-        {
-            "measurement_type": "correlation",
-            "duration_seconds": 60,
-            "metadata": {
-                "channel1": 1,
-                "channel2": 2,
-                "binwidth": 1000000000,
-                "n_values": 100,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
-            }
-        }
     """
-    try:
-        # Generate unique status ID
-        status_id = str(uuid.uuid4())
-
-        logger.info(
-            f"[{status_id}] Received correlation measurement request: {request.dict()}"
-        )
-
-        # Extract channels from metadata
-        channels = [request.metadata.channel1, request.metadata.channel2]
-
-        # Validate and book channels
-        try:
-            status_manager.validate_channels(channels)
-            booking_result = status_manager.book_channels(channels, status_id)
-            logger.info(
-                f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
-            )
-
-            # Log channel booking with measurement info
-            if file_logger:
-                file_logger.log_channel_booking_for_measurement(
-                    measurement_type=request.measurement_type.value,
-                    measurement_id=status_id,
-                    channel_numbers=booking_result["booked_channels"],
-                    timestamp=datetime.utcnow(),
-                )
-        except ValueError as e:
-            logger.error(f"[{status_id}] Channel booking failed: {e}")
-            raise HTTPException(
-                status_code=409, detail=f"Channel booking failed: {str(e)}"
-            )
-
-        # Prepare metadata with booking info
-        metadata_dict = request.metadata.model_dump()
-        metadata_dict["booked_channels"] = booking_result["booked_channels"]
-        metadata_dict["booking_time"] = booking_result["booking_time"]
-
-        # Create status in Redis
-        status_manager.create_status(
-            status_id=status_id,
-            measurement_type=request.measurement_type.value,
-            duration_seconds=request.duration_seconds,
-            metadata=metadata_dict,
-        )
-
-        # Enqueue job for backend worker (don't process immediately)
-        processor.enqueue_job(
-            status_id=status_id,
-            measurement_type=request.measurement_type.value,
-            duration_seconds=request.duration_seconds,
-            metadata=metadata_dict,
-        )
-
-        logger.info(f"[{status_id}] Correlation measurement enqueued successfully")
-
-        # Log measurement request to file
-        if file_logger:
-            logger.info(
-                f"[{status_id}] File logger available, writing to measurement log"
-            )
-            try:
-                file_logger.log_measurement_request(
-                    measurement_id=status_id,
-                    measurement_type=request.measurement_type.value,
-                    duration_seconds=request.duration_seconds,
-                    metadata=request.metadata.model_dump(),
-                    timestamp=datetime.utcnow(),
-                )
-                logger.info(f"[{status_id}] Measurement logged to file successfully")
-            except Exception as e:
-                logger.error(
-                    f"[{status_id}] Failed to log measurement: {e}", exc_info=True
-                )
-        else:
-            logger.warning(f"[{status_id}] File logger is None - skipping file logging")
-
-        return MeasurementResponse(
-            measurement_id=status_id,
-            measurement_type=request.measurement_type,
-            status=MeasurementStatus.QUEUED.value,
-            started_at=datetime.utcnow(),
-            message=f"Correlation measurement queued for channels {channels}. Use ID '{status_id}' to query status or stop.",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to enqueue correlation measurement: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
+    return _handle_measurement_request(
+        request_name="correlation",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=[request.metadata.channel1, request.metadata.channel2],
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+    )
 
 
 @measurement_router.post(
@@ -467,114 +279,17 @@ async def start_coincidences_measurement(
     The job is enqueued for processing by the backend worker.
 
     Automatically books the specified channels.
-
-    Example:
-        POST /api/v1/measurements/coincidences
-        {
-            "measurement_type": "coincidences",
-            "duration_seconds": 60,
-            "metadata": {
-                "channels": [1, 2, 3],
-                "binwidth": 1000000000,
-                "n_values": 1,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
-            }
-        }
     """
-    try:
-        # Generate unique status ID
-        status_id = str(uuid.uuid4())
-
-        logger.info(
-            f"[{status_id}] Received coincidences measurement request: {request.dict()}"
-        )
-
-        # Extract channel list from metadata
-        channels = request.metadata.channels
-
-        # Validate and book channels
-        try:
-            status_manager.validate_channels(channels)
-            booking_result = status_manager.book_channels(channels, status_id)
-            logger.info(
-                f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
-            )
-
-            # Log channel booking with measurement info
-            if file_logger:
-                file_logger.log_channel_booking_for_measurement(
-                    measurement_type=request.measurement_type.value,
-                    measurement_id=status_id,
-                    channel_numbers=booking_result["booked_channels"],
-                    timestamp=datetime.utcnow(),
-                )
-        except ValueError as e:
-            logger.error(f"[{status_id}] Channel booking failed: {e}")
-            raise HTTPException(
-                status_code=409, detail=f"Channel booking failed: {str(e)}"
-            )
-
-        # Prepare metadata with booking info
-        metadata_dict = request.metadata.model_dump()
-        metadata_dict["booked_channels"] = booking_result["booked_channels"]
-        metadata_dict["booking_time"] = booking_result["booking_time"]
-
-        # Create status in Redis
-        status_manager.create_status(
-            status_id=status_id,
-            measurement_type=request.measurement_type.value,
-            duration_seconds=request.duration_seconds,
-            metadata=metadata_dict,
-        )
-
-        # Enqueue job for backend worker (don't process immediately)
-        processor.enqueue_job(
-            status_id=status_id,
-            measurement_type=request.measurement_type.value,
-            duration_seconds=request.duration_seconds,
-            metadata=metadata_dict,
-        )
-
-        logger.info(f"[{status_id}] Coincidences measurement enqueued successfully")
-
-        # Log measurement request to file
-        if file_logger:
-            logger.info(
-                f"[{status_id}] File logger available, writing to measurement log"
-            )
-            try:
-                file_logger.log_measurement_request(
-                    measurement_id=status_id,
-                    measurement_type=request.measurement_type.value,
-                    duration_seconds=request.duration_seconds,
-                    metadata=request.metadata.model_dump(),
-                    timestamp=datetime.utcnow(),
-                )
-                logger.info(f"[{status_id}] Measurement logged to file successfully")
-            except Exception as e:
-                logger.error(
-                    f"[{status_id}] Failed to log measurement: {e}", exc_info=True
-                )
-        else:
-            logger.warning(f"[{status_id}] File logger is None - skipping file logging")
-
-        return MeasurementResponse(
-            measurement_id=status_id,
-            measurement_type=request.measurement_type,
-            status=MeasurementStatus.QUEUED.value,
-            started_at=datetime.utcnow(),
-            message=f"Coincidences measurement queued with channels {channels}. Use ID '{status_id}' to query status or stop.",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to enqueue coincidences measurement: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
+    return _handle_measurement_request(
+        request_name="coincidences",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.metadata.channels,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+    )
 
 # ========== CHANNEL MANAGEMENT ENDPOINTS ==========
 

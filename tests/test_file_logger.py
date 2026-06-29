@@ -684,3 +684,64 @@ class TestLogFormatting:
                 # All data lines should have pipe separators
                 for line in data_lines:
                     assert line.count("|") >= 4  # At least 4 pipe separators
+
+class TestFileLoggerCoverage:
+    def test_format_timestamp_fallback(self):
+        logger = FileLogger("dummy", "dummy")
+        assert logger._format_timestamp(123456.789) == "123456.789"
+        
+    def test_format_timestamp_other_type(self):
+        logger = FileLogger("dummy", "dummy")
+        assert logger._format_timestamp({"a": 1}) == "{'a': 1}"
+
+    def test_log_channel_booking_for_measurement(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logger = FileLogger(temp_dir)
+            logger.log_channel_booking_for_measurement("test_type", "test_id", [1, 2], timestamp=datetime(2026, 5, 22, 10, 0, 0))
+            channel_file = os.path.join(temp_dir, "channel_requests.txt")
+            with open(channel_file, "r") as f:
+                content = f.read()
+                assert "measurement-test_type" in content
+                assert "test_id" in content
+                assert "1, 2" in content
+
+    def test_log_channel_release_request_ioerror(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logger = FileLogger(temp_dir)
+            channel_file = os.path.join(temp_dir, "channel_requests.txt")
+            os.chmod(channel_file, 0o444)
+            try:
+                logger.log_channel_release_request("test", [1])
+            finally:
+                os.chmod(channel_file, 0o644)
+
+    def test_log_measurement_status_update_ioerror(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logger = FileLogger(temp_dir, temp_dir)
+            status_file = os.path.join(temp_dir, "measurement_status_log.jsonl")
+            os.chmod(status_file, 0o444)
+            try:
+                logger.log_measurement_status_update("test", {"status": "ok"})
+            finally:
+                os.chmod(status_file, 0o644)
+
+    def test_log_measurement_status_removal(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logger = FileLogger(temp_dir, temp_dir)
+            logger.log_measurement_status_removal("test_id", {"status": "removed"}, timestamp=datetime(2026, 5, 22, 10, 0, 0))
+            status_file = os.path.join(temp_dir, "measurement_status_log.jsonl")
+            with open(status_file, "r") as f:
+                content = f.read()
+                assert "test_id" in content
+                assert "removed" in content
+                assert "measurement_status_update" in content
+
+    def test_get_file_logger_uninitialized(self):
+        import app.services.file_logger
+        orig = app.services.file_logger._file_logger
+        try:
+            app.services.file_logger._file_logger = None
+            with pytest.raises(RuntimeError):
+                app.services.file_logger.get_file_logger()
+        finally:
+            app.services.file_logger._file_logger = orig

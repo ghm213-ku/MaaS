@@ -8,12 +8,8 @@ from typing import Optional, Dict, Any, Callable
 from datetime import datetime
 import redis
 from app.services.status_manager import StatusManager, MeasurementStatus
-from app.models import (
-    SaveRawTagsMetadata,
-    CountRateMetadata,
-    CorrelationMetadata,
-    CoincidencesMetadata,
-)
+from app.payloads import MeasurementPayloadMapper
+from app.utils.path_utils import format_target_location
 from app.utils.logger import configure_logging
 
 logger = configure_logging(__name__)
@@ -230,17 +226,39 @@ class JobProcessor:
             if metadata is None:
                 metadata = self.status_manager.get_metadata(status_id) or {}
 
-            # Run the handler based on measurement type
-            if measurement_type == "count_rate":
-                self._handle_count_rate(handler, duration_seconds, metadata, status_id)
-            elif measurement_type == "correlation":
-                self._handle_correlation(handler, duration_seconds, metadata, status_id)
-            elif measurement_type == "coincidences":
-                self._handle_coincidences(handler, duration_seconds, metadata, status_id)
-            elif measurement_type == "save_raw_tags":
-                self._handle_save_raw_tags(handler, duration_seconds, metadata, status_id)
-            else:
+            # Generic execution pipeline replacing redundant _handle_* methods
+            if not duration_seconds:
+                raise ValueError(f"duration_seconds is required for {measurement_type}")
+
+            try:
+                metadata_model_class = MeasurementPayloadMapper.get_metadata_model_for_type(measurement_type)
+            except ValueError:
                 raise ValueError(f"Unknown measurement type: {measurement_type}")
+
+            # Apply format to target_location/target_file_path
+            path_key = "target_file_path" if measurement_type == "save_raw_tags" else "target_location"
+            
+            # For types other than save_raw_tags, provide a default if missing
+            if path_key == "target_location" and path_key not in metadata:
+                metadata[path_key] = os.path.expanduser("~/Desktop/MaasData/{datetime}/{measurement-type}")
+                
+            if path_key in metadata:
+                metadata[path_key] = format_target_location(metadata[path_key], measurement_type)
+
+            # Instantiate the proper Pydantic model. Validation happens automatically here.
+            parsed_metadata = metadata_model_class(**metadata)
+
+            # Run the async handler
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                if status_id:
+                    self.active_handlers[status_id] = (handler, loop)
+                loop.run_until_complete(
+                    handler.start(duration_seconds, parsed_metadata)
+                )
+            finally:
+                loop.close()
 
             # If the job was stopped by the user, don't overwrite the STOPPED
             # status with COMPLETED.
@@ -282,189 +300,9 @@ class JobProcessor:
             if status_id in self.active_handlers:
                 del self.active_handlers[status_id]
 
-    def _format_target_location(self, target_location: str, measurement_type: str) -> str:
-        """Format the target location, replacing placeholders and ensuring it's a file path."""
-        if not target_location:
-            return target_location
-            
-        dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        formatted = target_location.replace("{datetime}", dt_str)
-        formatted = formatted.replace("{measurement-type}", measurement_type)
-        
-        # If the path represents an existing directory or ends with a slash, append a default filename
-        if os.path.isdir(formatted) or formatted.endswith(('/', '\\')):
-            ext = ".tags" if measurement_type == "save_raw_tags" else ".csv"
-            formatted = os.path.join(formatted, f"{measurement_type}_{dt_str}{ext}")
-            
-        return formatted
-
-    def _handle_count_rate(
-        self,
-        handler: Any,
-        duration_seconds: Optional[int],
-        metadata: Dict[str, Any],
-        status_id: Optional[str] = None,
-    ) -> None:
-        """Handle count-rate measurement."""
-        if not duration_seconds:
-            raise ValueError("duration_seconds is required for count_rate")
-
-        channels = metadata.get("channels")
-        if not channels:
-            raise ValueError("channels are required in metadata")
-
-        # Create CountRateMetadata from dict
-        binwidth = metadata.get("binwidth", int(1e9))
-        n_values = metadata.get("n_values", 1)
-        target_location = metadata.get(
-            "target_location", os.path.expanduser("~/Desktop/MaasData/{datetime}/{measurement-type}")
-        )
-        target_location = self._format_target_location(target_location, "count_rate")
-
-        count_rate_metadata = CountRateMetadata(
-            channels=channels,
-            binwidth=binwidth,
-            n_values=n_values,
-            target_location=target_location,
-        )
 
 
-        # Run the async handler
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            if status_id:
-                self.active_handlers[status_id] = (handler, loop)
-            loop.run_until_complete(
-                handler.start(duration_seconds, count_rate_metadata)
-            )
-        finally:
-            loop.close()
 
-    def _handle_save_raw_tags(
-        self,
-        handler: Any,
-        duration_seconds: Optional[int],
-        metadata: Dict[str, Any],
-        status_id: Optional[str] = None,
-    ) -> None:
-        """Handle save-raw-tags measurement."""
-        if not duration_seconds:
-            raise ValueError("duration_seconds is required for save_raw_tags")
-
-        channel_list = metadata.get("channel_list")
-        target_file_path = metadata.get("target_file_path")
-        
-        if not channel_list or not target_file_path:
-            raise ValueError(
-                "channel_list and target_file_path are required in metadata"
-            )
-            
-        target_file_path = self._format_target_location(target_file_path, "save_raw_tags")
-
-        # Run the async handler
-        saveRawTagMetadata = SaveRawTagsMetadata(
-            channel_list=channel_list, target_file_path=target_file_path
-        )
-
-
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(
-                handler.start(duration_seconds, saveRawTagMetadata)
-            )
-        finally:
-            loop.close()
-
-    def _handle_correlation(
-        self,
-        handler: Any,
-        duration_seconds: Optional[int],
-        metadata: Dict[str, Any],
-        status_id: Optional[str] = None,
-    ) -> None:
-        """Handle correlation measurement."""
-        if not duration_seconds:
-            raise ValueError("duration_seconds is required for correlation")
-
-        channel1 = metadata.get("channel1")
-        channel2 = metadata.get("channel2")
-
-        if channel1 is None or channel2 is None:
-            raise ValueError("channel1 and channel2 are required in metadata")
-
-        # Create CorrelationMetadata from dict
-        binwidth = metadata.get("binwidth", int(1e9))
-        n_values = metadata.get("n_values", 100)
-        target_location = metadata.get(
-            "target_location", os.path.expanduser("~/Desktop/MaasData/{datetime}/{measurement-type}")
-        )
-        target_location = self._format_target_location(target_location, "correlation")
-
-        correlation_metadata = CorrelationMetadata(
-            channel1=channel1,
-            channel2=channel2,
-            binwidth=binwidth,
-            n_values=n_values,
-            target_location=target_location,
-        )
-
-
-        # Run the async handler
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            if status_id:
-                self.active_handlers[status_id] = (handler, loop)
-            loop.run_until_complete(
-                handler.start(duration_seconds, correlation_metadata)
-            )
-        finally:
-            loop.close()
-
-    def _handle_coincidences(
-        self,
-        handler: Any,
-        duration_seconds: Optional[int],
-        metadata: Dict[str, Any],
-        status_id: Optional[str] = None,
-    ) -> None:
-        """Handle coincidences measurement."""
-        if not duration_seconds:
-            raise ValueError("duration_seconds is required for coincidences")
-
-        channels = metadata.get("channels")
-        if not channels:
-            raise ValueError("channels are required in metadata")
-
-        # Create CoincidencesMetadata from dict
-        binwidth = metadata.get("binwidth", int(1e9))
-        n_values = metadata.get("n_values", 1)
-        target_location = metadata.get(
-            "target_location", os.path.expanduser("~/Desktop/MaasData/{datetime}/{measurement-type}")
-        )
-        target_location = self._format_target_location(target_location, "coincidences")
-
-        coincidences_metadata = CoincidencesMetadata(
-            channels=channels,
-            binwidth=binwidth,
-            n_values=n_values,
-            target_location=target_location,
-        )
-
-
-        # Run the async handler
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            if status_id:
-                self.active_handlers[status_id] = (handler, loop)
-            loop.run_until_complete(
-                handler.start(duration_seconds, coincidences_metadata)
-            )
-        finally:
-            loop.close()
 
     def stop_job(self, status_id: str) -> bool:
         """Stop a running job, stopping the measurement and deleting its data file.

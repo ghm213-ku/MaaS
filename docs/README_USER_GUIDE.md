@@ -126,11 +126,13 @@ Counts detector events over a period of time using specified channels.
 curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
   -H "Content-Type: application/json" \
   -d '{
-    "channels": [1, 2, 3],
-    "binwidth": 1000000000,
-    "n_values": 1,
-    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
-    "duration_seconds": 60
+    "duration_seconds": 60,
+    "metadata": {
+      "channels": [1, 2, 3],
+      "binwidth": 1000000000,
+      "n_values": 1,
+      "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+    }
   }'
 ```
 
@@ -191,11 +193,13 @@ import time
 response = requests.post(
     "http://localhost:8000/api/v1/measurements/count-rate",
     json={
-        "channels": [1, 2, 3],
-        "binwidth": 1000000000,
-        "n_values": 1,
-        "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
-        "duration_seconds": 60
+        "duration_seconds": 60,
+        "metadata": {
+            "channels": [1, 2, 3],
+            "binwidth": 1000000000,
+            "n_values": 1,
+            "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+        }
     }
 )
 measurement_id = response.json()["measurement_id"]
@@ -251,11 +255,13 @@ async function startMultipleMeasurements() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        channels: [1 + i, 2 + i, 3 + i],
-        binwidth: 1000000000,
-        n_values: 1,
-        target_location: "desktop/MaasData/{datetime}/{measurement-type}",
-        duration_seconds: 30
+        duration_seconds: 30,
+        metadata: {
+          channels: [1 + i, 2 + i, 3 + i],
+          binwidth: 1000000000,
+          n_values: 1,
+          target_location: "desktop/MaasData/{datetime}/{measurement-type}"
+        }
       })
     });
     
@@ -541,11 +547,13 @@ For count-rate measurements, you can customize where results are saved:
 curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
   -H "Content-Type: application/json" \
   -d '{
-    "channels": [1, 2, 3],
-    "binwidth": 1000000000,
-    "n_values": 10,
-    "target_location": "C:\\custom\\path\\my_measurement_{datetime}.csv",
-    "duration_seconds": 60
+    "duration_seconds": 60,
+    "metadata": {
+      "channels": [1, 2, 3],
+      "binwidth": 1000000000,
+      "n_values": 10,
+      "target_location": "C:\\custom\\path\\my_measurement_{datetime}.csv"
+    }
   }'
 ```
 

@@ -51,42 +51,45 @@ python worker.py
 MaaS/
 ├── app/
 │   ├── __init__.py
-│   ├── models.py                 ← Pydantic request/response models
-│   ├── payloads.py              ← Legacy payload models
+│   ├── models.py                ← Pydantic request/response models
+│   ├── payloads.py              ← Measurement payload mapping and schemas
 │   │
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── routes.py            ← Original monolithic routes (legacy)
-│   │   └── routes.py ← NEW: Distributed API endpoints
+│   │   └── routes.py            ← Distributed API endpoints with unified handler
 │   │
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── count_rate.py        ← Count-rate measurement handler
 │   │   ├── save_raw_tags.py     ← Save-raw-tags measurement handler
+│   │   ├── coincidences.py      ← Coincidences measurement handler
+│   │   ├── correlation.py       ← Correlation measurement handler
 │   │   ├── measurement.py       ← Original monolithic service (legacy)
-│   │   ├── status_manager.py    ← NEW: Redis status management
-│   │   ├── job_processor.py     ← NEW: Thread-based job execution
-│   │   └── base_handler.py      ← (Optional) Base handler class
+│   │   ├── status_manager.py    ← Redis status management
+│   │   ├── job_processor.py     ← Thread-based job execution
+│   │   └── file_logger.py       ← Legacy logging functionality
 │   │
 │   └── utils/
 │       ├── __init__.py
 │       ├── logger.py            ← Logging configuration
+│       ├── path_utils.py        ← Path formatting utilities
 │       └── ssl_utils.py         ← SSL/TLS utilities
 │
 ├── tests/
 │   ├── conftest.py
 │   ├── test_*.py               ← Various unit tests
-│   └── test_distributed_integration.py ← NEW: Integration tests
+│   └── test_distributed_integration.py ← Integration tests
 │
-├── main_distributed.py          ← NEW: Web layer entry point
-├── main.py                      ← Original monolithic entry point
-├── backend_worker.py            ← NEW: Backend worker entry point
+├── main.py                      ← Web layer entry point
+├── worker.py                    ← Backend worker entry point
 ├── config.py
 ├── requirements.txt
 │
-├── README_*.md                 ← Specialized documentation
-├── QUICKSTART.md              ← Legacy quickstart
-└── certs/                      ← SSL certificates
+├── docs/
+│   ├── README_DEVELOPER_GUIDE.md
+│   ├── README_SYSTEM_FLOW.md
+│   └── README_USER_GUIDE.md
+└── worker.py                    ← Backend process for job execution
 ```
 
 ---
@@ -124,20 +127,22 @@ async def lifespan(app: FastAPI):
 ### API Routes: app/api/routes.py
 
 ```python
-# Each route follows this pattern:
+# Endpoints are simplified using a unified helper:
 
 @router.post("/count-rate", response_model=MeasurementResponse, status_code=201)
-async def start_count_rate_measurement(request):
-    # 1. Validate request (Pydantic does this automatically)
-    # 2. Generate status_id
-    # 3. Create status in Redis (status_manager.create_status)
-    # 4. Enqueue job (job_processor.process_job)
-    # 5. Return response immediately
+async def start_count_rate_measurement(request: CountRateMeasurementRequest):
+    return await _handle_measurement_request(
+        request=request,
+        measurement_type="count_rate",
+        status_manager=status_manager,
+        job_processor=job_processor,
+    )
 ```
 
 **Key Functions**:
-- `start_count_rate_measurement()` - Start count-rate job
-- `start_save_raw_tags_measurement()` - Start save-raw-tags job
+- `_handle_measurement_request()` - Unified orchestrator for starting measurements
+- `start_count_rate_measurement()` - Wrapper for count-rate
+- `start_save_raw_tags_measurement()` - Wrapper for save-raw-tags
 - `stop_measurement()` - Stop running job
 - `get_measurement_status()` - Query status
 - `set_processors()` - Dependency injection
@@ -188,8 +193,7 @@ class JobProcessor:
     def register_handler(measurement_type, handler_class)
     
     def _run_job_in_thread(status_id, measurement_type, duration)  # Private
-    def _handle_count_rate(...)  # Private
-    def _handle_save_raw_tags(...)  # Private
+    # dynamically resolves metadata using MeasurementPayloadMapper
 ```
 
 **Key Concepts**:
@@ -734,37 +738,12 @@ async def start_energy_spectrum_measurement(
     request: EnergySpectrumRequest,
 ) -> MeasurementResponse:
     """Start an energy spectrum measurement."""
-    logger.info(f"Received energy-spectrum request: {request.dict()}")
-    
-    try:
-        status_id = str(uuid.uuid4())
-        
-        # Create status in Redis
-        status_manager.create_status(
-            status_id=status_id,
-            measurement_type="energy_spectrum",
-            duration_seconds=request.duration_seconds,
-            metadata=request.metadata.model_dump(),
-        )
-        
-        # Enqueue job
-        job_processor.process_job(
-            status_id,
-            "energy_spectrum",
-            request.duration_seconds,
-        )
-        
-        return MeasurementResponse(
-            measurement_id=status_id,
-            measurement_type="energy_spectrum",
-            status="queued",
-            started_at=datetime.utcnow(),
-            message=f"Energy spectrum measurement queued. Use ID '{status_id}' to query status.",
-        )
-        
-    except Exception as e:
-        logger.error(f"Error starting energy spectrum measurement: {e}", exc_info=True)
-        raise
+    return await _handle_measurement_request(
+        request=request,
+        measurement_type="energy_spectrum",
+        status_manager=status_manager,
+        job_processor=job_processor,
+    )
 ```
 
 ---

@@ -7,6 +7,7 @@ from app.models import (
     CountRateMeasurementRequest,
     CorrelationMeasurementRequest,
     CoincidencesMeasurementRequest,
+    SaveRawTagsMeasurmentRequest,
 )
 
 # ============================================================================
@@ -138,6 +139,7 @@ class MeasurementPayloadMapper:
         "count_rate": CountRateMeasurementRequest,
         "correlation": CorrelationMeasurementRequest,
         "coincidences": CoincidencesMeasurementRequest,
+        "save_raw_tags": SaveRawTagsMeasurmentRequest,
     }
 
     @classmethod
@@ -160,6 +162,23 @@ class MeasurementPayloadMapper:
                 f"Available types: {list(cls._PAYLOAD_MODELS.keys())}"
             )
         return cls._PAYLOAD_MODELS[measurement_type]
+
+    @classmethod
+    def get_metadata_model_for_type(cls, measurement_type: str) -> Type[BaseModel]:
+        """
+        Get the appropriate Pydantic metadata model class for a measurement type.
+
+        Args:
+            measurement_type: Type of measurement (e.g., 'count_rate')
+
+        Returns:
+            Pydantic metadata model class for that measurement type
+
+        Raises:
+            ValueError: If measurement type is not registered
+        """
+        model_class = cls.get_model_for_type(measurement_type)
+        return model_class.model_fields['metadata'].annotation
 
     @classmethod
     def validate_and_parse(
