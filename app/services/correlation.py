@@ -40,6 +40,7 @@ class CorrelationMeasurementHandler(MeasurementHandler):
         """
         logger.info("Starting correlation measurement")
         self._start_time = datetime.utcnow()
+        self._stopped = False
 
         # Extract parameters from metadata
         channel1 = metadata.channel1
@@ -53,6 +54,7 @@ class CorrelationMeasurementHandler(MeasurementHandler):
             f"binwidth: {binwidth}, n_values: {n_values}, target: {target_location}"
         )
 
+        self._measurement_task = asyncio.current_task()
         self.tagger.setTestSignal(1, True)
         self.tagger.setTestSignal(2, True)
 
@@ -66,20 +68,38 @@ class CorrelationMeasurementHandler(MeasurementHandler):
         )
         self._counter = counter
         counter.startFor(duration_seconds * 1e12)
-        counter.waitUntilFinished()
 
-        # If the measurement was stopped, discard any data instead of saving it
-        if self._stopped:
-            logger.info("Correlation measurement was stopped; skipping data save")
-            return
+        try:
+            import os
+            self._stop_event = asyncio.Event()
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=duration_seconds+1)
+            except asyncio.TimeoutError:
+                pass
 
-        counter_data = counter.getData()
-        data = np.array(counter_data)
-        logger.info(
-            f"Correlation measurement finished for duration: {duration_seconds} seconds"
-        )
-        np.savetxt(target_location, data, delimiter=",")
-        logger.info(f"Correlation data saved to {target_location}")
+            # If the measurement was stopped, discard any data instead of saving it
+            if self._stopped:
+                logger.info("Correlation measurement was stopped; skipping data save")
+                if self._counter is not None:
+                    try:
+                        self._counter.stop()
+                    except Exception as e:
+                        logger.error(f"Failed to stop correlation measurement: {e}")
+                return
+
+            if self._counter:
+                counter_data = self._counter.getData()
+                data = np.array(counter_data)
+                logger.info(
+                    f"Correlation measurement finished for duration: {duration_seconds} seconds"
+                )
+                if self._target_location:
+                    os.makedirs(os.path.dirname(os.path.abspath(self._target_location)), exist_ok=True)
+                    np.savetxt(self._target_location, data, delimiter=",")
+                    logger.info(f"Correlation data saved to {self._target_location}")
+        except asyncio.CancelledError:
+            logger.info("Correlation measurement cancelled")
+            raise
 
     async def stop(self) -> Dict[str, Any]:
         """
@@ -97,6 +117,9 @@ class CorrelationMeasurementHandler(MeasurementHandler):
                 self._counter.stop()
             except Exception as e:
                 logger.error(f"Failed to stop correlation measurement: {e}")
+
+        if self._stop_event:
+            self._stop_event.set()
 
         # Delete any data file that was already written for this measurement
         self._delete_output_file(self._target_location)

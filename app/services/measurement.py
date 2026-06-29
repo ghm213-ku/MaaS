@@ -23,6 +23,7 @@ class MeasurementHandler(ABC):
         # Set to True when a stop is requested so that start() skips writing
         # any final output once the running measurement is interrupted.
         self._stopped = False
+        self._stop_event: Optional[asyncio.Event] = None
 
     def _delete_output_file(self, path: Optional[str]) -> None:
         """Delete the output file written by a measurement, if it exists.

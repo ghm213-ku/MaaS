@@ -341,98 +341,38 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
 
 class TestMetadataValidationErrors:
     """Test validation error handling for missing or invalid metadata fields."""
-    
-    def test_missing_channel_list_raises_validation_error(self):
-        """Missing channel_list in metadata should raise ValidationError."""
+
+    @pytest.mark.parametrize(
+        "invalid_kwargs, expected_error_field",
+        [
+            ({"target_file_path": "C:\\test.dat"}, "channel_list"),
+            ({"channel_list": [1, 2, 3]}, "target_file_path"),
+            ({"channel_list": "1,2,3", "target_file_path": "C:\\test.dat"}, "channel_list"),
+            ({"channel_list": [1, 2, 3], "target_file_path": 123}, "target_file_path"),
+        ]
+    )
+    def test_metadata_validation_errors(self, invalid_kwargs, expected_error_field):
         with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(
-                target_file_path="C:\\test.dat"
-            )
+            SaveRawTagsMetadata(**invalid_kwargs)
         
         error = exc_info.value
         assert len(error.errors()) > 0
-        assert "channel_list" in str(error)
-    
-    def test_missing_target_file_path_raises_validation_error(self):
-        """Missing target_file_path in metadata should raise ValidationError."""
+        assert any(expected_error_field in str(e) for e in error.errors())
+
+    @pytest.mark.parametrize(
+        "invalid_kwargs, expected_error_field",
+        [
+            ({"duration_seconds": 60}, "metadata"),
+            ({"duration_seconds": 60, "metadata": {"channel_list": [1, 2, 3]}}, "target_file_path"),
+        ]
+    )
+    def test_request_validation_errors(self, invalid_kwargs, expected_error_field):
         with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(
-                channel_list=[1, 2, 3]
-            )
+            SaveRawTagsMeasurmentRequest(**invalid_kwargs)
         
         error = exc_info.value
         assert len(error.errors()) > 0
-        assert "target_file_path" in str(error)
-    
-    def test_invalid_channel_list_type_raises_validation_error(self):
-        """Invalid type for channel_list should raise ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(
-                channel_list="1,2,3",  # String instead of list
-                target_file_path="C:\\test.dat"
-            )
-        
-        error = exc_info.value
-        assert len(error.errors()) > 0
-    
-    def test_invalid_target_file_path_type_raises_validation_error(self):
-        """Invalid type for target_file_path should raise ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(
-                channel_list=[1, 2, 3],
-                target_file_path=123  # Int instead of string
-            )
-        
-        error = exc_info.value
-        assert len(error.errors()) > 0
-    
-    def test_request_missing_metadata_raises_validation_error(self):
-        """Request without metadata should raise ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMeasurmentRequest(
-                duration_seconds=60
-            )
-        
-        error = exc_info.value
-        assert len(error.errors()) > 0
-        assert "metadata" in str(error)
-    
-    def test_request_with_incomplete_metadata_dict_raises_validation_error(self):
-        """Request with incomplete metadata dict should raise ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMeasurmentRequest(
-                duration_seconds=60,
-                metadata={
-                    "channel_list": [1, 2, 3]
-                    # Missing target_file_path
-                }
-            )
-        
-        error = exc_info.value
-        assert len(error.errors()) > 0
-    
-    def test_validation_error_contains_field_name(self):
-        """Validation error should contain the missing field name."""
-        try:
-            SaveRawTagsMetadata(
-                channel_list=[1, 2, 3]
-            )
-        except ValidationError as e:
-            error_str = str(e)
-            assert "target_file_path" in error_str or "field required" in error_str.lower()
-    
-    def test_validation_error_contains_error_type(self):
-        """Validation error should specify the error type."""
-        try:
-            SaveRawTagsMetadata(
-                target_file_path="C:\\test.dat"
-            )
-        except ValidationError as e:
-            # Should have error information
-            assert len(e.errors()) > 0
-            # First error should have 'type' or 'msg' field
-            error_dict = e.errors()[0]
-            assert "type" in error_dict or "msg" in error_dict
+        assert any(expected_error_field in str(e) for e in error.errors())
 
 
 class TestIntegrationWithMockedTaggerAndModel:

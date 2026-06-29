@@ -2,7 +2,7 @@
 
 from enum import Enum
 from typing import Any, Optional, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 
 
@@ -26,7 +26,7 @@ class CountRateMetadata(BaseModel):
         description="Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
     )
     n_values: int = Field(
-        default=100,
+        default=1,
         description="Number of bins in the histogram. Default: 1",
     )
     target_location: str = Field(
@@ -86,7 +86,7 @@ class CoincidencesMetadata(BaseModel):
         description="Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
     )
     n_values: int = Field(
-        default=100,
+        default=1,
         description="Number of bins in the histogram. Default: 1",
     )
     target_location: str = Field(
@@ -135,6 +135,35 @@ class CountRateMeasurementRequest(BaseModel):
         description="Metadata containing channels, binwidth, n_values, and target_location"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 60)
+            measurement_type = data.pop("measurement_type", MeasurementType.COUNT_RATE)
+            return {
+                "measurement_type": measurement_type,
+                "duration_seconds": duration_seconds,
+                "metadata": data,
+            }
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return self.metadata.channels
+
+    @property
+    def binwidth(self) -> int:
+        return self.metadata.binwidth
+
+    @property
+    def n_values(self) -> int:
+        return self.metadata.n_values
+
+    @property
+    def target_location(self) -> str:
+        return self.metadata.target_location
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -160,6 +189,39 @@ class CorrelationMeasurementRequest(BaseModel):
     metadata: CorrelationMetadata = Field(
         description="Metadata containing channel1, channel2, binwidth, n_values, and target_location"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 60)
+            measurement_type = data.pop("measurement_type", MeasurementType.CORRELATION)
+            return {
+                "measurement_type": measurement_type,
+                "duration_seconds": duration_seconds,
+                "metadata": data,
+            }
+        return data
+
+    @property
+    def channel1(self) -> int:
+        return self.metadata.channel1
+
+    @property
+    def channel2(self) -> int:
+        return self.metadata.channel2
+
+    @property
+    def binwidth(self) -> int:
+        return self.metadata.binwidth
+
+    @property
+    def n_values(self) -> int:
+        return self.metadata.n_values
+
+    @property
+    def target_location(self) -> str:
+        return self.metadata.target_location
 
     class Config:
         json_schema_extra = {
@@ -188,6 +250,35 @@ class CoincidencesMeasurementRequest(BaseModel):
         description="Metadata containing channels, binwidth, n_values, and target_location"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 60)
+            measurement_type = data.pop("measurement_type", MeasurementType.COINCIDENCES)
+            return {
+                "measurement_type": measurement_type,
+                "duration_seconds": duration_seconds,
+                "metadata": data,
+            }
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return self.metadata.channels
+
+    @property
+    def binwidth(self) -> int:
+        return self.metadata.binwidth
+
+    @property
+    def n_values(self) -> int:
+        return self.metadata.n_values
+
+    @property
+    def target_location(self) -> str:
+        return self.metadata.target_location
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -211,6 +302,27 @@ class SaveRawTagsMeasurmentRequest(BaseModel):
     metadata: SaveRawTagsMetadata = Field(
         description="Metadata containing required channel_list and target_file_path"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 60)
+            measurement_type = data.pop("measurement_type", MeasurementType.SAVE_RAW_TAGS)
+            return {
+                "measurement_type": measurement_type,
+                "duration_seconds": duration_seconds,
+                "metadata": data,
+            }
+        return data
+
+    @property
+    def channel_list(self) -> list[int]:
+        return self.metadata.channel_list
+
+    @property
+    def target_file_path(self) -> str:
+        return self.metadata.target_file_path
 
     class Config:
         json_schema_extra = {

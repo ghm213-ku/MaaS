@@ -42,6 +42,7 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
             f"Starting save raw tags measurement for {duration_seconds} seconds on channels {channel_list}"
         )
         self._start_time = datetime.now()
+        self._stopped = False
         try:
             self._fileWriter = TimeTagger.FileWriter(
                 tagger=self.tagger, filename=target_file_path, channels=channel_list
@@ -49,7 +50,22 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
 
             logger.info("Save raw tags started")
             self._fileWriter.startFor(int(duration_seconds * 1e12))
-            self._fileWriter.waitUntilFinished()
+            
+            self._stop_event = asyncio.Event()
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=duration_seconds+1)
+            except asyncio.TimeoutError:
+                pass
+
+            # If the measurement was stopped, stop the writer
+            if self._stopped:
+                logger.info("Save raw tags was stopped; stopping file writer")
+                if self._fileWriter is not None:
+                    try:
+                        self._fileWriter.stop()
+                    except Exception as e:
+                        logger.error(f"Failed to stop file writer: {e}")
+                return
         finally:
             # Only free real TimeTagger instances (not mocks from tests)
             try:
@@ -66,6 +82,9 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
             f"Stopping save raw tags measurement on channels {self._channel_list}"
         )
         self._stopped = True
+
+        if self._stop_event:
+            self._stop_event.set()
 
         if self._fileWriter:
             try:

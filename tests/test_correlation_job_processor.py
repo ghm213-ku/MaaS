@@ -9,6 +9,13 @@ from app.services.status_manager import StatusManager, MeasurementStatus
 from app.models import CorrelationMetadata
 
 
+async def safe_await(task):
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 @pytest.fixture
 def mock_status_manager():
     """Create a mock status manager."""
@@ -268,15 +275,15 @@ class TestCorrelationHandlerIntegration:
             n_values=100,
         )
 
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
         await asyncio.sleep(0.05)
         results = await handler.stop()
+        await safe_await(task)
 
-        assert results["status"] == "completed"
+        assert results["status"] == "stopped"
         assert "duration" in results
 
-    @pytest.mark.asyncio
-    async def test_correlation_handler_integration_with_job_processor(
+    def test_correlation_handler_integration_with_job_processor(
         self, mock_status_manager, mock_tagger
     ):
         """Should integrate correctly with job processor."""
@@ -293,3 +300,59 @@ class TestCorrelationHandlerIntegration:
 
         # Should execute without error
         processor._handle_correlation(handler, 1, metadata)
+
+    @patch("app.services.correlation.np.savetxt")
+    def test_correlation_fails_on_target_location_permission_error(
+        self, mock_savetxt, mock_status_manager, mock_tagger
+    ):
+        """Should catch PermissionError when saving to target_location and set status FAILED."""
+        processor = JobProcessor(mock_status_manager, tagger=mock_tagger)
+        processor.register_handler("correlation", CorrelationMeasurementHandler)
+        
+        mock_savetxt.side_effect = PermissionError("Permission denied: 'C:\\test'")
+        
+        metadata = {
+            "channel1": 1,
+            "channel2": 2,
+            "target_location": "C:\\test\\test.csv",
+        }
+        status_id = "test-error-id"
+        
+        processor._run_job_in_thread(
+            status_id=status_id,
+            measurement_type="correlation",
+            duration_seconds=1,
+            metadata=metadata,
+        )
+        
+        # Verify status manager was called to set FAILED
+        mock_status_manager.update_status.assert_any_call(
+            status_id, MeasurementStatus.FAILED.value, "Job failed: Permission denied: 'C:\\test'"
+        )
+
+    def test_correlation_fails_on_timetagger_start_error(
+        self, mock_status_manager, mock_tagger
+    ):
+        """Should catch TimeTagger exception during initialization and set status FAILED."""
+        processor = JobProcessor(mock_status_manager, tagger=mock_tagger)
+        processor.register_handler("correlation", CorrelationMeasurementHandler)
+        
+        import TimeTagger
+        with patch("TimeTagger.Correlation", side_effect=Exception("Hardware missing")):
+            metadata = {
+                "channel1": 1,
+                "channel2": 2,
+            }
+            status_id = "test-hw-error-id"
+            
+            processor._run_job_in_thread(
+                status_id=status_id,
+                measurement_type="correlation",
+                duration_seconds=1,
+                metadata=metadata,
+            )
+            
+            # Verify status manager was called to set FAILED
+            mock_status_manager.update_status.assert_any_call(
+                status_id, MeasurementStatus.FAILED.value, "Job failed: Hardware missing"
+            )

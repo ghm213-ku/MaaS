@@ -9,6 +9,13 @@ from app.services.correlation import CorrelationMeasurementHandler
 from app.models import CorrelationMetadata
 
 
+async def safe_await(task):
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 @pytest.fixture
 async def handler():
     """Create a handler for testing."""
@@ -54,9 +61,13 @@ class TestCorrelationMeasurementHandler:
     @pytest.mark.asyncio
     async def test_start_handler(self, handler, metadata):
         """Should start measurement with proper setup."""
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
         assert handler._start_time is not None
+
+        await handler.stop()
+        await safe_await(task)
 
     @pytest.mark.asyncio
     async def test_start_handler_with_custom_parameters(self, handler):
@@ -68,32 +79,35 @@ class TestCorrelationMeasurementHandler:
             n_values=50,
             target_location="custom/path",
         )
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
         assert handler._start_time is not None
+
+        await handler.stop()
+        await safe_await(task)
 
     @pytest.mark.asyncio
     async def test_stop_handler_returns_results(self, handler, metadata):
         """Should return results when stopped."""
-        await handler.start(1, metadata)
-
-        # Let it run a bit
-        await asyncio.sleep(0.1)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
         results = await handler.stop()
+        await safe_await(task)
 
         assert "status" in results
-        assert results["status"] == "completed"
+        assert results["status"] == "stopped"
         assert "duration" in results
         assert "message" in results
-        assert results["message"] == "Correlation measurement stopped"
+        assert results["message"] == "Correlation measurement stopped and data file deleted"
 
     @pytest.mark.asyncio
     async def test_stop_without_start(self, handler):
         """Should handle stop without prior start."""
         results = await handler.stop()
 
-        assert results["status"] == "completed"
+        assert results["status"] == "stopped"
         assert "duration" in results
         assert results["duration"] >= 0
 
@@ -101,47 +115,61 @@ class TestCorrelationMeasurementHandler:
     async def test_start_records_start_time(self, handler, metadata):
         """Should record start time when measurement begins."""
         before_start = datetime.utcnow()
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
         after_start = datetime.utcnow()
 
         assert handler._start_time is not None
         assert before_start <= handler._start_time <= after_start
 
+        await handler.stop()
+        await safe_await(task)
+
     @pytest.mark.asyncio
     async def test_start_with_single_channel_pair(self, handler):
         """Should work with single channel pair."""
         metadata = CorrelationMetadata(channel1=1, channel2=2)
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
         assert handler._start_time is not None
+
+        await handler.stop()
+        await safe_await(task)
 
     @pytest.mark.asyncio
     async def test_start_with_default_values(self, handler):
         """Should use default values when not specified."""
         metadata = CorrelationMetadata(channel1=5, channel2=6)
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
         # Defaults should be applied
         assert metadata.binwidth == int(1e3)
         assert metadata.n_values == 1000
 
+        await handler.stop()
+        await safe_await(task)
+
     @pytest.mark.asyncio
     async def test_multiple_start_stop_cycles(self, handler, metadata):
         """Should handle multiple start/stop cycles."""
         # First cycle
-        await handler.start(1, metadata)
+        task1 = asyncio.create_task(handler.start(1, metadata))
         await asyncio.sleep(0.05)
         results1 = await handler.stop()
+        await safe_await(task1)
 
-        assert results1["status"] == "completed"
+        assert results1["status"] == "stopped"
         first_start_time = handler._start_time
 
         # Second cycle
-        await handler.start(1, metadata)
+        task2 = asyncio.create_task(handler.start(1, metadata))
         await asyncio.sleep(0.05)
         results2 = await handler.stop()
+        await safe_await(task2)
 
-        assert results2["status"] == "completed"
+        assert results2["status"] == "stopped"
         second_start_time = handler._start_time
 
         # Start times should be different
@@ -150,28 +178,37 @@ class TestCorrelationMeasurementHandler:
     @pytest.mark.asyncio
     async def test_tagger_called_with_both_channels(self, handler, metadata):
         """Verify handler accepts both channel1 and channel2."""
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
-        # Handler should accept and process both channels
         assert handler._start_time is not None
+
+        await handler.stop()
+        await safe_await(task)
 
     @pytest.mark.asyncio
     async def test_start_with_large_channel_numbers(self, handler):
         """Should handle large channel numbers."""
         metadata = CorrelationMetadata(channel1=101, channel2=102)
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
         assert handler._start_time is not None
+
+        await handler.stop()
+        await safe_await(task)
 
     @pytest.mark.asyncio
     async def test_stop_calculates_duration_correctly(self, handler, metadata):
         """Stop should calculate duration since start."""
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
-        sleep_duration = 0.1
+        sleep_duration = 0.05
         await asyncio.sleep(sleep_duration)
 
         results = await handler.stop()
+        await safe_await(task)
 
         # Duration should be at least sleep_duration
         assert results["duration"] >= sleep_duration
@@ -185,9 +222,13 @@ class TestCorrelationMeasurementHandler:
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
         metadata = CorrelationMetadata(channel1=1, channel2=2)
 
-        await handler.start(1, metadata)
+        task = asyncio.create_task(handler.start(1, metadata))
+        await asyncio.sleep(0.05)
 
         assert handler._start_time is not None
+
+        await handler.stop()
+        await safe_await(task)
 
 
 class TestCorrelationMetadataModel:
@@ -199,8 +240,8 @@ class TestCorrelationMetadataModel:
 
         assert metadata.channel1 == 1
         assert metadata.channel2 == 2
-        assert metadata.binwidth == int(1e9)
-        assert metadata.n_values == 100
+        assert metadata.binwidth == int(1e3)
+        assert metadata.n_values == 1000
 
     def test_metadata_with_all_fields(self):
         """Should create metadata with all fields."""
@@ -259,13 +300,13 @@ class TestCorrelationMetadataModel:
         metadata = CorrelationMetadata(
             channel1=1,
             channel2=2,
-            binwidth=int(1e9),
-            n_values=100,
+            binwidth=int(1e3),
+            n_values=1000,
         )
 
         data = metadata.dict()
 
         assert data["channel1"] == 1
         assert data["channel2"] == 2
-        assert data["binwidth"] == int(1e9)
-        assert data["n_values"] == 100
+        assert data["binwidth"] == int(1e3)
+        assert data["n_values"] == 1000

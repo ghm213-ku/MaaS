@@ -110,8 +110,8 @@ class TestCorrelationMeasurementRequestModel:
         assert request.duration_seconds == 30
         assert request.metadata.channel1 == 1
         assert request.metadata.channel2 == 2
-        assert request.metadata.binwidth == int(1e9)  # default
-        assert request.metadata.n_values == 100  # default
+        assert request.metadata.binwidth == int(1e3)  # default (1000 ps)
+        assert request.metadata.n_values == 1000  # default (1000 bins)
 
 
 class TestCorrelationPayloadSchema:
@@ -191,7 +191,7 @@ class TestCorrelationPayloadMapper:
         }
         result = MeasurementPayloadMapper.validate_and_parse("correlation", payload)
 
-        assert isinstance(result, CorrelationMetadata)
+        assert isinstance(result, CorrelationMeasurementRequest)
         assert result.channel1 == 1
         assert result.channel2 == 2
 
@@ -200,11 +200,11 @@ class TestCorrelationPayloadMapper:
         payload = {"channel1": 1, "channel2": 2}
         result = MeasurementPayloadMapper.validate_and_parse("correlation", payload)
 
-        assert isinstance(result, CorrelationMetadata)
+        assert isinstance(result, CorrelationMeasurementRequest)
         assert result.channel1 == 1
         assert result.channel2 == 2
-        assert result.binwidth == int(1e9)  # default
-        assert result.n_values == 100  # default
+        assert result.binwidth == int(1e3)  # default
+        assert result.n_values == 1000  # default
 
     def test_mapper_validate_and_parse_correlation_missing_channel1(self):
         """Should raise ValidationError if channel1 is missing."""
@@ -266,4 +266,4 @@ class TestCorrelationMeasurementTypeEnum:
     def test_measurement_type_correlation_is_string_enum(self):
         """CORRELATION should be a string enum."""
         assert isinstance(MeasurementType.CORRELATION, str)
-        assert str(MeasurementType.CORRELATION) == "correlation"
+        assert MeasurementType.CORRELATION == "correlation"
