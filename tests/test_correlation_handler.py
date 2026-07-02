@@ -27,7 +27,7 @@ async def handler():
 @pytest.fixture
 def metadata():
     """Create metadata for testing."""
-    return CorrelationMetadata(
+    return CorrelationMetadata(user_name="test_user", 
         channel1=1,
         channel2=2,
         binwidth=int(1e9),
@@ -72,7 +72,7 @@ class TestCorrelationMeasurementHandler:
     @pytest.mark.asyncio
     async def test_start_handler_with_custom_parameters(self, handler):
         """Should handle custom binwidth and n_values."""
-        metadata = CorrelationMetadata(
+        metadata = CorrelationMetadata(user_name="test_user", 
             channel1=3,
             channel2=4,
             binwidth=int(5e8),
@@ -128,7 +128,7 @@ class TestCorrelationMeasurementHandler:
     @pytest.mark.asyncio
     async def test_start_with_single_channel_pair(self, handler):
         """Should work with single channel pair."""
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
         task = asyncio.create_task(handler.start(1, metadata))
         await asyncio.sleep(0.05)
 
@@ -140,7 +140,7 @@ class TestCorrelationMeasurementHandler:
     @pytest.mark.asyncio
     async def test_start_with_default_values(self, handler):
         """Should use default values when not specified."""
-        metadata = CorrelationMetadata(channel1=5, channel2=6)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=5, channel2=6)
         task = asyncio.create_task(handler.start(1, metadata))
         await asyncio.sleep(0.05)
 
@@ -189,7 +189,7 @@ class TestCorrelationMeasurementHandler:
     @pytest.mark.asyncio
     async def test_start_with_large_channel_numbers(self, handler):
         """Should handle large channel numbers."""
-        metadata = CorrelationMetadata(channel1=101, channel2=102)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=101, channel2=102)
         task = asyncio.create_task(handler.start(1, metadata))
         await asyncio.sleep(0.05)
 
@@ -220,7 +220,7 @@ class TestCorrelationMeasurementHandler:
         mock_tagger.setTestSignal = MagicMock(return_value=None)
 
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
 
         task = asyncio.create_task(handler.start(1, metadata))
         await asyncio.sleep(0.05)
@@ -236,7 +236,7 @@ class TestCorrelationMetadataModel:
 
     def test_metadata_with_required_fields(self):
         """Should create metadata with only required fields."""
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
 
         assert metadata.channel1 == 1
         assert metadata.channel2 == 2
@@ -245,7 +245,7 @@ class TestCorrelationMetadataModel:
 
     def test_metadata_with_all_fields(self):
         """Should create metadata with all fields."""
-        metadata = CorrelationMetadata(
+        metadata = CorrelationMetadata(user_name="test_user", 
             channel1=1,
             channel2=2,
             binwidth=int(5e8),
@@ -261,7 +261,7 @@ class TestCorrelationMetadataModel:
 
     def test_metadata_default_target_location(self):
         """Should have default target location."""
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
 
         assert (
             metadata.target_location == "desktop/MaasData/{datetime}/{measurement-type}"
@@ -272,32 +272,32 @@ class TestCorrelationMetadataModel:
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            CorrelationMetadata(channel2=2)
+            CorrelationMetadata(user_name="test_user", channel2=2)
 
     def test_metadata_channel2_required(self):
         """channel2 should be required."""
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            CorrelationMetadata(channel1=1)
+            CorrelationMetadata(user_name="test_user", channel1=1)
 
     def test_metadata_channel1_must_be_int(self):
         """channel1 should be integer."""
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            CorrelationMetadata(channel1="invalid", channel2=2)
+            CorrelationMetadata(user_name="test_user", channel1="invalid", channel2=2)
 
     def test_metadata_channel2_must_be_int(self):
         """channel2 should be integer."""
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            CorrelationMetadata(channel1=1, channel2="invalid")
+            CorrelationMetadata(user_name="test_user", channel1=1, channel2="invalid")
 
     def test_metadata_dict_conversion(self):
         """Should convert to dict correctly."""
-        metadata = CorrelationMetadata(
+        metadata = CorrelationMetadata(user_name="test_user", 
             channel1=1,
             channel2=2,
             binwidth=int(1e3),

@@ -300,7 +300,7 @@ class StatusManager:
                 )
 
                 if booked_by:
-                    channel_info["booked_by"] = booked_by
+                    channel_info["user_name"] = booked_by
                 if booking_time:
                     channel_info["booking_time"] = booking_time
 
@@ -321,13 +321,13 @@ class StatusManager:
     def book_channels(
         self,
         channel_numbers: List[int],
-        booked_by: str,
+        user_name: str,
     ) -> Dict[str, Any]:
         """Book channels for a measurement or user.
 
         Args:
-            channel_numbers: List of channel numbers to book
-            booked_by: Who is booking (measurement_id or user identifier)
+            channel_numbers: List[int] to book
+            user_name: Who is booking (user identifier)
 
         Returns:
             Dict with booking results
@@ -345,7 +345,7 @@ class StatusManager:
 
         if unavailable:
             raise ValueError(
-                f"Cannot book channels {unavailable} - already booked by {booked_by}"
+                f"Cannot book channels {unavailable} - already booked"
             )
 
         pipe = self.redis_client.pipeline()
@@ -354,38 +354,38 @@ class StatusManager:
         for channel in channel_numbers:
             channel_str = str(channel)
             pipe.srem(self.available_channels_key, channel_str)
-            pipe.hset(self.booked_channels_key, channel_str, booked_by)
+            pipe.hset(self.booked_channels_key, channel_str, user_name)
             pipe.hset(self.booking_time_key, channel_str, booking_time)
 
         pipe.execute()
 
-        logger.info(f"[{booked_by}] Booked channels: {channel_numbers}")
+        logger.info(f"[{user_name}] Booked channels: {channel_numbers}")
 
         return {
-            "booked_by": booked_by,
+            "user_name": user_name,
             "booked_channels": channel_numbers,
             "booking_time": booking_time,
             "total_booked": len(channel_numbers),
         }
 
-    def release_channels(self, booked_by: str) -> Dict[str, Any]:
-        """Release all channels booked by a measurement or user.
+    def release_channels(self, user_name: str) -> Dict[str, Any]:
+        """Release all channels booked by a user.
 
         Args:
-            booked_by: The identifier (measurement_id or user) whose channels to release
+            user_name: The identifier (user) whose channels to release
 
         Returns:
             Dict with released channels info
         """
         booked = self.redis_client.hgetall(self.booked_channels_key)
         channels_to_release = [
-            int(ch) for ch, booker in booked.items() if booker == booked_by
+            int(ch) for ch, booker in booked.items() if booker == user_name
         ]
 
         if not channels_to_release:
-            logger.info(f"[{booked_by}] No channels to release")
+            logger.info(f"[{user_name}] No channels to release")
             return {
-                "booked_by": booked_by,
+                "user_name": user_name,
                 "released_channels": [],
                 "total_released": 0,
             }
@@ -400,18 +400,18 @@ class StatusManager:
 
         pipe.execute()
 
-        logger.info(f"[{booked_by}] Released channels: {channels_to_release}")
+        logger.info(f"[{user_name}] Released channels: {channels_to_release}")
 
         return {
-            "booked_by": booked_by,
+            "user_name": user_name,
             "released_channels": sorted(channels_to_release),
             "total_released": len(channels_to_release),
         }
 
-    def get_booked_channels_by(self, booked_by: str) -> List[int]:
-        """Get all channels booked by a specific identifier (measurement or user)."""
+    def get_booked_channels_by(self, user_name: str) -> List[int]:
+        """Get all channels booked by a specific user."""
         booked = self.redis_client.hgetall(self.booked_channels_key)
-        channels = [int(ch) for ch, booker in booked.items() if booker == booked_by]
+        channels = [int(ch) for ch, booker in booked.items() if booker == user_name]
         return sorted(channels)
 
     def validate_channels(self, channel_numbers: List[int]) -> bool:

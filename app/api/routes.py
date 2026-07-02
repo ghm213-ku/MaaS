@@ -5,7 +5,7 @@ This module provides two main routers:
 - channels_router: For /api/v1/channels (list, book, release channel management)
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Optional
 from datetime import datetime
 import uuid
@@ -25,6 +25,7 @@ from app.models import (
     ChannelStatsResponse,
     ChannelInfo,
     MeasurementType,
+    SetParametersRequest,
 )
 from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager, MeasurementStatus
@@ -36,6 +37,7 @@ logger = configure_logging(__name__)
 # Separate routers for measurements and channels
 measurement_router = APIRouter(prefix="/api/v1/measurements", tags=["measurements"])
 channels_router = APIRouter(prefix="/api/v1/channels", tags=["channels"])
+parameters_router = APIRouter(prefix="/api/v1/set-parameters", tags=["parameters"])
 
 # These will be set by main.py
 _job_processor: Optional[JobProcessor] = None
@@ -85,6 +87,7 @@ def _handle_measurement_request(
     processor: JobProcessor,
     status_manager: StatusManager,
     file_logger: Optional[FileLogger],
+    user_name: str,
 ) -> MeasurementResponse:
     try:
         # Generate unique status ID
@@ -92,32 +95,20 @@ def _handle_measurement_request(
 
         logger.info(f"[{status_id}] Received {request_name} measurement request: {metadata_dump}")
 
-        # Validate and book channels
-        try:
-            status_manager.validate_channels(channels)
-            booking_result = status_manager.book_channels(channels, status_id)
-            logger.info(
-                f"[{status_id}] Channels booked: {booking_result['booked_channels']}"
-            )
-
-            # Log channel booking with measurement info
-            if file_logger:
-                file_logger.log_channel_booking_for_measurement(
-                    measurement_type=measurement_type.value,
-                    measurement_id=status_id,
-                    channel_numbers=booking_result["booked_channels"],
-                    timestamp=datetime.utcnow(),
+        # Validate that channels are already booked by the user
+        status_manager.validate_channels(channels)
+        booked_channels_map = status_manager.get_booked_channels()
+        for channel in channels:
+            if booked_channels_map.get(channel) != user_name:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Channel {channel} is not booked by user '{user_name}'"
                 )
-        except ValueError as e:
-            logger.error(f"[{status_id}] Channel booking failed: {e}")
-            raise HTTPException(
-                status_code=409, detail=f"Channel booking failed: {str(e)}"
-            )
 
-        # Prepare metadata with booking info
+        logger.info(f"[{status_id}] Verified channels {channels} are booked by {user_name}")
+
+        # Prepare metadata
         metadata_dict = metadata_dump.copy()
-        metadata_dict["booked_channels"] = booking_result["booked_channels"]
-        metadata_dict["booking_time"] = booking_result["booking_time"]
 
         # Create status in Redis
         status_manager.create_status(
@@ -202,6 +193,7 @@ async def start_count_rate_measurement(
         processor=processor,
         status_manager=status_manager,
         file_logger=file_logger,
+        user_name=request.metadata.user_name,
     )
 
 
@@ -231,6 +223,7 @@ async def start_save_raw_tags_measurement(
         processor=processor,
         status_manager=status_manager,
         file_logger=file_logger,
+        user_name=request.user_name,
     )
 
 
@@ -260,6 +253,7 @@ async def start_correlation_measurement(
         processor=processor,
         status_manager=status_manager,
         file_logger=file_logger,
+        user_name=request.user_name,
     )
 
 
@@ -289,9 +283,51 @@ async def start_coincidences_measurement(
         processor=processor,
         status_manager=status_manager,
         file_logger=file_logger,
+        user_name=request.user_name,
     )
 
 # ========== CHANNEL MANAGEMENT ENDPOINTS ==========
+
+
+@parameters_router.post(
+    "/", response_model=MeasurementResponse, status_code=201
+)
+async def start_set_parameters(
+    request: SetParametersRequest = Body(
+        ...,
+        example={
+            "measurement_type": "set_parameters",
+            "duration_seconds": 0,
+            "metadata": {
+                "channels": [1, 2],
+                "user_name": "abc-123-def",
+                "input_delay": 1000,
+                "trigger_voltage": 0.5
+            }
+        }
+    ),
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """
+    Start a set parameters request.
+
+    Returns a unique status ID to be used for status queries.
+    The job is enqueued for processing by the backend worker.
+
+    """
+    return _handle_measurement_request(
+        request_name="set-parameters",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.metadata.channels,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+        user_name=request.user_name,
+    )
 
 
 @channels_router.get("/", response_model=ChannelListResponse)
@@ -346,11 +382,11 @@ async def list_available_channels(
         stats = status_manager.get_channel_stats()
 
         # Build mapping of identifiers to channels
-        booked_by_identifier = {}
+        user_names = {}
         for channel, identifier in booked.items():
-            if identifier not in booked_by_identifier:
-                booked_by_identifier[identifier] = []
-            booked_by_identifier[identifier].append(channel)
+            if identifier not in user_names:
+                user_names[identifier] = []
+            user_names[identifier].append(channel)
 
         return ChannelStatsResponse(
             total_channels=stats["total_channels"],
@@ -358,7 +394,7 @@ async def list_available_channels(
             booked_channels=stats["booked_channels"],
             utilization_percent=stats["utilization_percent"],
             available_channel_numbers=available,
-            booked_by_identifier=booked_by_identifier,
+            user_names=user_names,
         )
     except Exception as e:
         logger.error(f"Failed to list available channels: {e}", exc_info=True)
@@ -394,7 +430,7 @@ async def book_channels(
         409: If any channels are already booked
     """
     logger.info(
-        f"[{request.booked_by}] Channel booking request for channels: {request.channel_numbers}"
+        f"[{request.user_name}] Channel booking request for channels: {request.channel_numbers}"
     )
 
     try:
@@ -404,51 +440,51 @@ async def book_channels(
         # Book the channels
         booking_result = status_manager.book_channels(
             request.channel_numbers,
-            request.booked_by,
+            request.user_name,
         )
 
-        logger.info(f"[{request.booked_by}] Channels booked successfully")
+        logger.info(f"[{request.user_name}] Channels booked successfully")
 
         # Log channel booking request to file
         if file_logger:
             logger.info(
-                f"[{request.booked_by}] File logger available, writing to channel log"
+                f"[{request.user_name}] File logger available, writing to channel log"
             )
             try:
                 file_logger.log_channel_book_request(
-                    booked_by=booking_result["booked_by"],
+                    user_name=booking_result["user_name"],
                     channel_numbers=booking_result["booked_channels"],
                     timestamp=booking_result["booking_time"],
                 )
                 logger.info(
-                    f"[{request.booked_by}] Channel booking logged to file successfully"
+                    f"[{request.user_name}] Channel booking logged to file successfully"
                 )
             except Exception as e:
                 logger.error(
-                    f"[{request.booked_by}] Failed to log channel booking: {e}",
+                    f"[{request.user_name}] Failed to log channel booking: {e}",
                     exc_info=True,
                 )
         else:
             logger.warning(
-                f"[{request.booked_by}] File logger is None - skipping file logging"
+                f"[{request.user_name}] File logger is None - skipping file logging"
             )
 
         return ChannelBookResponse(
-            booked_by=booking_result["booked_by"],
+            user_name=booking_result["user_name"],
             booked_channels=booking_result["booked_channels"],
             booking_time=booking_result["booking_time"],
             total_booked=booking_result["total_booked"],
         )
 
     except ValueError as e:
-        logger.warning(f"[{request.booked_by}] Channel booking validation failed: {e}")
+        logger.warning(f"[{request.user_name}] Channel booking validation failed: {e}")
         raise HTTPException(
             status_code=400 if "Invalid channel" in str(e) else 409,
             detail=str(e),
         )
     except Exception as e:
         logger.error(
-            f"[{request.booked_by}] Channel booking failed: {e}", exc_info=True
+            f"[{request.user_name}] Channel booking failed: {e}", exc_info=True
         )
         raise HTTPException(
             status_code=500,
@@ -457,21 +493,21 @@ async def book_channels(
 
 
 @channels_router.post(
-    "/release/{booked_by}",
+    "/release/{user_name}",
     response_model=ChannelReleaseResponse,
 )
 async def release_channels(
-    booked_by: str,
+    user_name: str,
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
 ) -> ChannelReleaseResponse:
     """
     Release (free up) all channels booked by a measurement or user.
 
-    Endpoint: POST /api/v1/channels/release/{booked_by}
+    Endpoint: POST /api/v1/channels/release/{user_name}
 
     Args:
-        booked_by: The identifier (measurement_id or user) whose channels to release
+        user_name: The identifier (user) whose channels to release
 
     Returns:
         Release confirmation with released channels count
@@ -480,73 +516,73 @@ async def release_channels(
         Channels are automatically released when a measurement completes, stops, or fails.
         This endpoint allows explicit manual release if needed.
     """
-    logger.info(f"[{booked_by}] Channel release request")
+    logger.info(f"[{user_name}] Channel release request")
 
     try:
-        release_result = status_manager.release_channels(booked_by)
+        release_result = status_manager.release_channels(user_name)
 
         logger.info(
-            f"[{booked_by}] Channels released successfully: {release_result['released_channels']}"
+            f"[{user_name}] Channels released successfully: {release_result['released_channels']}"
         )
 
         # Log channel release request to file
         if file_logger:
-            logger.info(f"[{booked_by}] File logger available, writing to channel log")
+            logger.info(f"[{user_name}] File logger available, writing to channel log")
             try:
                 file_logger.log_channel_release_request(
-                    booked_by=release_result["booked_by"],
+                    user_name=release_result["user_name"],
                     released_channels=release_result["released_channels"],
                     timestamp=datetime.utcnow(),
                 )
                 logger.info(
-                    f"[{booked_by}] Channel release logged to file successfully"
+                    f"[{user_name}] Channel release logged to file successfully"
                 )
             except Exception as e:
                 logger.error(
-                    f"[{booked_by}] Failed to log channel release: {e}", exc_info=True
+                    f"[{user_name}] Failed to log channel release: {e}", exc_info=True
                 )
         else:
-            logger.warning(f"[{booked_by}] File logger is None - skipping file logging")
+            logger.warning(f"[{user_name}] File logger is None - skipping file logging")
 
         return ChannelReleaseResponse(
-            booked_by=release_result["booked_by"],
+            user_name=release_result["user_name"],
             released_channels=release_result["released_channels"],
             total_released=release_result["total_released"],
         )
 
     except Exception as e:
-        logger.error(f"[{booked_by}] Channel release failed: {e}", exc_info=True)
+        logger.error(f"[{user_name}] Channel release failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=str(e),
         )
 
 
-async def get_booked_by_channels(
-    booked_by: str,
+async def get_user_name_channels(
+    user_name: str,
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> dict:
     """
-    Get all channels currently booked by a specific identifier (measurement or user).
+    Get all channels currently booked by a specific user.
 
     Args:
-        booked_by: The identifier (measurement_id or user)
+        user_name: The user identifier
 
     Returns:
         List of booked channels and count
     """
-    logger.debug(f"[{booked_by}] Get booked channels request")
+    logger.debug(f"[{user_name}] Get booked channels request")
 
     try:
-        channels = status_manager.get_booked_channels_by(booked_by)
+        channels = status_manager.get_booked_channels_by(user_name)
 
         return {
-            "booked_by": booked_by,
+            "user_name": user_name,
             "booked_channels": channels,
             "total_booked": len(channels),
         }
     except Exception as e:
-        logger.error(f"[{booked_by}] Failed to get booked channels: {e}", exc_info=True)
+        logger.error(f"[{user_name}] Failed to get booked channels: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=str(e),
@@ -610,12 +646,7 @@ async def stop_measurement(
                 f"[{measurement_id}] Cannot stop job in {current_status} state"
             )
 
-        # Release channels immediately
-        try:
-            status_manager.release_channels(measurement_id)
-            logger.info(f"[{measurement_id}] Channels released on stop")
-        except Exception as e:
-            logger.warning(f"[{measurement_id}] Error releasing channels on stop: {e}")
+        # Release channels was removed because channels are manually booked by user
 
         # Get updated status
         updated_status = status_manager.get_status(measurement_id)
@@ -736,6 +767,9 @@ async def list_measurements(
                 "list_available": "GET /api/v1/channels/available",
                 "book_channels": "POST /api/v1/channels/book",
                 "release_channels": "POST /api/v1/channels/release/{booked_by}",
+            },
+            "parameter_endpoints": {
+                "start_set_parameters": "POST /api/v1/set-parameters",
             },
         }
     except Exception as e:

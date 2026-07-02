@@ -9,7 +9,8 @@ from app.api.routes import (
     list_available_channels,
     book_channels,
     release_channels,
-    get_booked_by_channels,
+    get_user_name_channels,
+    
     stop_measurement,
     get_measurement_status,
     list_measurements
@@ -30,9 +31,10 @@ async def test_start_save_raw_tags_measurement():
     request = SaveRawTagsMeasurmentRequest(
         measurement_type=MeasurementType.SAVE_RAW_TAGS,
         duration_seconds=10.0,
-        metadata=SaveRawTagsMetadata(channel_list=[1, 2], target_file_path="test")
+        metadata=SaveRawTagsMetadata(user_name="test_user", channel_list=[1, 2], target_file_path="test")
     )
     mock_status_manager = MagicMock()
+    mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user", 3: "test_user", 4: "test_user"}
     mock_status_manager.book_channels.return_value = {"booked_channels": [1, 2], "booking_time": "time"}
     mock_job_processor = MagicMock()
     mock_file_logger = MagicMock()
@@ -42,13 +44,13 @@ async def test_start_save_raw_tags_measurement():
     assert res.status == "queued"
     
     # Booking fails
-    mock_status_manager.book_channels.side_effect = ValueError("Booking failed")
+    mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
     with pytest.raises(HTTPException) as exc:
         await start_save_raw_tags_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
-    assert exc.value.status_code == 409
+    assert exc.value.status_code == 500
     
     # Exception
-    mock_status_manager.book_channels.side_effect = Exception("Unknown")
+    mock_status_manager.validate_channels.side_effect = Exception("Unknown")
     with pytest.raises(HTTPException) as exc:
         await start_save_raw_tags_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
     assert exc.value.status_code == 500
@@ -58,9 +60,10 @@ async def test_start_correlation_measurement():
     request = CorrelationMeasurementRequest(
         measurement_type=MeasurementType.CORRELATION,
         duration_seconds=10.0,
-        metadata=CorrelationMetadata(channel1=1, channel2=2)
+        metadata=CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
     )
     mock_status_manager = MagicMock()
+    mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user", 3: "test_user", 4: "test_user"}
     mock_status_manager.book_channels.return_value = {"booked_channels": [1, 2], "booking_time": "time"}
     mock_job_processor = MagicMock()
     mock_file_logger = MagicMock()
@@ -68,12 +71,12 @@ async def test_start_correlation_measurement():
     res = await start_correlation_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
     assert res.status == "queued"
     
-    mock_status_manager.book_channels.side_effect = ValueError("Booking failed")
+    mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
     with pytest.raises(HTTPException) as exc:
         await start_correlation_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
-    assert exc.value.status_code == 409
+    assert exc.value.status_code == 500
     
-    mock_status_manager.book_channels.side_effect = Exception("Unknown")
+    mock_status_manager.validate_channels.side_effect = Exception("Unknown")
     with pytest.raises(HTTPException) as exc:
         await start_correlation_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
     assert exc.value.status_code == 500
@@ -83,9 +86,10 @@ async def test_start_coincidences_measurement():
     request = CoincidencesMeasurementRequest(
         measurement_type=MeasurementType.COINCIDENCES,
         duration_seconds=10.0,
-        metadata=CoincidencesMetadata(channels=[1, 2])
+        metadata=CoincidencesMetadata(user_name="test_user", channels=[1, 2])
     )
     mock_status_manager = MagicMock()
+    mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user", 3: "test_user", 4: "test_user"}
     mock_status_manager.book_channels.return_value = {"booked_channels": [1, 2], "booking_time": "time"}
     mock_job_processor = MagicMock()
     mock_file_logger = MagicMock()
@@ -93,12 +97,12 @@ async def test_start_coincidences_measurement():
     res = await start_coincidences_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
     assert res.status == "queued"
     
-    mock_status_manager.book_channels.side_effect = ValueError("Booking failed")
+    mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
     with pytest.raises(HTTPException) as exc:
         await start_coincidences_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
-    assert exc.value.status_code == 409
+    assert exc.value.status_code == 500
     
-    mock_status_manager.book_channels.side_effect = Exception("Unknown")
+    mock_status_manager.validate_channels.side_effect = Exception("Unknown")
     with pytest.raises(HTTPException) as exc:
         await start_coincidences_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
     assert exc.value.status_code == 500
@@ -137,10 +141,10 @@ async def test_channels_endpoints():
         await list_available_channels(mock_sm)
 
     mock_sm = MagicMock()
-    req = ChannelBookRequest(channel_numbers=[1], booked_by="me")
-    mock_sm.book_channels.return_value = {"booked_channels": [1], "booked_by": "me", "booking_time": "time", "total_booked": 1}
+    req = ChannelBookRequest(channel_numbers=[1, 2], user_name="test_user")
+    mock_sm.book_channels.return_value = {"booked_channels": [1, 2], "user_name": "test_user", "booking_time": "time", "total_booked": 2}
     res = await book_channels(req, mock_sm, MagicMock())
-    assert res.booked_channels == [1]
+    assert res.booked_channels == [1, 2]
 
     mock_sm.book_channels.side_effect = ValueError("Err")
     with pytest.raises(HTTPException) as exc:
@@ -152,8 +156,8 @@ async def test_channels_endpoints():
         await book_channels(req, mock_sm, MagicMock())
 
     mock_sm = MagicMock()
-    mock_sm.release_channels.return_value = {"released_channels": [1], "booked_by": "me", "total_released": 1}
-    res = await release_channels("me", mock_sm, MagicMock())
+    mock_sm.release_channels.return_value = {"released_channels": [1], "user_name": "test_user", "total_released": 1}
+    res = await release_channels("test_user", mock_sm, MagicMock())
     assert res.released_channels == [1]
     
     mock_sm.release_channels.side_effect = Exception("Err")
@@ -162,12 +166,12 @@ async def test_channels_endpoints():
 
     mock_sm = MagicMock()
     mock_sm.get_booked_channels_by.return_value = [1]
-    res = await get_booked_by_channels("me", mock_sm)
+    res = await get_user_name_channels("me", mock_sm)
     assert res["booked_channels"] == [1]
     
     mock_sm.get_booked_channels_by.side_effect = Exception("Err")
     with pytest.raises(HTTPException):
-        await get_booked_by_channels("me", mock_sm)
+        await get_user_name_channels("me", mock_sm)
 
 @pytest.mark.asyncio
 async def test_measurements_endpoints():
@@ -178,7 +182,7 @@ async def test_measurements_endpoints():
         "measurement_type": "count_rate",
         "duration_seconds": 10.0,
         "message": "msg",
-        "metadata": {},
+        "metadata": {"user_name": "test_user", },
         "results": {}
     }
     mock_jp = MagicMock()

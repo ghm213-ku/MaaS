@@ -56,7 +56,7 @@ class TestCorrelationJobProcessing:
     def test_handle_correlation_with_required_params(self, job_processor, mock_tagger):
         """Should handle correlation with only required parameters."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
         }
@@ -70,7 +70,7 @@ class TestCorrelationJobProcessing:
     def test_handle_correlation_with_all_params(self, job_processor, mock_tagger):
         """Should handle correlation with all parameters."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
             "binwidth": int(5e8),
@@ -89,7 +89,7 @@ class TestCorrelationJobProcessing:
     ):
         """Should raise error if duration_seconds is missing."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
         }
@@ -104,7 +104,7 @@ class TestCorrelationJobProcessing:
     ):
         """Should raise error if channel1 is missing."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel2": 2,
         }
 
@@ -118,7 +118,7 @@ class TestCorrelationJobProcessing:
     ):
         """Should raise error if channel2 is missing."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
         }
 
@@ -132,7 +132,7 @@ class TestCorrelationJobProcessing:
     ):
         """Should raise error if channel1 is None."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": None,
             "channel2": 2,
         }
@@ -147,7 +147,7 @@ class TestCorrelationJobProcessing:
     ):
         """Should raise error if channel2 is None."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": None,
         }
@@ -160,7 +160,7 @@ class TestCorrelationJobProcessing:
     def test_handle_correlation_uses_default_binwidth(self, job_processor, mock_tagger):
         """Should use default binwidth if not provided."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
         }
@@ -176,7 +176,7 @@ class TestCorrelationJobProcessing:
     def test_handle_correlation_uses_default_n_values(self, job_processor, mock_tagger):
         """Should use default n_values if not provided."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
         }
@@ -191,7 +191,7 @@ class TestCorrelationJobProcessing:
     ):
         """Should use default target_location if not provided."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
         }
@@ -207,6 +207,7 @@ class TestCorrelationJobProcessing:
         """Should create CorrelationMetadata object."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
         metadata_dict = {
+            "user_name": "test_user",
             "channel1": 1,
             "channel2": 2,
             "binwidth": int(5e8),
@@ -224,7 +225,7 @@ class TestCorrelationJobProcessing:
     ):
         """Should handle large channel numbers."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 101,
             "channel2": 102,
         }
@@ -237,7 +238,7 @@ class TestCorrelationJobProcessing:
     def test_enqueue_job_with_correlation(self, job_processor):
         """Should enqueue correlation job."""
         status_id = "test-status-id"
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
         }
@@ -253,7 +254,7 @@ class TestCorrelationJobProcessing:
         assert job_processor.redis_client.rpush.called
 
     def test_run_job_calls_handler_start(self, job_processor, mock_status_manager, mock_tagger):
-        metadata = {'channel1': 1, 'channel2': 2}
+        metadata = {"user_name": "test_user", 'channel1': 1, 'channel2': 2}
         job_processor.job_handlers['correlation'] = __import__('unittest').mock.MagicMock()
         handler_mock = __import__('unittest').mock.MagicMock()
         job_processor.job_handlers['correlation'].return_value = handler_mock
@@ -265,7 +266,7 @@ class TestCorrelationJobProcessing:
     ):
         """Handler should receive CorrelationMetadata with correct values."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 3,
             "channel2": 4,
             "binwidth": int(2e9),
@@ -287,7 +288,7 @@ class TestCorrelationHandlerIntegration:
     async def test_correlation_handler_execution(self, mock_tagger):
         """Should execute correlation handler correctly."""
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = CorrelationMetadata(
+        metadata = CorrelationMetadata(user_name="test_user", 
             channel1=1,
             channel2=2,
             binwidth=int(1e9),
@@ -310,7 +311,7 @@ class TestCorrelationHandlerIntegration:
         processor.register_handler("correlation", CorrelationMeasurementHandler)
 
         handler = CorrelationMeasurementHandler(tagger=mock_tagger)
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
             "binwidth": int(1e9),
@@ -331,7 +332,7 @@ class TestCorrelationHandlerIntegration:
         
         mock_savetxt.side_effect = PermissionError("Permission denied: 'C:\\test'")
         
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel1": 1,
             "channel2": 2,
             "target_location": "C:\\test\\test.csv",
@@ -359,7 +360,7 @@ class TestCorrelationHandlerIntegration:
         
         import TimeTagger
         with patch("TimeTagger.Correlation", side_effect=Exception("Hardware missing")):
-            metadata = {
+            metadata = {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
             }

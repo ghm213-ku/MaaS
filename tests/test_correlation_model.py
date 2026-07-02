@@ -19,7 +19,7 @@ class TestCorrelationMeasurementRequestModel:
 
     def test_model_creation_with_valid_metadata(self):
         """Should create valid CorrelationMeasurementRequest."""
-        metadata = CorrelationMetadata(
+        metadata = CorrelationMetadata(user_name="test_user", 
             channel1=1,
             channel2=2,
             binwidth=int(1e9),
@@ -39,14 +39,14 @@ class TestCorrelationMeasurementRequestModel:
 
     def test_model_default_measurement_type(self):
         """Should default to CORRELATION measurement type."""
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
         request = CorrelationMeasurementRequest(duration_seconds=60, metadata=metadata)
 
         assert request.measurement_type == MeasurementType.CORRELATION
 
     def test_model_requires_duration_seconds(self):
         """Should require duration_seconds field."""
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
 
         with pytest.raises(ValidationError) as exc_info:
             CorrelationMeasurementRequest(metadata=metadata)
@@ -62,7 +62,7 @@ class TestCorrelationMeasurementRequestModel:
 
     def test_model_dict_serialization(self):
         """Should serialize to dictionary correctly."""
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
         request = CorrelationMeasurementRequest(duration_seconds=60, metadata=metadata)
 
         request_dict = request.dict()
@@ -81,7 +81,7 @@ class TestCorrelationMeasurementRequestModel:
 
     def test_model_with_custom_parameters(self):
         """Should accept custom binwidth and n_values."""
-        metadata = CorrelationMetadata(
+        metadata = CorrelationMetadata(user_name="test_user", 
             channel1=3,
             channel2=4,
             binwidth=int(5e8),
@@ -97,14 +97,14 @@ class TestCorrelationMeasurementRequestModel:
 
     def test_model_duration_seconds_must_be_int(self):
         """duration_seconds should be integer."""
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
 
         with pytest.raises(ValidationError):
             CorrelationMeasurementRequest(duration_seconds="not_int", metadata=metadata)
 
     def test_model_with_minimal_metadata(self):
         """Should work with minimal metadata (only required fields)."""
-        metadata = CorrelationMetadata(channel1=1, channel2=2)
+        metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
         request = CorrelationMeasurementRequest(duration_seconds=30, metadata=metadata)
 
         assert request.duration_seconds == 30
@@ -183,7 +183,7 @@ class TestCorrelationPayloadMapper:
     def test_mapper_validate_and_parse_correlation_valid(self):
         """Should parse valid correlation payload."""
         payload = {
-            "channel1": 1,
+            "user_name": "test_user", "channel1": 1,
             "channel2": 2,
             "binwidth": 1000000000,
             "n_values": 100,
@@ -197,7 +197,7 @@ class TestCorrelationPayloadMapper:
 
     def test_mapper_validate_and_parse_correlation_minimal(self):
         """Should parse minimal correlation payload (only channels required)."""
-        payload = {"channel1": 1, "channel2": 2}
+        payload = {"user_name": "test_user", "channel1": 1, "channel2": 2}
         result = MeasurementPayloadMapper.validate_and_parse("correlation", payload)
 
         assert isinstance(result, CorrelationMeasurementRequest)
@@ -215,7 +215,7 @@ class TestCorrelationPayloadMapper:
 
     def test_mapper_validate_and_parse_correlation_missing_channel2(self):
         """Should raise ValidationError if channel2 is missing."""
-        payload = {"channel1": 1}
+        payload = {"user_name": "test_user", "channel1": 1}
 
         with pytest.raises(ValidationError):
             MeasurementPayloadMapper.validate_and_parse("correlation", payload)
@@ -229,7 +229,7 @@ class TestCorrelationPayloadMapper:
 
     def test_mapper_validate_and_parse_correlation_invalid_channel2_type(self):
         """Should raise ValidationError if channel2 is not an integer."""
-        payload = {"channel1": 1, "channel2": "not_int"}
+        payload = {"user_name": "test_user", "channel1": 1, "channel2": "not_int"}
 
         with pytest.raises(ValidationError):
             MeasurementPayloadMapper.validate_and_parse("correlation", payload)

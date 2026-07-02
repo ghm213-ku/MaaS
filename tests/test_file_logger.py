@@ -50,7 +50,7 @@ class TestFileLoggerInitialization:
                 content = f.read()
                 assert "CHANNEL BOOKING AND RELEASE REQUESTS LOG" in content
                 assert (
-                    "Booked By | Channel Numbers | Request Type | Timestamp | Details"
+                    "User Name | Channel Numbers | Request Type | Timestamp | Details"
                     in content
                 )
                 assert "=" * 80 in content
@@ -94,7 +94,7 @@ class TestChannelBookRequestLogging:
             timestamp = datetime(2026, 5, 22, 10, 30, 45, 123000)
 
             logger.log_channel_book_request(
-                booked_by="measurement-001",
+                user_name="measurement-001",
                 channel_numbers=[1, 2, 3],
                 timestamp=timestamp,
             )
@@ -114,7 +114,7 @@ class TestChannelBookRequestLogging:
             logger = FileLogger(temp_dir)
 
             logger.log_channel_book_request(
-                booked_by="user-abc",
+                user_name="user-abc",
                 channel_numbers=[5],
                 timestamp=datetime(2026, 5, 22, 12, 0, 0),
             )
@@ -132,7 +132,7 @@ class TestChannelBookRequestLogging:
             logger = FileLogger(temp_dir)
 
             logger.log_channel_book_request(
-                booked_by="measurement-xyz",
+                user_name="measurement-xyz",
                 channel_numbers=[1, 2, 3, 4, 5, 6, 7, 8],
             )
 
@@ -148,7 +148,7 @@ class TestChannelBookRequestLogging:
             before = datetime.utcnow()
 
             logger.log_channel_book_request(
-                booked_by="user-test",
+                user_name="user-test",
                 channel_numbers=[1, 2],
                 timestamp=None,
             )
@@ -176,7 +176,7 @@ class TestChannelReleaseRequestLogging:
             timestamp = datetime(2026, 5, 22, 11, 45, 30, 500000)
 
             logger.log_channel_release_request(
-                booked_by="measurement-001",
+                user_name="measurement-001",
                 released_channels=[1, 2, 3],
                 timestamp=timestamp,
             )
@@ -197,21 +197,21 @@ class TestChannelReleaseRequestLogging:
 
             # Book channels
             logger.log_channel_book_request(
-                booked_by="measurement-001",
+                user_name="measurement-001",
                 channel_numbers=[1, 2, 3],
                 timestamp=datetime(2026, 5, 22, 10, 0, 0),
             )
 
             # Release channels
             logger.log_channel_release_request(
-                booked_by="measurement-001",
+                user_name="measurement-001",
                 released_channels=[1, 2, 3],
                 timestamp=datetime(2026, 5, 22, 10, 5, 0),
             )
 
             # Book different channels
             logger.log_channel_book_request(
-                booked_by="measurement-002",
+                user_name="measurement-002",
                 channel_numbers=[4, 5],
                 timestamp=datetime(2026, 5, 22, 10, 10, 0),
             )
@@ -242,7 +242,7 @@ class TestTimestampHandling:
             iso_timestamp = "2026-05-22T14:30:45.123456"
 
             logger.log_channel_book_request(
-                booked_by="measurement-001",
+                user_name="measurement-001",
                 channel_numbers=[1, 2, 3],
                 timestamp=iso_timestamp,
             )
@@ -262,7 +262,7 @@ class TestTimestampHandling:
             iso_timestamp = "2026-05-22T15:45:30.987654"
 
             logger.log_channel_release_request(
-                booked_by="measurement-001",
+                user_name="measurement-001",
                 released_channels=[1, 2, 3],
                 timestamp=iso_timestamp,
             )
@@ -284,7 +284,7 @@ class TestTimestampHandling:
                 measurement_id="meas-001",
                 measurement_type="count_rate",
                 duration_seconds=60,
-                metadata={"detector": "det_001"},
+                metadata={"user_name": "test_user", "detector": "det_001"},
                 timestamp=iso_timestamp,
             )
 
@@ -320,14 +320,14 @@ class TestTimestampHandling:
 
             # First request with datetime object
             logger.log_channel_book_request(
-                booked_by="user-1",
+                user_name="user-1",
                 channel_numbers=[1, 2],
                 timestamp=datetime(2026, 5, 22, 10, 0, 0),
             )
 
             # Second request with ISO format string
             logger.log_channel_book_request(
-                booked_by="user-2",
+                user_name="user-2",
                 channel_numbers=[3, 4],
                 timestamp="2026-05-22T11:00:00.000000",
             )
@@ -353,7 +353,7 @@ class TestMeasurementRequestLogging:
                 measurement_id="meas-abc-123",
                 measurement_type="count_rate",
                 duration_seconds=60,
-                metadata={"detector_id": "det_001"},
+                metadata={"user_name": "test_user", "detector_id": "det_001"},
                 timestamp=timestamp,
             )
 
@@ -371,7 +371,7 @@ class TestMeasurementRequestLogging:
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = FileLogger(temp_dir)
 
-            metadata = {
+            metadata = {"user_name": "test_user", 
                 "channel_list": [1, 2, 3],
                 "target_file_path": "C:\\Users\\test\\data",
             }
@@ -400,7 +400,7 @@ class TestMeasurementRequestLogging:
                 measurement_id="meas-manual-001",
                 measurement_type="count_rate",
                 duration_seconds=None,
-                metadata={"mode": "manual"},
+                metadata={"user_name": "test_user", "mode": "manual"},
             )
 
             measurement_file = os.path.join(temp_dir, "measurement_requests.txt")
@@ -438,7 +438,7 @@ class TestMeasurementRequestLogging:
                 measurement_id="meas-001",
                 measurement_type="count_rate",
                 duration_seconds=60,
-                metadata={"detector": "det_001"},
+                metadata={"user_name": "test_user", "detector": "det_001"},
                 timestamp=datetime(2026, 5, 22, 10, 0, 0),
             )
 
@@ -447,7 +447,7 @@ class TestMeasurementRequestLogging:
                 measurement_id="meas-002",
                 measurement_type="save_raw_tags",
                 duration_seconds=120,
-                metadata={"channels": [1, 2, 3]},
+                metadata={"user_name": "test_user", "channels": [1, 2, 3]},
                 timestamp=datetime(2026, 5, 22, 10, 5, 0),
             )
 
@@ -469,7 +469,7 @@ class TestAppendBehavior:
             # First instance - create files and add entry
             logger1 = FileLogger(temp_dir)
             logger1.log_channel_book_request(
-                booked_by="user-1",
+                user_name="user-1",
                 channel_numbers=[1, 2],
                 timestamp=datetime(2026, 5, 22, 10, 0, 0),
             )
@@ -481,7 +481,7 @@ class TestAppendBehavior:
             # Second instance - should append, not recreate
             logger2 = FileLogger(temp_dir)
             logger2.log_channel_book_request(
-                booked_by="user-2",
+                user_name="user-2",
                 channel_numbers=[3, 4],
                 timestamp=datetime(2026, 5, 22, 11, 0, 0),
             )
@@ -574,7 +574,7 @@ class TestErrorHandling:
             try:
                 # Should not raise exception, but may print error
                 logger.log_channel_book_request(
-                    booked_by="test",
+                    user_name="test",
                     channel_numbers=[1],
                 )
                 # If we get here, error was handled gracefully
@@ -616,13 +616,13 @@ class TestLogFormatting:
 
             # Log multiple entries
             logger.log_channel_book_request(
-                booked_by="test-user",
+                user_name="test-user",
                 channel_numbers=[1, 2],
                 timestamp=datetime(2026, 5, 22, 10, 0, 0),
             )
 
             logger.log_channel_release_request(
-                booked_by="test-user",
+                user_name="test-user",
                 released_channels=[1, 2],
                 timestamp=datetime(2026, 5, 22, 10, 5, 0),
             )
@@ -662,7 +662,7 @@ class TestLogFormatting:
                 measurement_id="test-meas-002",
                 measurement_type="save_raw_tags",
                 duration_seconds=120,
-                metadata={"key": "value"},
+                metadata={"user_name": "test_user", "key": "value"},
             )
 
             measurement_file = os.path.join(temp_dir, "measurement_requests.txt")

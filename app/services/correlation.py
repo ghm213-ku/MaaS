@@ -55,8 +55,6 @@ class CorrelationMeasurementHandler(MeasurementHandler):
         )
 
         self._measurement_task = asyncio.current_task()
-        self.tagger.setTestSignal(1, True)
-        self.tagger.setTestSignal(2, True)
 
         # Start the counting task
         counter = TimeTagger.Correlation(

@@ -47,7 +47,7 @@ class TestMeasurementPayloadMapper:
     def test_validate_and_parse_count_rate_valid(self):
         """Should successfully parse valid count-rate payload."""
         payload = {
-            "channels": [1, 2, 3],
+            "user_name": "test_user", "channels": [1, 2, 3],
             "binwidth": 1000000000,
             "n_values": 1,
             "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -61,7 +61,7 @@ class TestMeasurementPayloadMapper:
 
     def test_validate_and_parse_count_rate_minimal(self):
         """Should parse minimal valid count-rate payload (only channels required)."""
-        payload = {"channels": [1]}
+        payload = {"user_name": "test_user", "channels": [1]}
         result = MeasurementPayloadMapper.validate_and_parse("count_rate", payload)
 
         assert isinstance(result, CountRateMeasurementRequest)
@@ -72,7 +72,7 @@ class TestMeasurementPayloadMapper:
     def test_validate_and_parse_missing_measurement_type_ok(self):
         """Should handle payload with custom parameters."""
         # The new format requires channels as only mandatory field
-        payload = {"channels": [1, 2], "binwidth": 500000000, "n_values": 10}
+        payload = {"user_name": "test_user", "channels": [1, 2], "binwidth": 500000000, "n_values": 10}
         result = MeasurementPayloadMapper.validate_and_parse("count_rate", payload)
 
         # Should succeed
@@ -146,7 +146,7 @@ class TestPayloadHelpers:
     def test_validate_payload_for_type_valid(self):
         """Should validate payload for type."""
         payload = {
-            "channels": [1, 2],
+            "user_name": "test_user", "channels": [1, 2],
             "binwidth": 1000000000,
             "n_values": 1,
             "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -178,7 +178,7 @@ class TestPayloadEdgeCases:
     def test_empty_metadata(self):
         """Should handle multiple channels."""
         payload = {
-            "channels": [1, 2, 3, 4, 5],
+            "user_name": "test_user", "channels": [1, 2, 3, 4, 5],
         }
         result = MeasurementPayloadMapper.validate_and_parse("count_rate", payload)
         assert result.channels == [1, 2, 3, 4, 5]
@@ -186,7 +186,7 @@ class TestPayloadEdgeCases:
     def test_large_duration(self):
         """Should handle large binwidth values."""
         payload = {
-            "channels": [1],
+            "user_name": "test_user", "channels": [1],
             "binwidth": 10000000000,  # Large binwidth
         }
         result = MeasurementPayloadMapper.validate_and_parse("count_rate", payload)
@@ -195,7 +195,7 @@ class TestPayloadEdgeCases:
     def test_complex_metadata(self):
         """Should handle complex custom target paths."""
         payload = {
-            "channels": [1, 2, 3],
+            "user_name": "test_user", "channels": [1, 2, 3],
             "binwidth": 1000000000,
             "n_values": 100,
             "target_location": "C:\\custom\\path\\measurement_{datetime}.csv",

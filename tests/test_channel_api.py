@@ -5,7 +5,7 @@ including:
 - List all channels (GET /api/v1/channels/)
 - List available channels (GET /api/v1/channels/available)
 - Book channels (POST /api/v1/channels/book)
-- Release channels (POST /api/v1/channels/release/{booked_by})
+- Release channels (POST /api/v1/channels/release/{user_name})
 
 Tests verify proper channel state management, validation, and error handling.
 """
@@ -25,7 +25,7 @@ from app.api import routes
 def client():
     """Create a test client with mocked channel management."""
     # Channel state tracking
-    booked_channels = {}  # {channel: booked_by}
+    booked_channels = {}  # {channel: user_name}
     available_channels = (
         list(range(1, 17)) + list(range(101, 117)) + list(range(201, 217))
     )
@@ -53,12 +53,12 @@ def client():
             result = []
             for ch in all_channels:
                 status = "booked" if ch in booked_channels else "available"
-                booked_by = booked_channels.get(ch)
+                user_name= booked_channels.get(ch)
                 result.append(
                     {
                         "channel_number": ch,
                         "status": status,
-                        "booked_by": booked_by,
+                        "user_name": user_name,
                     }
                 )
             return result
@@ -73,13 +73,13 @@ def client():
 
         # Get booked channels
         def get_booked_channels_side_effect():
-            """Return mapping of booked channels to booked_by identifiers."""
+            """Return mapping of booked channels to user_name identifiers."""
             return dict(booked_channels)
 
         # Get booked channels by identifier
-        def get_booked_channels_by_side_effect(booked_by):
+        def get_booked_channels_by_side_effect(user_name):
             """Return channels booked by a specific identifier."""
-            return [ch for ch, by in booked_channels.items() if by == booked_by]
+            return [ch for ch, by in booked_channels.items() if by == user_name]
 
         # Get channel stats
         def get_channel_stats_side_effect():
@@ -100,7 +100,7 @@ def client():
             }
 
         # Book channels
-        def book_channels_side_effect(channels, booked_by):
+        def book_channels_side_effect(channels, user_name):
             """Book channels for a measurement or user."""
             # Validate first
             validate_channels_side_effect(channels)
@@ -112,26 +112,26 @@ def client():
 
             # Book the channels
             for ch in channels:
-                booked_channels[ch] = booked_by
+                booked_channels[ch] = user_name
 
             return {
-                "booked_by": booked_by,
+                "user_name": user_name,
                 "booked_channels": channels,
                 "booking_time": datetime.utcnow().isoformat(),
                 "total_booked": len(channels),
             }
 
         # Release channels
-        def release_channels_side_effect(booked_by):
+        def release_channels_side_effect(user_name):
             """Release all channels booked by an identifier."""
             released = []
             for ch, by in list(booked_channels.items()):
-                if by == booked_by:
+                if by == user_name:
                     del booked_channels[ch]
                     released.append(ch)
 
             return {
-                "booked_by": booked_by,
+                "user_name": user_name,
                 "released_channels": released,
                 "total_released": len(released),
             }
@@ -210,7 +210,7 @@ class TestListAllChannels:
         # Book some channels first
         book_response = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-001", "channel_numbers": [1, 2, 3]},
+            json={"user_name": "measurement-001", "channel_numbers": [1, 2, 3]},
         )
         assert book_response.status_code == 201
 
@@ -226,7 +226,7 @@ class TestListAllChannels:
         channels = data["channels"]
         booked_ch = [ch for ch in channels if ch["channel_number"] in [1, 2, 3]]
         assert all(ch["status"] == "booked" for ch in booked_ch)
-        assert all(ch["booked_by"] == "measurement-001" for ch in booked_ch)
+        assert all(ch["user_name"] == "measurement-001" for ch in booked_ch)
 
     def test_list_channels_response_format(self, client):
         """Should return properly formatted response."""
@@ -258,7 +258,7 @@ class TestListAvailableChannels:
         assert "available_channels" in data
         assert "booked_channels" in data
         assert "utilization_percent" in data
-        assert "booked_by_identifier" in data
+        assert "user_names" in data
 
         # Initially all should be available
         assert data["available_channels"] == 48
@@ -271,7 +271,7 @@ class TestListAvailableChannels:
         # Book channels
         book_response = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-002", "channel_numbers": [1, 5, 10]},
+            json={"user_name": "measurement-002", "channel_numbers": [1, 5, 10]},
         )
         assert book_response.status_code == 201
 
@@ -286,16 +286,16 @@ class TestListAvailableChannels:
         assert 5 not in data["available_channel_numbers"]
         assert 10 not in data["available_channel_numbers"]
 
-        # Check booked_by_identifier mapping
-        assert "measurement-002" in data["booked_by_identifier"]
-        assert set(data["booked_by_identifier"]["measurement-002"]) == {1, 5, 10}
+        # Check user_names mapping
+        assert "measurement-002" in data["user_names"]
+        assert set(data["user_names"]["measurement-002"]) == {1, 5, 10}
 
     def test_list_available_utilization_percent(self, client):
         """Should calculate utilization percentage correctly."""
         # Book 8 out of 48 channels (16.67%)
         client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "test-001", "channel_numbers": [1, 2, 3, 4, 5, 6, 7, 8]},
+            json={"user_name": "test-001", "channel_numbers": [1, 2, 3, 4, 5, 6, 7, 8]},
         )
 
         response = client.get("/api/v1/channels/available")
@@ -312,14 +312,14 @@ class TestBookChannels:
         """Should successfully book available channels."""
         response = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-003", "channel_numbers": [1, 2, 3]},
+            json={"user_name": "measurement-003", "channel_numbers": [1, 2, 3]},
         )
 
         assert response.status_code == 201
         data = response.json()
 
         # Verify response
-        assert data["booked_by"] == "measurement-003"
+        assert data["user_name"] == "measurement-003"
         assert set(data["booked_channels"]) == {1, 2, 3}
         assert data["total_booked"] == 3
         assert "booking_time" in data
@@ -328,7 +328,7 @@ class TestBookChannels:
         """Should reject invalid channel numbers."""
         response = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-004", "channel_numbers": [1, 999]},
+            json={"user_name": "measurement-004", "channel_numbers": [1, 999]},
         )
 
         assert response.status_code == 400
@@ -339,13 +339,13 @@ class TestBookChannels:
         # Book channels first
         client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-005", "channel_numbers": [1, 2]},
+            json={"user_name": "measurement-005", "channel_numbers": [1, 2]},
         )
 
         # Try to book same channels
         response = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-006", "channel_numbers": [1, 3]},
+            json={"user_name": "measurement-006", "channel_numbers": [1, 3]},
         )
 
         assert response.status_code == 409
@@ -356,14 +356,14 @@ class TestBookChannels:
         # Book for measurement 1
         response1 = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-007", "channel_numbers": [1, 2, 3]},
+            json={"user_name": "measurement-007", "channel_numbers": [1, 2, 3]},
         )
         assert response1.status_code == 201
 
         # Book for measurement 2
         response2 = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-008", "channel_numbers": [5, 6, 7]},
+            json={"user_name": "measurement-008", "channel_numbers": [5, 6, 7]},
         )
         assert response2.status_code == 201
 
@@ -371,14 +371,14 @@ class TestBookChannels:
         list_response = client.get("/api/v1/channels/available")
         data = list_response.json()
 
-        assert "measurement-007" in data["booked_by_identifier"]
-        assert "measurement-008" in data["booked_by_identifier"]
+        assert "measurement-007" in data["user_names"]
+        assert "measurement-008" in data["user_names"]
 
     def test_book_channels_empty_list(self, client):
         """Should handle empty channel list."""
         response = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-009", "channel_numbers": []},
+            json={"user_name": "measurement-009", "channel_numbers": []},
         )
 
         # Should succeed but book nothing
@@ -388,14 +388,14 @@ class TestBookChannels:
 
 
 class TestReleaseChannels:
-    """Test POST /api/v1/channels/release/{booked_by} - Release channels."""
+    """Test POST /api/v1/channels/release/{user_name} - Release channels."""
 
     def test_release_channels_success(self, client):
         """Should successfully release booked channels."""
         # Book channels first
         client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-010", "channel_numbers": [1, 2, 3]},
+            json={"user_name": "measurement-010", "channel_numbers": [1, 2, 3]},
         )
 
         # Release channels
@@ -405,7 +405,7 @@ class TestReleaseChannels:
         data = response.json()
 
         # Verify response
-        assert data["booked_by"] == "measurement-010"
+        assert data["user_name"] == "measurement-010"
         assert set(data["released_channels"]) == {1, 2, 3}
         assert data["total_released"] == 3
 
@@ -417,7 +417,7 @@ class TestReleaseChannels:
         data = response.json()
 
         # Should return empty release
-        assert data["booked_by"] == "measurement-nonexistent"
+        assert data["user_name"] == "measurement-nonexistent"
         assert data["released_channels"] == []
         assert data["total_released"] == 0
 
@@ -428,7 +428,7 @@ class TestReleaseChannels:
         # Book channels
         client.post(
             "/api/v1/channels/book",
-            json={"booked_by": measurement_id, "channel_numbers": [10, 11, 12]},
+            json={"user_name": measurement_id, "channel_numbers": [10, 11, 12]},
         )
 
         # Verify booked
@@ -450,13 +450,13 @@ class TestReleaseChannels:
         # Book for measurement 1
         client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-012", "channel_numbers": [1, 2]},
+            json={"user_name": "measurement-012", "channel_numbers": [1, 2]},
         )
 
         # Book for measurement 2
         client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "measurement-013", "channel_numbers": [5, 6]},
+            json={"user_name": "measurement-013", "channel_numbers": [5, 6]},
         )
 
         # Release measurement 1
@@ -485,7 +485,7 @@ class TestChannelIntegration:
         # 2. Book channels
         response2 = client.post(
             "/api/v1/channels/book",
-            json={"booked_by": measurement_id, "channel_numbers": [5, 10, 15]},
+            json={"user_name": measurement_id, "channel_numbers": [5, 10, 15]},
         )
         assert response2.status_code == 201
         assert response2.json()["total_booked"] == 3
@@ -515,7 +515,7 @@ class TestChannelIntegration:
         for meas_id, channels in measurements:
             response = client.post(
                 "/api/v1/channels/book",
-                json={"booked_by": meas_id, "channel_numbers": channels},
+                json={"user_name": meas_id, "channel_numbers": channels},
             )
             assert response.status_code == 201
 
@@ -536,11 +536,11 @@ class TestChannelIntegration:
         """Verify channel statistics are accurate."""
         # Book different amounts
         client.post(
-            "/api/v1/channels/book", json={"booked_by": "m1", "channel_numbers": [1]}
+            "/api/v1/channels/book", json={"user_name": "m1", "channel_numbers": [1]}
         )
         client.post(
             "/api/v1/channels/book",
-            json={"booked_by": "m2", "channel_numbers": [2, 3, 4]},
+            json={"user_name": "m2", "channel_numbers": [2, 3, 4]},
         )
 
         # Get stats

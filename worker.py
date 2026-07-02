@@ -93,7 +93,9 @@ class BackendWorker:
 
             logger.debug("Initializing TimeTagger...")
             tagger = TimeTagger.createTimeTagger()
-            tagger.setTestSignal([1, 2, 3, 4], True)
+            tagger.setTestSignal([2, 3, 4], True)
+            tagger.setTriggerLevel(12, 0.0)
+            tagger.setTriggerLevel(16, 0.0)
 
             logger.debug("Creating JobProcessor...")
             self.job_processor = JobProcessor(self.status_manager, tagger=tagger)

@@ -19,7 +19,7 @@ class TestCoincidencesMeasurementHandler:
     async def test_start_and_stop_coincidences(self, mock_tagger):
         """Should initialize and stop gracefully."""
         handler = CoincidencesMeasurementHandler(tagger=mock_tagger)
-        metadata = CoincidencesMetadata(
+        metadata = CoincidencesMetadata(user_name="test_user", 
             coincidenceWindow=1000,
             channels=[1, 2]
         )

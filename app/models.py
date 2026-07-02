@@ -13,6 +13,7 @@ class MeasurementType(str, Enum):
     SAVE_RAW_TAGS = "save_raw_tags"
     CORRELATION = "correlation"
     COINCIDENCES = "coincidences"
+    SET_PARAMETERS = "set_parameters"
 
 
 class CountRateMetadata(BaseModel):
@@ -20,6 +21,9 @@ class CountRateMetadata(BaseModel):
 
     channels: list[int] = Field(
         description="List of channel numbers to measure. Required."
+    )
+    user_name: str = Field(
+        description="The user who booked the channels. Required."
     )
     binwidth: int = Field(
         default=int(1e9),
@@ -50,6 +54,7 @@ class CorrelationMetadata(BaseModel):
 
     channel1: int = Field(description="First channel number to correlate. Required.")
     channel2: int = Field(description="Second channel number to correlate. Required.")
+    user_name: str = Field(description="The user who booked the channels. Required.")
     binwidth: int = Field(
         default=int(1e3),
         description="Bin width in picoseconds for histogram. Default: 1e3 (1 millisecond)",
@@ -68,6 +73,7 @@ class CorrelationMetadata(BaseModel):
             "example": {
                 "channel1": 1,
                 "channel2": 2,
+                "user_name": "abc-123-def",
                 "binwidth": 1000000000,
                 "n_values": 100,
                 "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -80,6 +86,9 @@ class CoincidencesMetadata(BaseModel):
 
     channels: list[int] = Field(
         description="List of channel numbers to measure. Required."
+    )
+    user_name: str = Field(
+        description="The user who booked the channels. Required."
     )
     binwidth: int = Field(
         default=int(1e9),
@@ -111,6 +120,9 @@ class SaveRawTagsMetadata(BaseModel):
     channel_list: list[int] = Field(
         description="List of channels to save raw tags from. Required."
     )
+    user_name: str = Field(
+        description="The user who booked the channels. Required."
+    )
     target_file_path: str = Field(
         description="File path to save the raw tags data. Required."
     )
@@ -119,7 +131,37 @@ class SaveRawTagsMetadata(BaseModel):
         json_schema_extra = {
             "example": {
                 "channel_list": [1, 2, 3],
+                "user_name": "abc-123-def",
                 "target_file_path": "C:\\Users\\s257050\\Desktop\\fileWriter",
+            }
+        }
+
+
+class SetParametersMetadata(BaseModel):
+    """Metadata model for setting parameters with required and optional fields."""
+
+    channels: list[int] = Field(
+        description="List of channel numbers to configure. Required."
+    )
+    user_name: str = Field(
+        description="The user who booked the channels. Required."
+    )
+    input_delay: Optional[int] = Field(
+        default=None,
+        description="Input delay in picoseconds",
+    )
+    trigger_voltage: Optional[float] = Field(
+        default=None,
+        description="Trigger voltage in volts",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "channels": [1, 2],
+                "user_name": "abc-123-def",
+                "input_delay": 1000,
+                "trigger_voltage": 0.5,
             }
         }
 
@@ -153,6 +195,10 @@ class CountRateMeasurementRequest(BaseModel):
         return self.metadata.channels
 
     @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+    @property
     def binwidth(self) -> int:
         return self.metadata.binwidth
 
@@ -171,6 +217,7 @@ class CountRateMeasurementRequest(BaseModel):
                 "duration_seconds": 60,
                 "metadata": {
                     "channels": [1, 2, 3],
+                    "user_name": "abc-123-def",
                     "binwidth": 1000000000,
                     "n_values": 1,
                     "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -212,6 +259,10 @@ class CorrelationMeasurementRequest(BaseModel):
         return self.metadata.channel2
 
     @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+    @property
     def binwidth(self) -> int:
         return self.metadata.binwidth
 
@@ -231,6 +282,7 @@ class CorrelationMeasurementRequest(BaseModel):
                 "metadata": {
                     "channel1": 1,
                     "channel2": 2,
+                    "user_name": "abc-123-def",
                     "binwidth": 1000000000,
                     "n_values": 100,
                     "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -268,6 +320,10 @@ class CoincidencesMeasurementRequest(BaseModel):
         return self.metadata.channels
 
     @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+    @property
     def binwidth(self) -> int:
         return self.metadata.binwidth
 
@@ -286,6 +342,7 @@ class CoincidencesMeasurementRequest(BaseModel):
                 "duration_seconds": 60,
                 "metadata": {
                     "channels": [1, 2, 3],
+                    "user_name": "abc-123-def",
                     "binwidth": 1000000000,
                     "n_values": 1,
                     "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -321,6 +378,10 @@ class SaveRawTagsMeasurmentRequest(BaseModel):
         return self.metadata.channel_list
 
     @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+    @property
     def target_file_path(self) -> str:
         return self.metadata.target_file_path
 
@@ -331,7 +392,63 @@ class SaveRawTagsMeasurmentRequest(BaseModel):
                 "duration_seconds": 60,
                 "metadata": {
                     "channel_list": [1, 2, 3],
+                    "user_name": "abc-123-def",
                     "target_file_path": "C:\\Users\\s257050\\Desktop\\fileWriter",
+                },
+            }
+        }
+
+
+class SetParametersRequest(BaseModel):
+    """Request model for setting parameters."""
+
+    measurement_type: MeasurementType = MeasurementType.SET_PARAMETERS
+    duration_seconds: int = Field(
+        default=0, description="Duration in seconds (typically 0 for immediate application)"
+    )
+    metadata: SetParametersMetadata = Field(
+        description="Metadata containing channels, user_name, input_delay, and trigger_voltage"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 0)
+            measurement_type = data.pop("measurement_type", MeasurementType.SET_PARAMETERS)
+            return {
+                "measurement_type": measurement_type,
+                "duration_seconds": duration_seconds,
+                "metadata": data,
+            }
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return self.metadata.channels
+
+    @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+    @property
+    def input_delay(self) -> Optional[int]:
+        return self.metadata.input_delay
+
+    @property
+    def trigger_voltage(self) -> Optional[float]:
+        return self.metadata.trigger_voltage
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "measurement_type": "set_parameters",
+                "duration_seconds": 0,
+                "metadata": {
+                    "channels": [1, 2],
+                    "user_name": "abc-123-def",
+                    "input_delay": 1000,
+                    "trigger_voltage": 0.5,
                 },
             }
         }
@@ -381,8 +498,8 @@ class ChannelInfo(BaseModel):
         description="Channel number (1-16, 101-116, or 201-216)"
     )
     status: str = Field(description="Channel status: 'available' or 'booked'")
-    booked_by: Optional[str] = Field(
-        None, description="Who booked the channel (measurement_id or user identifier)"
+    user_name: Optional[str] = Field(
+        None, description="Who booked the channel (user identifier)"
     )
     booking_time: Optional[str] = Field(
         None, description="ISO timestamp of when booked"
@@ -392,8 +509,8 @@ class ChannelInfo(BaseModel):
 class ChannelBookRequest(BaseModel):
     """Request to book channels."""
 
-    booked_by: str = Field(
-        description="Who is booking the channels (measurement_id or user identifier)"
+    user_name: str = Field(
+        description="Who is booking the channels (user identifier)"
     )
     channel_numbers: list[int] = Field(
         description="List of channel numbers to book (e.g., [1, 2, 3] or [101, 102])"
@@ -401,14 +518,14 @@ class ChannelBookRequest(BaseModel):
 
     class Config:
         json_schema_extra = {
-            "example": {"booked_by": "abc-123-def", "channel_numbers": [1, 2, 3]}
+            "example": {"user_name": "abc-123-def", "channel_numbers": [1, 2, 3]}
         }
 
 
 class ChannelBookResponse(BaseModel):
     """Response after booking channels."""
 
-    booked_by: str
+    user_name: str
     booked_channels: list[int]
     booking_time: str
     total_booked: int
@@ -417,7 +534,7 @@ class ChannelBookResponse(BaseModel):
 class ChannelReleaseResponse(BaseModel):
     """Response after releasing channels."""
 
-    booked_by: str
+    user_name: str
     released_channels: list[int]
     total_released: int
 
@@ -441,6 +558,6 @@ class ChannelStatsResponse(BaseModel):
     available_channel_numbers: list[int] = Field(
         description="List of available channel numbers"
     )
-    booked_by_identifier: dict[str, list[int]] = Field(
-        description="Mapping of booked_by identifier to channel lists"
+    user_names: dict[str, list[int]] = Field(
+        description="Mapping of user_name identifier to channel lists"
     )
