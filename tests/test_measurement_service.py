@@ -87,7 +87,7 @@ class TestMeasurementService:
     async def test_start_measurement_with_metadata(self, measurement_service):
         """Should store and pass metadata."""
         service = measurement_service
-        metadata = {"detector": "det_001", "location": "lab_B"}
+        metadata = {"user_name": "test_user", "detector": "det_001", "location": "lab_B"}
         
         meas_id = await service.start_measurement("mock", metadata=metadata)
         measurement = service._measurements[meas_id]
@@ -186,7 +186,7 @@ class TestMeasurementService:
         # Start 5 measurements
         meas_ids = []
         for i in range(5):
-            meas_id = await service.start_measurement("mock", metadata={"index": i})
+            meas_id = await service.start_measurement("mock", metadata={"user_name": "test_user", "index": i})
             meas_ids.append(meas_id)
         
         # Verify all are active
@@ -216,12 +216,12 @@ class TestMeasurement:
             measurement_type="mock",
             handler=handler,
             duration_seconds=10,
-            metadata={"test": "data"},
+            metadata={"user_name": "test_user", "test": "data"},
         )
         
         assert meas.measurement_id == "test_id"
         assert meas.status == "active"
-        assert meas.metadata == {"test": "data"}
+        assert meas.metadata == {"test": "data", "user_name": "test_user"}
         assert meas.started_at is not None
         
         await meas.stop()

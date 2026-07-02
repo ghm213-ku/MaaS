@@ -27,7 +27,7 @@ async def handler():
 @pytest.fixture
 def metadata():
     """Create metadata for testing."""
-    return CountRateMetadata(
+    return CountRateMetadata(user_name="test_user", 
         channels=[1, 2],
         binwidth=int(1e9),
         n_values=1,
@@ -205,7 +205,7 @@ class TestCountRateMeasurementHandlerEdgeCases:
         mock_tagger = MagicMock()
         mock_tagger.setTestSignal = MagicMock()
         handler = CountRateMeasurementHandler(tagger=mock_tagger)
-        metadata = CountRateMetadata(
+        metadata = CountRateMetadata(user_name="test_user", 
             channels=[1],
             binwidth=int(1e9),
             n_values=1,
@@ -232,7 +232,7 @@ class TestCountRateMeasurementHandlerEdgeCases:
 
         handler1 = CountRateMeasurementHandler(tagger=mock_tagger1)
         handler2 = CountRateMeasurementHandler(tagger=mock_tagger2)
-        metadata = CountRateMetadata(
+        metadata = CountRateMetadata(user_name="test_user", 
             channels=[1],
             binwidth=int(1e9),
             n_values=1,
@@ -269,7 +269,7 @@ class TestCountRateMeasurementHandlerEdgeCases:
         
         with patch("app.services.count_rate.TimeTagger.Counter", return_value=mock_counter):
             handler = CountRateMeasurementHandler(tagger=mock_tagger)
-            metadata = CountRateMetadata(
+            metadata = CountRateMetadata(user_name="test_user", 
                 channels=[1],
                 binwidth=int(1e9),
                 n_values=1,

@@ -78,6 +78,7 @@ def client():
                 return measurements[status_id]
             return None
 
+        mock_status_manager.get_booked_channels.return_value = {i: "test_user" for i in range(1, 201)}
         mock_status_manager.health_check.return_value = True
         mock_status_manager.create_status.side_effect = create_status_side_effect
         mock_status_manager.get_status.side_effect = get_status_side_effect
@@ -186,8 +187,8 @@ class TestStartMeasurementEndpoint:
         payload = {
             "measurement_type": "count_rate",
             "duration_seconds": 60,
-            "metadata": {
-                "channels": [1, 2, 3],
+            "metadata": {"user_name": "test_user", 
+                "user_name": "test_user", "channels": [1, 2, 3],
                 "binwidth": 1000000000,
                 "n_values": 1,
                 "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -211,7 +212,7 @@ class TestStartMeasurementEndpoint:
         payload = {
             "measurement_type": "count_rate",
             "duration_seconds": 60,
-            "metadata": {"channels": [1]},
+            "metadata": {"user_name": "test_user", "user_name": "test_user", "channels": [1]},
         }
 
         response = client.post(
@@ -228,8 +229,8 @@ class TestStartMeasurementEndpoint:
         payload = {
             "measurement_type": "count_rate",
             "duration_seconds": 120,
-            "metadata": {
-                "channels": [1, 2, 3],
+            "metadata": {"user_name": "test_user", 
+                "user_name": "test_user", "channels": [1, 2, 3],
                 "binwidth": 500000000,
                 "n_values": 10,
                 "target_location": "C:\\custom\\path\\results.csv",
@@ -250,7 +251,7 @@ class TestStartMeasurementEndpoint:
         payload = {
             "measurement_type": "count_rate",
             "duration_seconds": 60,
-            "metadata": {"channels": [1]},
+            "metadata": {"user_name": "test_user", "user_name": "test_user", "channels": [1]},
         }
 
         response = client.post(
@@ -276,7 +277,7 @@ class TestStopMeasurementEndpoint:
             json={
                 "measurement_type": "count_rate",
                 "duration_seconds": 60,
-                "metadata": {"channels": [1]},
+                "metadata": {"user_name": "test_user", "user_name": "test_user", "channels": [1]},
             },
         )
         meas_id = start_response.json()["measurement_id"]
@@ -309,7 +310,7 @@ class TestStopMeasurementEndpoint:
             json={
                 "measurement_type": "count_rate",
                 "duration_seconds": 60,
-                "metadata": {"channels": [1]},
+                "metadata": {"user_name": "test_user", "user_name": "test_user", "channels": [1]},
             },
         )
         meas_id = start_response.json()["measurement_id"]
@@ -333,7 +334,7 @@ class TestGetStatusEndpoint:
         # Start measurement
         start_response = client.post(
             "/api/v1/measurements/count-rate",
-            json={"channels": [1]},
+            json={"user_name": "test_user", "channels": [1]},
         )
         meas_id = start_response.json()["measurement_id"]
 
@@ -355,7 +356,7 @@ class TestGetStatusEndpoint:
         # Start measurement
         start_response = client.post(
             "/api/v1/measurements/count-rate",
-            json={"channels": [1]},
+            json={"user_name": "test_user", "channels": [1]},
         )
         meas_id = start_response.json()["measurement_id"]
 
@@ -375,7 +376,7 @@ class TestGetStatusEndpoint:
         start_response = client.post(
             "/api/v1/measurements/count-rate",
             json={
-                "channels": [1, 2],
+                "user_name": "test_user", "channels": [1, 2],
                 "binwidth": 1000000000,
                 "n_values": 1,
                 "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -421,7 +422,7 @@ class TestApiErrorHandling:
     @pytest.mark.asyncio
     async def test_payload_with_implicit_type(self, client, mock_service):
         """Should accept payload with only required fields (channels)."""
-        payload = {"channels": [1, 2]}
+        payload = {"user_name": "test_user", "channels": [1, 2]}
 
         response = client.post(
             "/api/v1/measurements/count-rate",
@@ -435,7 +436,7 @@ class TestApiErrorHandling:
     async def test_invalid_payload_missing_type(self, client, mock_service):
         """Should accept minimal payload with only required channels field."""
         # Minimal valid payload - just channels
-        payload = {"channels": [1]}
+        payload = {"user_name": "test_user", "channels": [1]}
 
         response = client.post(
             "/api/v1/measurements/count-rate",
@@ -466,15 +467,15 @@ class TestApiErrorHandling:
         # Start 3 measurements
         response1 = client.post(
             "/api/v1/measurements/count-rate",
-            json={"channels": [1]},
+            json={"user_name": "test_user", "channels": [1]},
         )
         response2 = client.post(
             "/api/v1/measurements/count-rate",
-            json={"channels": [2]},
+            json={"user_name": "test_user", "channels": [2]},
         )
         response3 = client.post(
             "/api/v1/measurements/count-rate",
-            json={"channels": [3]},
+            json={"user_name": "test_user", "channels": [3]},
         )
 
         assert response1.status_code == 201
@@ -499,7 +500,7 @@ class TestApiIntegration:
         start_response = client.post(
             "/api/v1/measurements/count-rate",
             json={
-                "channels": [1, 2, 3],
+                "user_name": "test_user", "channels": [1, 2, 3],
                 "binwidth": 1000000000,
                 "n_values": 1,
             },

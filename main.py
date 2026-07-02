@@ -145,6 +145,7 @@ app = FastAPI(
 # Include routers
 app.include_router(routes.measurement_router)
 app.include_router(routes.channels_router)
+app.include_router(routes.parameters_router)
 
 
 @app.get("/health")

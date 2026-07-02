@@ -67,7 +67,7 @@ class TestStatusManagerWithRedis:
             status_id=status_id,
             measurement_type="count_rate",
             duration_seconds=30,
-            metadata={"detector": "det_001"},
+            metadata={"user_name": "test_user", "detector": "det_001"},
         )
 
         # Retrieve status
@@ -113,7 +113,7 @@ class TestStatusManagerWithRedis:
     def test_metadata_persistence(self, status_manager):
         """Test metadata is properly stored and retrieved."""
         status_id = str(uuid.uuid4())
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel_list": [1, 2, 3],
             "target_file_path": "C:\\data\\output.dat",
             "custom_field": "value",
@@ -255,7 +255,7 @@ class TestJobProcessorIntegration:
             status_id,
             "count_rate",
             2,  # 2 second measurement
-            {"detector": "test", "channels": [1, 2]},
+            {"detector": "test", "channels": [1, 2], "user_name": "test_user"},
         )
 
         # Process job (should update status)
@@ -430,7 +430,7 @@ class TestDataConsistency:
     def test_metadata_consistency(self, status_manager):
         """Test metadata consistency between create and retrieve."""
         status_id = str(uuid.uuid4())
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel_list": [1, 2, 3, 4, 5],
             "target_file_path": "C:\\data\\measurements\\output.dat",
             "sampling_rate": 100000,
@@ -527,7 +527,7 @@ class TestJobQueueing:
     def test_enqueue_job_to_redis(self, status_manager, job_processor):
         """Test enqueuing a job to Redis queue."""
         status_id = str(uuid.uuid4())
-        metadata = {"detector": "det_001", "location": "lab_A"}
+        metadata = {"user_name": "test_user", "detector": "det_001", "location": "lab_A"}
 
         # Create status
         status_manager.create_status(
@@ -594,7 +594,7 @@ class TestJobQueueing:
                 status_id=status_id,
                 measurement_type="count_rate",
                 duration_seconds=30,
-                metadata={"job_number": i},
+                metadata={"user_name": "test_user", "job_number": i},
             )
 
         # Retrieve all jobs in order (FIFO)
@@ -610,7 +610,7 @@ class TestJobQueueing:
     def test_enqueue_save_raw_tags_with_metadata(self, status_manager, job_processor):
         """Test enqueuing save_raw_tags job with required metadata."""
         status_id = str(uuid.uuid4())
-        metadata = {
+        metadata = {"user_name": "test_user", 
             "channel_list": [1, 2, 3],
             "target_file_path": "C:\\data\\output.dat",
         }
@@ -644,7 +644,7 @@ class TestJobQueueing:
     def test_job_queue_flow_end_to_end(self, status_manager, job_processor):
         """Test complete flow: enqueue → retrieve → process."""
         status_id = str(uuid.uuid4())
-        metadata = {"detector": "det_001", "channels": [1, 2]}
+        metadata = {"user_name": "test_user", "detector": "det_001", "channels": [1, 2]}
 
         # Step 1: API creates status
         status_manager.create_status(

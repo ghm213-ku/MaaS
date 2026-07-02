@@ -54,3 +54,14 @@ measurement-correlation        | 1, 2                           | BOOK          
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-29 07:55:13.667   | Measurement ID: 951b17b6-bd16-48c0-ba0e-4b4f6525bcef
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-29 07:56:29.780   | Measurement ID: 0511042f-1086-43a0-a423-6071918da5bb
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-06-29 11:51:01.461   | Measurement ID: 97d4d319-8de0-4834-bfc7-2e5f31dc7143
+measurement-count_rate         | 3, 4                           | BOOK            | 2026-07-02 09:45:34.729   | Measurement ID: 465c7056-6e77-4370-9004-01f0f02ba45e
+measurement-count_rate         | 12, 16                         | BOOK            | 2026-07-02 09:50:39.739   | Measurement ID: 21017e3a-99ad-48e0-bfc7-3bc5c55af857
+measurement-count_rate         | 12, 16                         | BOOK            | 2026-07-02 09:51:31.585   | Measurement ID: e7b811f4-b572-470f-81e1-c54e3d798aa7
+measurement-count_rate         | 12, 16                         | BOOK            | 2026-07-02 09:52:31.245   | Measurement ID: 476b6561-f639-4ce0-8892-22d1287fed1e
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-07-02 09:54:46.813   | Measurement ID: 8ca8de8e-379c-4241-bcb8-6684e6ef1358
+measurement-count_rate         | 12, 16                         | BOOK            | 2026-07-02 10:09:23.914   | Measurement ID: d9b646b6-ef89-4652-8623-48b283b7b4f6
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-07-02 10:11:08.374   | Measurement ID: c7d7f199-5916-4455-9cc1-8bb2c78b2ef5
+measurement-count_rate         | 12, 16                         | BOOK            | 2026-07-02 10:12:27.798   | Measurement ID: 3929bca3-6797-42f6-bdbd-cf2ec4c2c36d
+measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-07-02 10:12:32.917   | Measurement ID: 8c915e20-b315-4a35-b5fe-e8e97b3d32b1
+measurement-count_rate         | 12, 16                         | BOOK            | 2026-07-02 10:20:14.412   | Measurement ID: cc2fbb7b-01ac-4ce7-b24e-aed2c3ca8d47
+measurement-count_rate         | 1, 6                           | BOOK            | 2026-07-02 10:20:56.292   | Measurement ID: c0c8fef8-8705-4c57-8163-153a46941a2e

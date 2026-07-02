@@ -20,6 +20,7 @@ def client():
     from app.api import routes
 
     mock_status_manager = MagicMock(spec=StatusManager)
+    mock_status_manager.get_booked_channels.return_value = {i: "test_user" for i in range(1, 201)}
     mock_status_manager.health_check.return_value = True
     
     # We also need default behavior for validate_channels and book_channels
@@ -57,7 +58,7 @@ class TestSaveRawTagsValidationErrors:
         "invalid_payload, expected_error_field",
         [
             (
-                {"metadata": {"channel_list": [1, 2, 3], "target_file_path": "C:\\test.dat"}},
+                {"metadata": {"user_name": "test_user", "channel_list": [1, 2, 3], "target_file_path": "C:\\test.dat"}},
                 "duration_seconds",
             ),
             (
@@ -67,18 +68,18 @@ class TestSaveRawTagsValidationErrors:
             (
                 {
                     "duration_seconds": 30,
-                    "metadata": {"target_file_path": "C:\\test.dat"},
+                    "metadata": {"user_name": "test_user", "target_file_path": "C:\\test.dat"},
                 },
                 "channel_list",
             ),
             (
-                {"duration_seconds": 30, "metadata": {"channel_list": [1, 2, 3]}},
+                {"duration_seconds": 30, "metadata": {"user_name": "test_user", "channel_list": [1, 2, 3]}},
                 "target_file_path",
             ),
             (
                 {
                     "duration_seconds": 30,
-                    "metadata": {
+                    "metadata": {"user_name": "test_user", 
                         "channel_list": "1,2,3",
                         "target_file_path": "C:\\test.dat",
                     },
@@ -88,7 +89,7 @@ class TestSaveRawTagsValidationErrors:
             (
                 {
                     "duration_seconds": 30,
-                    "metadata": {
+                    "metadata": {"user_name": "test_user", 
                         "channel_list": [1, 2, 3],
                         "target_file_path": 12345,
                     },
@@ -98,7 +99,7 @@ class TestSaveRawTagsValidationErrors:
             (
                 {
                     "duration_seconds": "thirty",
-                    "metadata": {"channel_list": [1, 2, 3], "target_file_path": "C:\\test.dat"},
+                    "metadata": {"user_name": "test_user", "channel_list": [1, 2, 3], "target_file_path": "C:\\test.dat"},
                 },
                 "duration_seconds",
             ),
@@ -112,7 +113,7 @@ class TestSaveRawTagsValidationErrors:
             (
                 {
                     "duration_seconds": 30,
-                    "metadata": {},
+                    "metadata": {"user_name": "test_user", },
                 },
                 "channel_list",  # Either channel_list or target_file_path will be in the errors
             ),
@@ -135,11 +136,11 @@ class TestSaveRawTagsValidationErrors:
         # Send multiple bad requests
         errors = []
         for bad_payload in [
-            {"metadata": {"channel_list": [1, 2]}},  # Missing duration and path
+            {"metadata": {"user_name": "test_user", "channel_list": [1, 2]}},  # Missing duration and path
             {"duration_seconds": 30},  # Missing metadata
             {
                 "duration_seconds": "bad",
-                "metadata": {"channel_list": [1]},
+                "metadata": {"user_name": "test_user", "channel_list": [1]},
             },  # Wrong type
         ]:
             response = client.post(

@@ -53,23 +53,24 @@ def test_client():
                         f"Channel {ch} is already booked by {booked_channels[ch]}"
                     )
 
-        def book_channels_side_effect(channels, booked_by):
+        def book_channels_side_effect(channels, user_name):
             """Book channels."""
             for ch in channels:
-                booked_channels[ch] = booked_by
+                booked_channels[ch] = user_name
             return {
                 "booked_channels": channels,
                 "booking_time": datetime.utcnow().isoformat(),
             }
 
-        def release_channels_side_effect(booked_by):
+        def release_channels_side_effect(user_name):
             """Release channels."""
             to_release = [
-                ch for ch, owner in booked_channels.items() if owner == booked_by
+                ch for ch, owner in booked_channels.items() if owner == user_name
             ]
             for ch in to_release:
                 del booked_channels[ch]
 
+        mock_status_manager.get_booked_channels.return_value = {i: "test_user" for i in range(1, 201)}
         mock_status_manager.health_check.return_value = True
         mock_status_manager.create_status.side_effect = create_status_side_effect
         mock_status_manager.get_status.side_effect = get_status_side_effect
@@ -101,7 +102,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
                 "binwidth": 1000000000,
@@ -126,7 +127,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 30,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
             },
@@ -147,7 +148,7 @@ class TestCorrelationMeasurementAPI:
                 {
                     "measurement_type": "correlation",
                     "duration_seconds": 60,
-                    "metadata": {"channel2": 2},
+                    "metadata": {"user_name": "test_user", "channel2": 2},
                 },
                 "channel1",
             ),
@@ -155,7 +156,7 @@ class TestCorrelationMeasurementAPI:
                 {
                     "measurement_type": "correlation",
                     "duration_seconds": 60,
-                    "metadata": {"channel1": 1},
+                    "metadata": {"user_name": "test_user", "channel1": 1},
                 },
                 "channel2",
             ),
@@ -163,14 +164,14 @@ class TestCorrelationMeasurementAPI:
                 {
                     "measurement_type": "correlation",
                     "duration_seconds": 60,
-                    "metadata": {"channel1": "not_int", "channel2": 2},
+                    "metadata": {"user_name": "test_user", "channel1": "not_int", "channel2": 2},
                 },
                 "channel1",
             ),
             (
                 {
                     "measurement_type": "correlation",
-                    "metadata": {"channel1": 1, "channel2": 2},
+                    "metadata": {"user_name": "test_user", "channel1": 1, "channel2": 2},
                 },
                 "duration_seconds",
             ),
@@ -203,7 +204,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
             },
@@ -221,7 +222,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
             },
@@ -232,29 +233,6 @@ class TestCorrelationMeasurementAPI:
         assert response.status_code == 201
         assert mock_manager.create_status.called
 
-    def test_post_correlation_measurement_books_channels(self, test_client):
-        """Should book both channel1 and channel2."""
-        client, mock_manager, _ = test_client
-
-        payload = {
-            "measurement_type": "correlation",
-            "duration_seconds": 60,
-            "metadata": {
-                "channel1": 3,
-                "channel2": 4,
-            },
-        }
-
-        response = client.post("/api/v1/measurements/correlation", json=payload)
-
-        assert response.status_code == 201
-        assert mock_manager.book_channels.called
-        # Verify both channels were included
-        call_args = mock_manager.book_channels.call_args[0]
-        channels_to_book = call_args[0]
-        assert 3 in channels_to_book
-        assert 4 in channels_to_book
-
     def test_post_correlation_measurement_returns_measurement_id(self, test_client):
         """Should return unique measurement_id."""
         client, _, _ = test_client
@@ -262,7 +240,7 @@ class TestCorrelationMeasurementAPI:
         payload1 = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
             },
@@ -271,7 +249,7 @@ class TestCorrelationMeasurementAPI:
         payload2 = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 3,
                 "channel2": 4,
             },
@@ -292,7 +270,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
                 "binwidth": 500000000,
@@ -310,7 +288,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
                 "n_values": 50,
@@ -330,7 +308,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
                 "target_location": "custom/path/for/data",
@@ -350,7 +328,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
             },
@@ -368,7 +346,7 @@ class TestCorrelationMeasurementAPI:
         payload = {
             "measurement_type": "correlation",
             "duration_seconds": 60,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel1": 101,
                 "channel2": 102,
             },

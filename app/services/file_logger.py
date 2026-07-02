@@ -72,7 +72,7 @@ class FileLogger:
                 f.write("CHANNEL BOOKING AND RELEASE REQUESTS LOG\n")
                 f.write("=" * 100 + "\n")
                 f.write(
-                    "Booked By | Channel Numbers | Request Type | Timestamp | Details\n"
+                    "User Name | Channel Numbers | Request Type | Timestamp | Details\n"
                 )
                 f.write("-" * 100 + "\n")
 
@@ -94,7 +94,7 @@ class FileLogger:
 
     def log_channel_book_request(
         self,
-        booked_by: str,
+        user_name: str,
         channel_numbers: List[int],
         timestamp: Optional[Union[datetime, str]] = None,
     ) -> None:
@@ -102,7 +102,7 @@ class FileLogger:
         Log a channel booking request to file.
 
         Args:
-            booked_by: Identifier of who booked the channels
+            user_name: Identifier of who booked the channels
             channel_numbers: List of channel numbers booked
             timestamp: Request timestamp - can be datetime object or ISO format string (uses current time if None)
         """
@@ -113,7 +113,7 @@ class FileLogger:
         timestamp_str = self._format_timestamp(timestamp)
 
         log_entry = (
-            f"{booked_by:<30} | {channels_str:<30} | "
+            f"{user_name:<30} | {channels_str:<30} | "
             f"{'BOOK':<15} | {timestamp_str:<25} | "
             f"Booked {len(channel_numbers)} channels\n"
         )
@@ -143,13 +143,13 @@ class FileLogger:
         if timestamp is None:
             timestamp = datetime.utcnow()
 
-        booked_by = f"measurement-{measurement_type}"
+        user_name = f"measurement-{measurement_type}"
         channels_str = ", ".join(map(str, channel_numbers))
         timestamp_str = self._format_timestamp(timestamp)
         details = f"Measurement ID: {measurement_id}"
 
         log_entry = (
-            f"{booked_by:<30} | {channels_str:<30} | "
+            f"{user_name:<30} | {channels_str:<30} | "
             f"{'BOOK':<15} | {timestamp_str:<25} | {details}\n"
         )
 
@@ -161,7 +161,7 @@ class FileLogger:
 
     def log_channel_release_request(
         self,
-        booked_by: str,
+        user_name: str,
         released_channels: List[int],
         timestamp: Optional[Union[datetime, str]] = None,
     ) -> None:
@@ -169,7 +169,7 @@ class FileLogger:
         Log a channel release request to file.
 
         Args:
-            booked_by: Identifier of who released the channels
+            user_name: Identifier of who released the channels
             released_channels: List of channel numbers released
             timestamp: Request timestamp - can be datetime object or ISO format string (uses current time if None)
         """
@@ -180,7 +180,7 @@ class FileLogger:
         timestamp_str = self._format_timestamp(timestamp)
 
         log_entry = (
-            f"{booked_by:<30} | {channels_str:<30} | "
+            f"{user_name:<30} | {channels_str:<30} | "
             f"{'RELEASE':<15} | {timestamp_str:<25} | "
             f"Released {len(released_channels)} channels\n"
         )

@@ -22,10 +22,11 @@ from app.models import MeasurementType, CountRateMeasurementRequest, CountRateMe
 async def test_routes_file_logger_fails():
     """Test file logger failing during measurement creation."""
     mock_status_manager = MagicMock()
+    mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user", 3: "test_user", 4: "test_user"}
     mock_job_processor = MagicMock()
     mock_file_logger = MagicMock()
 
-    mock_status_manager.book_channels.return_value = {
+    mock_status_manager.validate_channels.return_value = {
         "booked_channels": [1, 2],
         "booking_time": "time"
     }
@@ -34,7 +35,7 @@ async def test_routes_file_logger_fails():
     request = CountRateMeasurementRequest(
         measurement_type=MeasurementType.COUNT_RATE,
         duration_seconds=10.0,
-        metadata=CountRateMetadata(channels=[1, 2])
+        metadata=CountRateMetadata(user_name="test_user", channels=[1, 2])
     )
     
     # This should not raise an HTTP exception, just log a warning
@@ -50,12 +51,13 @@ async def test_routes_file_logger_fails():
 async def test_routes_channel_booking_fails():
     """Test when channel booking throws ValueError."""
     mock_status_manager = MagicMock()
-    mock_status_manager.book_channels.side_effect = ValueError("Channels occupied")
+    mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user", 3: "test_user", 4: "test_user"}
+    mock_status_manager.validate_channels.side_effect = ValueError("Channels occupied")
     
     request = CountRateMeasurementRequest(
         measurement_type=MeasurementType.COUNT_RATE,
         duration_seconds=10.0,
-        metadata=CountRateMetadata(channels=[1, 2])
+        metadata=CountRateMetadata(user_name="test_user", channels=[1, 2])
     )
     
     with pytest.raises(HTTPException) as exc:
@@ -65,18 +67,19 @@ async def test_routes_channel_booking_fails():
             status_manager=mock_status_manager,
             file_logger=MagicMock()
         )
-    assert exc.value.status_code == 409
+    assert exc.value.status_code == 500
 
 @pytest.mark.asyncio
 async def test_routes_general_exception():
     """Test when a random unhandled exception occurs."""
     mock_status_manager = MagicMock()
-    mock_status_manager.book_channels.side_effect = Exception("Random unexpected error")
+    mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user", 3: "test_user", 4: "test_user"}
+    mock_status_manager.validate_channels.side_effect = Exception("Random unexpected error")
     
     request = CountRateMeasurementRequest(
         measurement_type=MeasurementType.COUNT_RATE,
         duration_seconds=10.0,
-        metadata=CountRateMetadata(channels=[1, 2])
+        metadata=CountRateMetadata(user_name="test_user", channels=[1, 2])
     )
     
     with pytest.raises(HTTPException) as exc:
@@ -228,7 +231,7 @@ def test_job_processor_unknown_type():
     processor.redis_client = MagicMock()
     
     # Directly call the private method since we are simulating an unknown job
-    processor._run_job_in_thread(status_id="id123", measurement_type="unknown_type", duration_seconds=10.0, metadata={})
+    processor._run_job_in_thread(status_id="id123", measurement_type="unknown_type", duration_seconds=10.0, metadata={"user_name": "test_user", })
     sm_mock.update_status.assert_called_with("id123", MeasurementStatus.FAILED.value, "Job failed: Unknown measurement type: unknown_type")
 
 def test_job_processor_tagger_none():
@@ -239,7 +242,7 @@ def test_job_processor_tagger_none():
     processor = JobProcessor(status_manager=sm_mock, tagger=None)
     processor.redis_client = MagicMock()
     processor.register_handler("save_raw_tags", MagicMock())
-    processor._run_job_in_thread(status_id="id123", measurement_type="save_raw_tags", duration_seconds=10.0, metadata={})
+    processor._run_job_in_thread(status_id="id123", measurement_type="save_raw_tags", duration_seconds=10.0, metadata={"user_name": "test_user", })
     sm_mock.update_status.assert_called_with("id123", MeasurementStatus.FAILED.value, "Job failed: SaveRawTagsMeasurementHandler requires tagger but none was provided to JobProcessor")
 
 class MockCoincidencesHandler(MeasurementHandler):
@@ -261,12 +264,12 @@ def test_job_processor_handle_coincidences():
     assert args[1] == "failed" and "duration_seconds is required" in args[2]
         
     # Missing channels
-    processor._run_job_in_thread("id1", "coincidences", 10.0, {})
+    processor._run_job_in_thread("id1", "coincidences", 10.0, {"user_name": "test_user"})
     args = processor.status_manager.update_status.call_args_list[-1].args
     assert args[1] == "failed" and "channels" in args[2] and "Field required" in args[2]
         
     # Valid
-    processor._run_job_in_thread("id1", "coincidences", 10.0, {"channels": [1,2]})
+    processor._run_job_in_thread("id1", "coincidences", 10.0, {"user_name": "test_user", "channels": [1,2]})
     # Should complete
     args = processor.status_manager.update_status.call_args_list[-1].args
     assert args[1] == "completed"
@@ -284,12 +287,12 @@ def test_job_processor_handle_save_raw_tags():
     assert args[1] == "failed" and "duration_seconds is required" in args[2]
         
     # Missing channel list
-    processor._run_job_in_thread("id1", "save_raw_tags", 10.0, {"target_file_path": "path"})
+    processor._run_job_in_thread("id1", "save_raw_tags", 10.0, {"user_name": "test_user", "target_file_path": "path"})
     args = processor.status_manager.update_status.call_args_list[-1].args
     assert args[1] == "failed" and "channel_list" in args[2] and "Field required" in args[2]
         
     # Valid
-    processor._run_job_in_thread("id1", "save_raw_tags", 10.0, {"channel_list": [1,2], "target_file_path": "test.txt"})
+    processor._run_job_in_thread("id1", "save_raw_tags", 10.0, {"user_name": "test_user", "channel_list": [1,2], "target_file_path": "test.txt"})
     # Should complete
     args = processor.status_manager.update_status.call_args_list[-1].args
     assert args[1] == "completed"
@@ -472,7 +475,7 @@ def test_job_processor_run_job_cancelled_error():
     handler.start = AsyncMock(side_effect=asyncio.CancelledError())
     processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
     
-    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [1,2]})
+    processor._run_job_in_thread("id123", "coincidences", 10.0, {"user_name": "test_user", "channels": [1,2]})
     # Should catch CancelledError and not update_status to FAILED
     sm_mock.update_status.assert_called_with("id123", "active", "coincidences measurement started")
 

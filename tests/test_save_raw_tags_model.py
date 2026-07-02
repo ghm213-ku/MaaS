@@ -33,7 +33,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     
     def test_model_creation_with_valid_metadata(self):
         """Should create a valid SaveRawTagsMeasurmentRequest with proper metadata."""
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2, 3],
             target_file_path="C:\\Users\\s257050\\Desktop\\fileWriter"
         )
@@ -50,7 +50,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     
     def test_model_default_measurement_type(self):
         """Should default to SAVE_RAW_TAGS measurement type."""
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2],
             target_file_path="C:\\test"
         )
@@ -63,7 +63,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     
     def test_model_requires_duration_seconds(self):
         """Should require duration_seconds field."""
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2],
             target_file_path="C:\\test"
         )
@@ -86,7 +86,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     def test_metadata_requires_channel_list(self):
         """Metadata should require channel_list field."""
         with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(
+            SaveRawTagsMetadata(user_name="test_user", 
                 target_file_path="C:\\path"
             )
         
@@ -95,7 +95,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     def test_metadata_requires_target_file_path(self):
         """Metadata should require target_file_path field."""
         with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(
+            SaveRawTagsMetadata(user_name="test_user", 
                 channel_list=[1, 2, 3]
             )
         
@@ -103,7 +103,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     
     def test_model_metadata_with_channel_list(self):
         """Metadata should contain channel_list."""
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2, 3, 4],
             target_file_path="C:\\path"
         )
@@ -118,7 +118,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     def test_model_metadata_with_target_file_path(self):
         """Metadata should contain target_file_path."""
         test_path = "D:\\data\\measurements\\raw_tags.dat"
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1],
             target_file_path=test_path
         )
@@ -131,7 +131,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     
     def test_model_dict_serialization(self):
         """Should serialize to dictionary correctly."""
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2, 3],
             target_file_path="C:\\test"
         )
@@ -148,7 +148,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     
     def test_model_json_serialization(self):
         """Should serialize to JSON correctly."""
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2, 3],
             target_file_path="C:\\test"
         )
@@ -167,7 +167,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
         data = {
             "measurement_type": "save_raw_tags",
             "duration_seconds": 45,
-            "metadata": {
+            "metadata": {"user_name": "test_user", 
                 "channel_list": [2, 3, 4],
                 "target_file_path": "D:\\output"
             }
@@ -180,7 +180,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     def test_metadata_channel_list_validation_type(self):
         """Channel list should be a list of integers."""
         with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(
+            SaveRawTagsMetadata(user_name="test_user", 
                 channel_list="not_a_list",  # String that cannot be converted to list
                 target_file_path="C:\\test"
             )
@@ -190,7 +190,7 @@ class TestSaveRawTagsMeasurmentRequestModel:
     def test_metadata_target_file_path_validation_type(self):
         """Target file path should be a string."""
         with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(
+            SaveRawTagsMetadata(user_name="test_user", 
                 channel_list=[1, 2, 3],
                 target_file_path=12345  # int instead of string
             )
@@ -220,7 +220,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         
         with patch("Swabian.TimeTagger.FileWriter", return_value=mock_file_writer):
             # Extract from metadata like the API would
-            metadata = SaveRawTagsMetadata(channel_list=channels, target_file_path=file_path)
+            metadata = SaveRawTagsMetadata(user_name="test_user", channel_list=channels, target_file_path=file_path)
             
             await handler.start(duration, metadata)
             
@@ -230,7 +230,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
     def test_handler_with_single_channel(self, mock_tagger):
         """Handler should work with single channel in metadata."""
         handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1],
             target_file_path="C:\\single_channel.dat"
         )
@@ -247,7 +247,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
         channels = [1, 2, 3, 4, 5, 6, 7, 8]
         
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=channels,
             target_file_path="C:\\multi_channel.dat"
         )
@@ -265,7 +265,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         
         durations = [10, 30, 60, 300, 1800]
         for duration in durations:
-            metadata = SaveRawTagsMetadata(
+            metadata = SaveRawTagsMetadata(user_name="test_user", 
                 channel_list=[1, 2],
                 target_file_path="C:\\test.dat"
             )
@@ -289,7 +289,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         ]
         
         for file_path in file_paths:
-            metadata = SaveRawTagsMetadata(
+            metadata = SaveRawTagsMetadata(user_name="test_user", 
                 channel_list=[1, 2, 3],
                 target_file_path=file_path
             )
@@ -318,7 +318,7 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
         
         # Create a request with metadata
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2],
             target_file_path="C:\\measurement.dat"
         )
@@ -353,7 +353,7 @@ class TestMetadataValidationErrors:
     )
     def test_metadata_validation_errors(self, invalid_kwargs, expected_error_field):
         with pytest.raises(ValidationError) as exc_info:
-            SaveRawTagsMetadata(**invalid_kwargs)
+            SaveRawTagsMetadata(user_name="test_user", **invalid_kwargs)
         
         error = exc_info.value
         assert len(error.errors()) > 0
@@ -363,7 +363,7 @@ class TestMetadataValidationErrors:
         "invalid_kwargs, expected_error_field",
         [
             ({"duration_seconds": 60}, "metadata"),
-            ({"duration_seconds": 60, "metadata": {"channel_list": [1, 2, 3]}}, "target_file_path"),
+            ({"duration_seconds": 60, "metadata": {"user_name": "test_user", "channel_list": [1, 2, 3]}}, "target_file_path"),
         ]
     )
     def test_request_validation_errors(self, invalid_kwargs, expected_error_field):
@@ -381,7 +381,7 @@ class TestIntegrationWithMockedTaggerAndModel:
     def test_model_to_handler_workflow(self, mock_tagger):
         """Complete workflow from model creation to handler usage."""
         # Create metadata model
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2, 3],
             target_file_path="C:\\output\\measurement.dat"
         )
@@ -408,7 +408,7 @@ class TestIntegrationWithMockedTaggerAndModel:
     
     def test_mocked_tagger_file_writer_interaction(self, mock_tagger, mock_file_writer):
         """Test interaction between mocked tagger and FileWriter."""
-        metadata = SaveRawTagsMetadata(
+        metadata = SaveRawTagsMetadata(user_name="test_user", 
             channel_list=[1, 2, 3],
             target_file_path="C:\\test.dat"
         )
