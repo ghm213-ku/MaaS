@@ -500,6 +500,7 @@ async def release_channels(
     user_name: str,
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
+    processor: JobProcessor = Depends(get_job_processor),
 ) -> ChannelReleaseResponse:
     """
     Release (free up) all channels booked by a measurement or user.
@@ -524,6 +525,33 @@ async def release_channels(
         logger.info(
             f"[{user_name}] Channels released successfully: {release_result['released_channels']}"
         )
+
+        # Reset delays to 0 for released channels
+        if release_result["released_channels"]:
+            reset_status_id = str(uuid.uuid4())
+            status_manager.create_status(
+                reset_status_id,
+                MeasurementType.SET_PARAMETERS.value,
+                0,
+                {
+                    "channels": release_result["released_channels"],
+                    "input_delay": 0,
+                    "trigger_voltage": 0.5,
+                    "user_name": user_name,
+                },
+            )
+            processor.enqueue_job(
+                status_id=reset_status_id,
+                measurement_type=MeasurementType.SET_PARAMETERS.value,
+                duration_seconds=0,
+                metadata={
+                    "channels": release_result["released_channels"],
+                    "input_delay": 0,
+                    "trigger_voltage": 0.5,
+                    "user_name": user_name,
+                },
+            )
+            logger.info(f"[{user_name}] Enqueued parameter reset job for released channels (ID: {reset_status_id})")
 
         # Log channel release request to file
         if file_logger:

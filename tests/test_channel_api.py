@@ -409,6 +409,30 @@ class TestReleaseChannels:
         assert set(data["released_channels"]) == {1, 2, 3}
         assert data["total_released"] == 3
 
+    def test_release_channels_enqueues_reset_job(self, client):
+        """Should enqueue a set-parameters job to reset delay to 0."""
+        from app.api.routes import _job_processor
+        _job_processor.enqueue_job.reset_mock()
+        
+        # Book channels
+        client.post(
+            "/api/v1/channels/book",
+            json={"user_name": "measurement-reset", "channel_numbers": [4, 5]},
+        )
+
+        # Release channels
+        response = client.post("/api/v1/channels/release/measurement-reset")
+        assert response.status_code == 200
+        
+        # Verify enqueue_job was called
+        assert _job_processor.enqueue_job.call_count == 1
+        call_kwargs = _job_processor.enqueue_job.call_args.kwargs
+        assert call_kwargs["measurement_type"] == "set_parameters"
+        assert call_kwargs["metadata"]["channels"] == [4, 5]
+        assert call_kwargs["metadata"]["input_delay"] == 0
+        assert call_kwargs["metadata"]["trigger_voltage"] == 0.5
+        assert call_kwargs["metadata"]["user_name"] == "measurement-reset"
+
     def test_release_channels_not_booked(self, client):
         """Should handle release of non-booked identifier gracefully."""
         response = client.post("/api/v1/channels/release/measurement-nonexistent")
