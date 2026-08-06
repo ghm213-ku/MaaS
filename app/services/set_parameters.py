@@ -44,9 +44,11 @@ class SetParametersHandler(MeasurementHandler):
             f"input_delay: {input_delay}, trigger_voltage: {trigger_voltage}"
         )
 
-        # Handler logic is intentionally left empty for now
-        self.tagger.setInputDelay(channels, input_delay)
-        self.tagger.setTriggerLevel(channels, trigger_voltage)
+        # Handler logic
+        if input_delay is not None:
+            self.tagger.setInputDelay(channels, input_delay)
+        if trigger_voltage is not None:
+            self.tagger.setTriggerLevel(channels, trigger_voltage)
             
         logger.info("Set parameters finished")
 
