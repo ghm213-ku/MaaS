@@ -17,8 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.services.job_processor import JobProcessor
-from app.services.status_manager import StatusManager
 from app.services.count_rate import CountRateMeasurementHandler
+from app.services.count_rate_live import CountRateLiveMeasurementHandler
 from app.services.correlation import CorrelationMeasurementHandler
 from app.services.coincidences import CoincidencesMeasurementHandler
 from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
@@ -105,6 +105,9 @@ class BackendWorker:
                 "count_rate", CountRateMeasurementHandler
             )
             self.job_processor.register_handler(
+                "count_rate_live", CountRateLiveMeasurementHandler
+            )
+            self.job_processor.register_handler(
                 "correlation", CorrelationMeasurementHandler
             )
             self.job_processor.register_handler(
@@ -116,7 +119,7 @@ class BackendWorker:
 
             logger.info("Backend worker initialized successfully")
             logger.info(
-                "  Handlers registered: count_rate, correlation, coincidences, save_raw_tags"
+                "  Handlers registered: count_rate, count_rate_live, correlation, coincidences, save_raw_tags"
             )
             self.retry_count = 0
             self.current_retry_delay = 1.0
@@ -172,7 +175,7 @@ class BackendWorker:
         logger.info(f"Configuration:")
         logger.info(f"  Poll timeout: {poll_timeout}s")
         logger.info(f"  Redis: {self.redis_host}:{self.redis_port}")
-        logger.info(f"  Registered handlers: count_rate, save_raw_tags")
+        logger.info(f"  Registered handlers: count_rate, count_rate_live, save_raw_tags")
         logger.info("=" * 70)
 
         try:
