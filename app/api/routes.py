@@ -12,6 +12,7 @@ import uuid
 
 from app.models import (
     CountRateMeasurementRequest,
+    CountRateLiveMeasurementRequest,
     CorrelationMeasurementRequest,
     CoincidencesMeasurementRequest,
     SaveRawTagsMeasurmentRequest,
@@ -186,6 +187,37 @@ async def start_count_rate_measurement(
     """
     return _handle_measurement_request(
         request_name="count-rate",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.metadata.channels,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+        user_name=request.metadata.user_name,
+    )
+
+
+@measurement_router.post(
+    "/count-rate-live", response_model=MeasurementResponse, status_code=201
+)
+async def start_count_rate_live_measurement(
+    request: CountRateLiveMeasurementRequest,
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """
+    Start a new live streaming count-rate measurement request.
+
+    Returns a unique measurement ID (status ID) to be used for status queries and stopping.
+    The job is enqueued for processing by the backend worker.
+
+    Automatically books the specified channels. Data will be streamed via Redis pub/sub on
+    channel `measurement:data:<status_id>`.
+    """
+    return _handle_measurement_request(
+        request_name="count-rate-live",
         measurement_type=request.measurement_type,
         duration_seconds=request.duration_seconds,
         metadata_dump=request.metadata.model_dump(),
@@ -786,6 +818,7 @@ async def list_measurements(
             "redis_status": "healthy" if redis_healthy else "unhealthy",
             "measurement_endpoints": {
                 "start_count_rate": "POST /api/v1/measurements/count-rate",
+                "start_count_rate_live": "POST /api/v1/measurements/count-rate-live",
                 "start_save_raw_tags": "POST /api/v1/measurements/save-raw-tags",
                 "get_status": "GET /api/v1/measurements/{measurement_id}/status",
                 "stop_measurement": "DELETE /api/v1/measurements/{measurement_id}",
