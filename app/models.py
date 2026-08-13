@@ -8,8 +8,8 @@ from datetime import datetime
 
 class MeasurementType(str, Enum):
     """Supported measurement types. Extensible for future types."""
-
     COUNT_RATE = "count_rate"
+    COUNT_RATE_LIVE = "count_rate_live"
     SAVE_RAW_TAGS = "save_raw_tags"
     CORRELATION = "correlation"
     COINCIDENCES = "coincidences"
@@ -221,6 +221,61 @@ class CountRateMeasurementRequest(BaseModel):
                     "binwidth": 1000000000,
                     "n_values": 1,
                     "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                },
+            }
+        }
+
+
+class CountRateLiveMeasurementRequest(BaseModel):
+    """Request model for live count-rate measurements."""
+
+    measurement_type: MeasurementType = MeasurementType.COUNT_RATE_LIVE
+    duration_seconds: int = Field(
+        description="Duration in seconds for the count-rate measurement"
+    )
+    metadata: CountRateMetadata = Field(
+        description="Metadata containing channels, binwidth, and n_values"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 60)
+            measurement_type = data.pop("measurement_type", MeasurementType.COUNT_RATE_LIVE)
+            return {
+                "measurement_type": measurement_type,
+                "duration_seconds": duration_seconds,
+                "metadata": data,
+            }
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return self.metadata.channels
+
+    @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+    @property
+    def binwidth(self) -> int:
+        return self.metadata.binwidth
+
+    @property
+    def n_values(self) -> int:
+        return self.metadata.n_values
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "measurement_type": "count_rate_live",
+                "duration_seconds": 60,
+                "metadata": {
+                    "channels": [1, 2, 3],
+                    "user_name": "abc-123-def",
+                    "binwidth": 1000000000,
+                    "n_values": 1,
                 },
             }
         }

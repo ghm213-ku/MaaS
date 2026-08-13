@@ -219,6 +219,10 @@ class JobProcessor:
                 )
             handler = handler_class(tagger=self.tagger)
 
+            # Inject context for handlers that might need it
+            handler.status_id = status_id
+            handler.redis_client = self.redis_client
+
             # Track the live handler instance so a stop request can reach it
             self.active_handlers[status_id] = handler
 

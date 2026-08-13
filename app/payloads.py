@@ -5,6 +5,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from app.models import (
     CountRateMeasurementRequest,
+    CountRateLiveMeasurementRequest,
     CorrelationMeasurementRequest,
     CoincidencesMeasurementRequest,
     SaveRawTagsMeasurmentRequest,
@@ -47,6 +48,33 @@ class MeasurementPayloadSchemas:
             "binwidth": 1000000000,
             "n_values": 1,
             "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+        },
+    }
+
+    COUNT_RATE_LIVE_SCHEMA = {
+        "type": "object",
+        "title": "Live Count-Rate Measurement Payload",
+        "description": "Payload for starting a live streaming count-rate measurement",
+        "properties": {
+            "channels": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "List of channel numbers to measure (required). E.g., [1, 2, 3]",
+            },
+            "binwidth": {
+                "type": "integer",
+                "description": "Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
+            },
+            "n_values": {
+                "type": "integer",
+                "description": "Number of bins in the histogram. Default: 1",
+            },
+        },
+        "required": ["channels"],
+        "example": {
+            "channels": [1, 2, 3],
+            "binwidth": 1000000000,
+            "n_values": 1,
         },
     }
 
@@ -121,6 +149,7 @@ class MeasurementPayloadSchemas:
     # Map of measurement type to schema
     SCHEMAS: Dict[str, Dict[str, Any]] = {
         "count_rate": COUNT_RATE_SCHEMA,
+        "count_rate_live": COUNT_RATE_LIVE_SCHEMA,
         "correlation": CORRELATION_SCHEMA,
         "coincidences": COINCIDENCES_SCHEMA,
     }
@@ -137,6 +166,7 @@ class MeasurementPayloadMapper:
     # Registry: measurement_type -> Pydantic model class
     _PAYLOAD_MODELS: Dict[str, Type[BaseModel]] = {
         "count_rate": CountRateMeasurementRequest,
+        "count_rate_live": CountRateLiveMeasurementRequest,
         "correlation": CorrelationMeasurementRequest,
         "coincidences": CoincidencesMeasurementRequest,
         "save_raw_tags": SaveRawTagsMeasurmentRequest,
