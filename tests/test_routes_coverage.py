@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock
 from fastapi import HTTPException
 from app.api.routes import (
+    start_count_rate_live_measurement,
     start_save_raw_tags_measurement,
     start_correlation_measurement,
     start_coincidences_measurement,
@@ -17,14 +18,45 @@ from app.api.routes import (
 )
 from app.models import (
     SaveRawTagsMeasurmentRequest,
+    CountRateLiveMeasurementRequest,
     CorrelationMeasurementRequest,
     CoincidencesMeasurementRequest,
     ChannelBookRequest,
     MeasurementType,
+    CountRateMetadata,
     SaveRawTagsMetadata,
     CorrelationMetadata,
     CoincidencesMetadata
 )
+
+@pytest.mark.asyncio
+async def test_start_count_rate_live_measurement():
+    request = CountRateLiveMeasurementRequest(
+        measurement_type=MeasurementType.COUNT_RATE_LIVE,
+        duration_seconds=10.0,
+        metadata=CountRateMetadata(user_name="test_user", channels=[1, 2], binwidth=1000000000, n_values=1)
+    )
+    mock_status_manager = MagicMock()
+    mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user", 3: "test_user", 4: "test_user"}
+    mock_status_manager.book_channels.return_value = {"booked_channels": [1, 2], "booking_time": "time"}
+    mock_job_processor = MagicMock()
+    mock_file_logger = MagicMock()
+    
+    # Success
+    res = await start_count_rate_live_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
+    assert res.status == "queued"
+    
+    # Booking fails
+    mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
+    with pytest.raises(HTTPException) as exc:
+        await start_count_rate_live_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
+    assert exc.value.status_code == 500
+    
+    # Exception
+    mock_status_manager.validate_channels.side_effect = Exception("Unknown")
+    with pytest.raises(HTTPException) as exc:
+        await start_count_rate_live_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
+    assert exc.value.status_code == 500
 
 @pytest.mark.asyncio
 async def test_start_save_raw_tags_measurement():
@@ -157,12 +189,12 @@ async def test_channels_endpoints():
 
     mock_sm = MagicMock()
     mock_sm.release_channels.return_value = {"released_channels": [1], "user_name": "test_user", "total_released": 1}
-    res = await release_channels("test_user", mock_sm, MagicMock())
+    res = await release_channels("test_user", mock_sm, MagicMock(), MagicMock())
     assert res.released_channels == [1]
     
     mock_sm.release_channels.side_effect = Exception("Err")
     with pytest.raises(HTTPException):
-        await release_channels("me", status_manager=mock_sm, file_logger=MagicMock())
+        await release_channels("me", status_manager=mock_sm, file_logger=MagicMock(), processor=MagicMock())
 
     mock_sm = MagicMock()
     mock_sm.get_booked_channels_by.return_value = [1]
