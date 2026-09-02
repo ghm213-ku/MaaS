@@ -43,8 +43,20 @@ class BaseTimeHistogramLiveHandler(MeasurementHandler):
             # Fetch data and push to redis
             if self._counter:
                 try:
-                    data = self._counter.getData()
-                    index = self._counter.getIndex()
+                    raw_data = self._counter.getData()
+                    if hasattr(self._counter, 'getIndex'):
+                        data = raw_data
+                        index = self._counter.getIndex()
+                    else:
+                        # For StartStop, data is Nx2 array: [:, 0] is times, [:, 1] is counts
+                        data_arr = np.array(raw_data)
+                        if data_arr.size > 0 and data_arr.ndim == 2:
+                            index = data_arr[:, 0]
+                            data = data_arr[:, 1]
+                        else:
+                            index = []
+                            data = []
+                            
                     if hasattr(self, 'redis_client') and self.redis_client and hasattr(self, 'status_id'):
                         pub_channel = f"measurement:data:{self.status_id}"
                         payload = json.dumps({
@@ -119,8 +131,7 @@ class StartStopLiveMeasurementHandler(BaseTimeHistogramLiveHandler):
             tagger=self.tagger, 
             click_channel=click_channel, 
             start_channel=start_channel, 
-            binwidth=binwidth, 
-            n_bins=n_bins
+            binwidth=binwidth
         )
         self._counter.startFor(duration_seconds * 1e12)
 
