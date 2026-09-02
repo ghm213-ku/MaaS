@@ -5,7 +5,9 @@ This module provides two main routers:
 - channels_router: For /api/v1/channels (list, book, release channel management)
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, HTTPException, Depends, Body, WebSocket, WebSocketDisconnect
+import redis.asyncio as aioredis
+import asyncio
 from typing import Optional
 from datetime import datetime
 import uuid
@@ -27,6 +29,9 @@ from app.models import (
     ChannelInfo,
     MeasurementType,
     SetParametersRequest,
+    StartStopLiveMeasurementRequest,
+    HistogramLiveMeasurementRequest,
+    CorrelationLiveMeasurementRequest,
 )
 from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager, MeasurementStatus
@@ -171,7 +176,7 @@ def _handle_measurement_request(
 @measurement_router.post(
     "/count-rate", response_model=MeasurementResponse, status_code=201
 )
-async def start_count_rate_measurement(
+def start_count_rate_measurement(
     request: CountRateMeasurementRequest,
     processor: JobProcessor = Depends(get_job_processor),
     status_manager: StatusManager = Depends(get_status_manager),
@@ -201,7 +206,7 @@ async def start_count_rate_measurement(
 @measurement_router.post(
     "/count-rate-live", response_model=MeasurementResponse, status_code=201
 )
-async def start_count_rate_live_measurement(
+def start_count_rate_live_measurement(
     request: CountRateLiveMeasurementRequest,
     processor: JobProcessor = Depends(get_job_processor),
     status_manager: StatusManager = Depends(get_status_manager),
@@ -232,7 +237,7 @@ async def start_count_rate_live_measurement(
 @measurement_router.post(
     "/save-raw-tags", response_model=MeasurementResponse, status_code=201
 )
-async def start_save_raw_tags_measurement(
+def start_save_raw_tags_measurement(
     request: SaveRawTagsMeasurmentRequest,
     processor: JobProcessor = Depends(get_job_processor),
     status_manager: StatusManager = Depends(get_status_manager),
@@ -262,7 +267,7 @@ async def start_save_raw_tags_measurement(
 @measurement_router.post(
     "/correlation", response_model=MeasurementResponse, status_code=201
 )
-async def start_correlation_measurement(
+def start_correlation_measurement(
     request: CorrelationMeasurementRequest,
     processor: JobProcessor = Depends(get_job_processor),
     status_manager: StatusManager = Depends(get_status_manager),
@@ -292,19 +297,13 @@ async def start_correlation_measurement(
 @measurement_router.post(
     "/coincidences", response_model=MeasurementResponse, status_code=201
 )
-async def start_coincidences_measurement(
+def start_coincidences_measurement(
     request: CoincidencesMeasurementRequest,
     processor: JobProcessor = Depends(get_job_processor),
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
 ) -> MeasurementResponse:
     """
-    Start a new coincidences measurement request.
-
-    Returns a unique measurement ID (status ID) to be used for status queries and stopping.
-    The job is enqueued for processing by the backend worker.
-
-    Automatically books the specified channels.
     """
     return _handle_measurement_request(
         request_name="coincidences",
@@ -318,13 +317,79 @@ async def start_coincidences_measurement(
         user_name=request.user_name,
     )
 
+@measurement_router.post(
+    "/startstop-live", response_model=MeasurementResponse, status_code=201
+)
+def start_startstop_live_measurement(
+    request: StartStopLiveMeasurementRequest,
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """Start a live startstop measurement streaming to Redis."""
+    return _handle_measurement_request(
+        request_name="startstop-live",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.channels,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+        user_name=request.user_name,
+    )
+
+@measurement_router.post(
+    "/histogram-live", response_model=MeasurementResponse, status_code=201
+)
+def start_histogram_live_measurement(
+    request: HistogramLiveMeasurementRequest,
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """Start a live histogram measurement streaming to Redis."""
+    return _handle_measurement_request(
+        request_name="histogram-live",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.channels,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+        user_name=request.user_name,
+    )
+
+@measurement_router.post(
+    "/correlation-live", response_model=MeasurementResponse, status_code=201
+)
+def start_correlation_live_measurement(
+    request: CorrelationLiveMeasurementRequest,
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """Start a live correlation measurement streaming to Redis."""
+    return _handle_measurement_request(
+        request_name="correlation-live",
+        measurement_type=request.measurement_type,
+        duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.channels,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+        user_name=request.user_name,
+    )
+
 # ========== CHANNEL MANAGEMENT ENDPOINTS ==========
 
 
 @parameters_router.post(
     "/", response_model=MeasurementResponse, status_code=201
 )
-async def start_set_parameters(
+def start_set_parameters(
     request: SetParametersRequest = Body(
         ...,
         example={
@@ -363,7 +428,7 @@ async def start_set_parameters(
 
 
 @channels_router.get("/", response_model=ChannelListResponse)
-async def list_all_channels(
+def list_all_channels(
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> ChannelListResponse:
     """
@@ -395,7 +460,7 @@ async def list_all_channels(
 
 
 @channels_router.get("/available", response_model=ChannelStatsResponse)
-async def list_available_channels(
+def list_available_channels(
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> ChannelStatsResponse:
     """
@@ -441,7 +506,7 @@ async def list_available_channels(
     response_model=ChannelBookResponse,
     status_code=201,
 )
-async def book_channels(
+def book_channels(
     request: ChannelBookRequest,
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
@@ -528,7 +593,7 @@ async def book_channels(
     "/release/{user_name}",
     response_model=ChannelReleaseResponse,
 )
-async def release_channels(
+def release_channels(
     user_name: str,
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
@@ -618,7 +683,7 @@ async def release_channels(
         )
 
 
-async def get_user_name_channels(
+def get_user_name_channels(
     user_name: str,
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> dict:
@@ -650,7 +715,7 @@ async def get_user_name_channels(
 
 
 @measurement_router.delete("/{measurement_id}", response_model=MeasurementResponse)
-async def stop_measurement(
+def stop_measurement(
     measurement_id: str,
     processor: JobProcessor = Depends(get_job_processor),
     status_manager: StatusManager = Depends(get_status_manager),
@@ -732,11 +797,44 @@ async def stop_measurement(
             detail=str(e),
         )
 
+@measurement_router.websocket("/stream/{measurement_id}")
+async def stream_measurement_data(websocket: WebSocket, measurement_id: str):
+    """
+    Stream live measurement data via WebSocket.
+    """
+    await websocket.accept()
+    
+    # Initialize async redis connection
+    redis_client = aioredis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+    pubsub = redis_client.pubsub()
+    channel_name = f"measurement:data:{measurement_id}"
+    
+    try:
+        await pubsub.subscribe(channel_name)
+        logger.info(f"WebSocket client connected and subscribed to {channel_name}")
+        
+        # Listen for messages
+        while True:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message is not None:
+                await websocket.send_text(message['data'])
+                
+            # Allow cancellation checking
+            await asyncio.sleep(0.01)
+            
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket client disconnected from {channel_name}")
+    except Exception as e:
+        logger.error(f"WebSocket error on {channel_name}: {e}", exc_info=True)
+    finally:
+        await pubsub.unsubscribe(channel_name)
+        await redis_client.aclose()
+
 
 @measurement_router.get(
     "/{measurement_id}/status", response_model=MeasurementStatusResponse
 )
-async def get_measurement_status(
+def get_measurement_status(
     measurement_id: str,
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> MeasurementStatusResponse:
@@ -797,7 +895,7 @@ async def get_measurement_status(
 
 
 @measurement_router.get("/", response_model=dict)
-async def list_measurements(
+def list_measurements(
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> dict:
     """

@@ -9,6 +9,7 @@ from app.models import (
     CorrelationMeasurementRequest,
     CoincidencesMeasurementRequest,
     SaveRawTagsMeasurmentRequest,
+    SetParametersRequest,
 )
 
 # ============================================================================
@@ -170,6 +171,7 @@ class MeasurementPayloadMapper:
         "correlation": CorrelationMeasurementRequest,
         "coincidences": CoincidencesMeasurementRequest,
         "save_raw_tags": SaveRawTagsMeasurmentRequest,
+        "set_parameters": SetParametersRequest,
     }
 
     @classmethod

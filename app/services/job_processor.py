@@ -59,34 +59,37 @@ class JobProcessor:
 
     def _listen_for_stops(self):
         """Listen for stop events and halt the corresponding active handlers."""
-        for message in self._pubsub.listen():
-            if message["type"] == "message":
-                status_id = message["data"]
-                if isinstance(status_id, bytes):
-                    status_id = status_id.decode("utf-8")
-                handler_info = self.active_handlers.get(status_id)
-                if handler_info is not None:
-                    logger.info(f"[{status_id}] Stop event received via Pub/Sub, stopping handler")
-                    if isinstance(handler_info, tuple):
-                        handler, loop = handler_info
-                    else:
-                        handler, loop = handler_info, None
-                    
-                    try:
-                        if loop is not None and loop.is_running():
-                            future = asyncio.run_coroutine_threadsafe(handler.stop(), loop)
-                            def _log_exception(f):
-                                try:
-                                    f.result()
-                                except Exception as inner_e:
-                                    logger.error(f"[{status_id}] Exception inside handler.stop(): {inner_e}", exc_info=True)
-                            future.add_done_callback(_log_exception)
+        try:
+            for message in self._pubsub.listen():
+                if message["type"] == "message":
+                    status_id = message["data"]
+                    if isinstance(status_id, bytes):
+                        status_id = status_id.decode("utf-8")
+                    handler_info = self.active_handlers.get(status_id)
+                    if handler_info is not None:
+                        logger.info(f"[{status_id}] Stop event received via Pub/Sub, stopping handler")
+                        if isinstance(handler_info, tuple):
+                            handler, loop = handler_info
                         else:
-                            new_loop = asyncio.new_event_loop()
-                            new_loop.run_until_complete(handler.stop())
-                            new_loop.close()
-                    except Exception as e:
-                        logger.error(f"[{status_id}] Error stopping handler from Pub/Sub listener: {e}", exc_info=True)
+                            handler, loop = handler_info, None
+                        
+                        try:
+                            if loop is not None and loop.is_running():
+                                future = asyncio.run_coroutine_threadsafe(handler.stop(), loop)
+                                def _log_exception(f):
+                                    try:
+                                        f.result()
+                                    except Exception as inner_e:
+                                        logger.error(f"[{status_id}] Exception inside handler.stop(): {inner_e}", exc_info=True)
+                                future.add_done_callback(_log_exception)
+                            else:
+                                new_loop = asyncio.new_event_loop()
+                                new_loop.run_until_complete(handler.stop())
+                                new_loop.close()
+                        except Exception as e:
+                            logger.error(f"[{status_id}] Error stopping handler from Pub/Sub listener: {e}", exc_info=True)
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.debug(f"Pub/Sub listener stopped: {e}")
 
     def register_handler(self, measurement_type: str, handler_class: type) -> None:
         """Register a handler class for a measurement type.
@@ -172,7 +175,7 @@ class JobProcessor:
         job_thread = threading.Thread(
             target=self._run_job_in_thread,
             args=(status_id, measurement_type, duration_seconds, metadata),
-            daemon=False,
+            daemon=True,
             name=f"job-{status_id}",
         )
 
@@ -197,6 +200,17 @@ class JobProcessor:
                     f"[{status_id}] Job was stopped before starting; skipping execution"
                 )
                 return
+
+            if not existing:
+                logger.warning(
+                    f"[{status_id}] Status not found before starting job; creating it."
+                )
+                self.status_manager.create_status(
+                    status_id=status_id,
+                    measurement_type=measurement_type,
+                    duration_seconds=duration_seconds,
+                    metadata=metadata,
+                )
 
             # Update status to active
             self.status_manager.update_status(
@@ -231,7 +245,7 @@ class JobProcessor:
                 metadata = self.status_manager.get_metadata(status_id) or {}
 
             # Generic execution pipeline replacing redundant _handle_* methods
-            if not duration_seconds:
+            if duration_seconds is None:
                 raise ValueError(f"duration_seconds is required for {measurement_type}")
 
             try:
@@ -332,3 +346,17 @@ class JobProcessor:
     def is_job_active(self, status_id: str) -> bool:
         """Check if a job is currently running."""
         return status_id in self.active_jobs and self.active_jobs[status_id].is_alive()
+
+    def shutdown_all_jobs(self):
+        """Shutdown all active jobs and wait for them to finish."""
+        logger.info(f"Shutting down {len(self.active_jobs)} active jobs...")
+        
+        # Send stop signal to all running jobs
+        for status_id in list(self.active_jobs.keys()):
+            self.stop_job(status_id)
+            
+        # Wait for threads to complete
+        for status_id, thread in list(self.active_jobs.items()):
+            if thread.is_alive():
+                logger.debug(f"Waiting for job thread {status_id} to finish...")
+                thread.join(timeout=2.0)

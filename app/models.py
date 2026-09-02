@@ -14,6 +14,9 @@ class MeasurementType(str, Enum):
     CORRELATION = "correlation"
     COINCIDENCES = "coincidences"
     SET_PARAMETERS = "set_parameters"
+    STARTSTOP_LIVE = "startstop_live"
+    HISTOGRAM_LIVE = "histogram_live"
+    CORRELATION_LIVE = "correlation_live"
 
 
 class CountRateMetadata(BaseModel):
@@ -36,6 +39,10 @@ class CountRateMetadata(BaseModel):
     target_location: str = Field(
         default="desktop/MaasData/{datetime}/{measurement-type}",
         description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
+    )
+    refresh_rate: int = Field(
+        default=25,
+        description="Refresh rate in Hz for live measurements",
     )
 
     class Config:
@@ -79,6 +86,78 @@ class CorrelationMetadata(BaseModel):
                 "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
             }
         }
+
+
+class TimeHistogramLiveMetadata(BaseModel):
+    """Base metadata model for live time histogram measurements (StartStop, Histogram)."""
+
+    click_channel: int = Field(description="Click channel number. Required.")
+    start_channel: int = Field(description="Start channel number. Required.")
+    user_name: str = Field(description="The user who booked the channels. Required.")
+    binwidth: int = Field(
+        default=int(1e3),
+        description="Bin width in picoseconds for histogram. Default: 1e3 (1 millisecond)",
+    )
+    n_bins: int = Field(
+        default=1000,
+        description="Number of bins in the histogram. Default: 1000",
+    )
+    refresh_rate: int = Field(
+        default=25,
+        description="Refresh rate in Hz for live measurements",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "click_channel": 1,
+                "start_channel": 2,
+                "user_name": "abc-123-def",
+                "binwidth": 1000000,
+                "n_bins": 1000,
+                "refresh_rate": 25,
+            }
+        }
+
+class StartStopLiveMetadata(TimeHistogramLiveMetadata):
+    """Metadata model for live StartStop measurements."""
+    pass
+
+class HistogramLiveMetadata(TimeHistogramLiveMetadata):
+    """Metadata model for live Histogram measurements."""
+    pass
+
+class CorrelationLiveMetadata(BaseModel):
+    """Metadata model for live correlation measurements."""
+
+    channel1: int = Field(description="First channel number to correlate. Required.")
+    channel2: int = Field(description="Second channel number to correlate. Required.")
+    user_name: str = Field(description="The user who booked the channels. Required.")
+    binwidth: int = Field(
+        default=int(1e3),
+        description="Bin width in picoseconds for histogram. Default: 1e3",
+    )
+    n_bins: int = Field(
+        default=1000,
+        description="Number of bins in the histogram. Default: 1000",
+    )
+    refresh_rate: int = Field(
+        default=25,
+        description="Refresh rate in Hz for live measurements",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "channel1": 1,
+                "channel2": 2,
+                "user_name": "abc-123-def",
+                "binwidth": 1000000,
+                "n_bins": 1000,
+                "refresh_rate": 25,
+            }
+        }
+
 
 
 class CoincidencesMetadata(BaseModel):
@@ -616,3 +695,69 @@ class ChannelStatsResponse(BaseModel):
     user_names: dict[str, list[int]] = Field(
         description="Mapping of user_name identifier to channel lists"
     )
+
+class StartStopLiveMeasurementRequest(BaseModel):
+    measurement_type: MeasurementType = MeasurementType.STARTSTOP_LIVE
+    duration_seconds: int = Field(description="Duration in seconds")
+    metadata: StartStopLiveMetadata = Field(description="Metadata containing channels, binwidth, n_bins")
+    
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 60)
+            measurement_type = data.pop("measurement_type", MeasurementType.STARTSTOP_LIVE)
+            return {"measurement_type": measurement_type, "duration_seconds": duration_seconds, "metadata": data}
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return [self.metadata.click_channel, self.metadata.start_channel]
+
+    @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+class HistogramLiveMeasurementRequest(BaseModel):
+    measurement_type: MeasurementType = MeasurementType.HISTOGRAM_LIVE
+    duration_seconds: int = Field(description="Duration in seconds")
+    metadata: HistogramLiveMetadata = Field(description="Metadata containing channels, binwidth, n_bins")
+    
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 60)
+            measurement_type = data.pop("measurement_type", MeasurementType.HISTOGRAM_LIVE)
+            return {"measurement_type": measurement_type, "duration_seconds": duration_seconds, "metadata": data}
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return [self.metadata.click_channel, self.metadata.start_channel]
+
+    @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+class CorrelationLiveMeasurementRequest(BaseModel):
+    measurement_type: MeasurementType = MeasurementType.CORRELATION_LIVE
+    duration_seconds: int = Field(description="Duration in seconds")
+    metadata: CorrelationLiveMetadata = Field(description="Metadata containing channels, binwidth, n_bins")
+    
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            duration_seconds = data.pop("duration_seconds", 60)
+            measurement_type = data.pop("measurement_type", MeasurementType.CORRELATION_LIVE)
+            return {"measurement_type": measurement_type, "duration_seconds": duration_seconds, "metadata": data}
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return [self.metadata.channel1, self.metadata.channel2]
+
+    @property
+    def user_name(self) -> str:
+        return self.metadata.user_name

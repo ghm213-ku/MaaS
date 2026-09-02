@@ -65,3 +65,220 @@ measurement-count_rate         | 12, 16                         | BOOK          
 measurement-count_rate         | 1, 2, 3                        | BOOK            | 2026-07-02 10:12:32.917   | Measurement ID: 8c915e20-b315-4a35-b5fe-e8e97b3d32b1
 measurement-count_rate         | 12, 16                         | BOOK            | 2026-07-02 10:20:14.412   | Measurement ID: cc2fbb7b-01ac-4ce7-b24e-aed2c3ca8d47
 measurement-count_rate         | 1, 6                           | BOOK            | 2026-07-02 10:20:56.292   | Measurement ID: c0c8fef8-8705-4c57-8163-153a46941a2e
+maas-gui-client                | 1, 2, 3, 4                     | BOOK            | 2026-08-13 12:59:50.272   | Booked 4 channels
+maas-gui-client                | 1, 2, 3, 4                     | RELEASE         | 2026-08-13 13:00:10.640   | Released 4 channels
+maas-gui-client                | 1, 2, 3, 4                     | BOOK            | 2026-08-13 13:04:36.420   | Booked 4 channels
+maas-gui-client                | 1, 2, 3, 4                     | RELEASE         | 2026-08-13 13:05:09.135   | Released 4 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-13 13:06:56.799   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-13 13:07:44.763   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-13 13:08:04.785   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-13 13:08:23.585   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-13 13:09:43.628   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-13 13:10:01.845   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-13 13:10:03.878   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-13 13:10:12.113   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-13 13:16:36.064   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-13 13:17:00.558   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-13 13:17:01.805   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-13 13:49:42.229   | Released 3 channels
+sushant                        | 1, 2, 3                        | BOOK            | 2026-08-13 13:49:54.114   | Booked 3 channels
+sushant                        | 1, 2, 3                        | RELEASE         | 2026-08-13 13:50:11.479   | Released 3 channels
+sushant                        | 1, 2, 3                        | BOOK            | 2026-08-13 13:50:17.350   | Booked 3 channels
+sushant                        | 1, 2, 3                        | RELEASE         | 2026-08-14 12:17:31.271   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 08:23:26.441   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 08:24:08.656   | Released 3 channels
+maas-gui-client                | 2, 3                           | BOOK            | 2026-08-17 08:34:06.486   | Booked 2 channels
+maas-gui-client                | 2, 3                           | RELEASE         | 2026-08-17 08:34:49.995   | Released 2 channels
+abc-123                        | 5, 6, 7                        | BOOK            | 2026-08-17 08:58:18.728   | Booked 3 channels
+maas-gui-client                |                                | RELEASE         | 2026-08-17 09:01:36.252   | Released 0 channels
+abc-123                        | 5, 6, 7                        | RELEASE         | 2026-08-17 09:01:47.584   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 09:05:17.330   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 09:06:46.898   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 10:21:15.365   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 10:21:23.569   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 10:32:20.943   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 10:32:29.156   | Released 3 channels
+test                           | 1                              | BOOK            | 2026-08-17 10:35:37.503   | Booked 1 channels
+maas-gui-client                | 2, 3                           | BOOK            | 2026-08-17 12:10:35.244   | Booked 2 channels
+maas-gui-client                | 2, 3                           | RELEASE         | 2026-08-17 12:11:55.644   | Released 2 channels
+maas-gui-client                | 2, 3                           | BOOK            | 2026-08-17 12:22:22.390   | Booked 2 channels
+maas-gui-client                | 2, 3                           | RELEASE         | 2026-08-17 12:23:02.581   | Released 2 channels
+maas-gui-client                | 2, 3                           | BOOK            | 2026-08-17 12:23:03.440   | Booked 2 channels
+maas-gui-client                | 2, 3                           | RELEASE         | 2026-08-17 12:23:20.440   | Released 2 channels
+maas-gui-client                | 2, 3                           | BOOK            | 2026-08-17 12:23:29.391   | Booked 2 channels
+maas-gui-client                | 2, 3                           | RELEASE         | 2026-08-17 12:23:54.473   | Released 2 channels
+maas-gui-client                | 2, 3                           | BOOK            | 2026-08-17 13:00:09.659   | Booked 2 channels
+maas-gui-client                | 2, 3                           | RELEASE         | 2026-08-17 13:00:26.640   | Released 2 channels
+maas-gui-client                | 2, 3                           | BOOK            | 2026-08-17 13:00:33.872   | Booked 2 channels
+maas-gui-client                | 2, 3                           | RELEASE         | 2026-08-17 13:37:53.509   | Released 2 channels
+maas-gui-client                | 2, 3, 4                        | BOOK            | 2026-08-17 13:40:20.888   | Booked 3 channels
+maas-gui-client                | 2, 3, 4                        | RELEASE         | 2026-08-17 13:40:31.614   | Released 3 channels
+maas-gui-client                | 2, 3, 4                        | BOOK            | 2026-08-17 13:40:33.976   | Booked 3 channels
+maas-gui-client                | 2, 3, 4                        | RELEASE         | 2026-08-17 13:55:36.560   | Released 3 channels
+maas-gui-client                |                                | RELEASE         | 2026-08-17 13:59:09.473   | Released 0 channels
+test                           | 1                              | RELEASE         | 2026-08-17 14:01:27.401   | Released 1 channels
+test2                          | 1                              | BOOK            | 2026-08-17 14:01:59.546   | Booked 1 channels
+test2                          | 1                              | RELEASE         | 2026-08-17 14:02:36.546   | Released 1 channels
+test2                          | 1                              | BOOK            | 2026-08-17 14:02:38.602   | Booked 1 channels
+test2                          | 1                              | RELEASE         | 2026-08-17 14:10:23.817   | Released 1 channels
+maas-gui-client                | 2, 3, 4                        | BOOK            | 2026-08-17 14:12:02.520   | Booked 3 channels
+maas-gui-client                | 2, 3, 4                        | RELEASE         | 2026-08-17 14:12:46.086   | Released 3 channels
+maas-gui-client                | 2, 3, 4                        | BOOK            | 2026-08-17 14:12:54.692   | Booked 3 channels
+maas-gui-client                | 2, 3, 4                        | RELEASE         | 2026-08-17 14:13:13.043   | Released 3 channels
+maas-gui-client                | 2, 3, 4                        | BOOK            | 2026-08-17 14:13:41.265   | Booked 3 channels
+maas-gui-client                | 2, 3, 4                        | RELEASE         | 2026-08-17 14:14:07.786   | Released 3 channels
+maas-gui-client                | 2, 3, 4                        | BOOK            | 2026-08-17 14:14:15.853   | Booked 3 channels
+maas-gui-client                | 2, 3, 4                        | RELEASE         | 2026-08-17 14:15:51.934   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:26:28.870   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:26:52.464   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:26:59.537   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:27:53.701   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:27:57.989   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:29:06.094   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:37:15.595   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:38:18.037   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:39:50.677   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:40:12.541   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:40:18.931   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:41:25.862   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:41:35.346   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:42:53.271   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:43:04.715   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:44:37.295   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:44:43.134   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-17 14:45:16.152   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-17 14:45:19.422   | Booked 3 channels
+maas-gui-client                | 4                              | BOOK            | 2026-08-24 08:06:28.508   | Booked 1 channels
+maas-gui-client                | 1, 2, 3, 4                     | RELEASE         | 2026-08-24 08:07:02.168   | Released 4 channels
+maas-gui-client                | 1, 4                           | BOOK            | 2026-08-24 08:07:14.737   | Booked 2 channels
+maas-gui-client                | 1, 4                           | RELEASE         | 2026-08-24 08:08:20.091   | Released 2 channels
+maas-gui-client                | 1, 4                           | BOOK            | 2026-08-24 08:08:24.069   | Booked 2 channels
+maas-gui-client                | 1, 4                           | RELEASE         | 2026-08-24 08:10:03.981   | Released 2 channels
+sushant                        | 1, 2, 3, 4                     | BOOK            | 2026-08-24 08:31:59.987   | Booked 4 channels
+sushant                        | 1, 2, 3, 4                     | RELEASE         | 2026-08-24 08:33:51.176   | Released 4 channels
+sushant                        | 1, 2, 3, 4                     | BOOK            | 2026-08-24 08:34:00.274   | Booked 4 channels
+sushant                        | 1, 2, 3, 4                     | RELEASE         | 2026-08-24 08:34:50.033   | Released 4 channels
+sushant                        | 1, 2, 3, 4                     | BOOK            | 2026-08-24 08:34:58.588   | Booked 4 channels
+sushant                        | 1, 2, 3, 4                     | RELEASE         | 2026-08-24 08:36:22.860   | Released 4 channels
+sushant                        | 1, 2, 3, 4                     | BOOK            | 2026-08-24 08:36:32.924   | Booked 4 channels
+sushant                        | 1, 2, 3, 4                     | RELEASE         | 2026-08-24 08:38:47.787   | Released 4 channels
+sushant                        | 1, 2, 3, 4                     | BOOK            | 2026-08-24 08:39:10.541   | Booked 4 channels
+sushant                        | 1, 2, 3, 4                     | RELEASE         | 2026-08-24 08:39:53.697   | Released 4 channels
+sushant                        | 1, 2, 3, 4                     | BOOK            | 2026-08-24 08:40:02.364   | Booked 4 channels
+sushant                        | 1, 2, 3, 4                     | RELEASE         | 2026-08-24 08:42:11.011   | Released 4 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:09:35.956   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:29:56.079   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:31:37.083   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:34:09.923   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:34:23.420   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:34:31.612   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:34:34.744   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:35:33.769   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:47:35.650   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:48:03.550   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:48:08.537   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:48:48.170   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:48:53.848   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:49:27.775   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:49:30.778   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:49:56.454   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 11:50:01.833   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 11:53:01.105   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:02:35.128   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:03:22.965   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:03:32.458   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:04:35.475   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:05:03.522   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:05:29.783   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:05:35.601   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:08:51.825   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:21:09.760   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:21:17.929   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:24:31.329   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:24:39.538   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:25:05.025   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:25:12.608   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:25:46.564   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:25:54.745   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:27:43.305   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:28:45.546   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:28:55.138   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:31:31.513   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:31:35.835   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:32:35.161   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:42:35.169   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:43:16.760   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:43:23.599   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:46:25.281   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:46:30.757   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 12:47:37.035   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 12:59:15.258   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:00:50.156   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:00:55.410   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:01:06.653   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:01:45.602   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:02:43.304   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:05:50.213   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:06:41.248   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:06:47.353   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:06:58.674   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:07:59.548   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:08:41.019   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:08:45.144   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:08:47.916   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:15:19.857   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:15:28.021   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:15:33.484   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:15:57.774   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:22:35.334   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:22:43.571   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:22:46.033   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:23:04.058   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:23:20.656   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:23:55.014   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:45:29.026   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-08-24 13:45:37.216   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-08-24 13:45:42.217   | Booked 3 channels
+maas-gui-client                | 4, 5                           | BOOK            | 2026-08-24 13:53:55.840   | Booked 2 channels
+maas-gui-client                | 1, 2, 3, 4, 5                  | RELEASE         | 2026-08-24 13:54:04.024   | Released 5 channels
+maas-gui-client                | 4, 5                           | BOOK            | 2026-08-24 13:54:08.741   | Booked 2 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-09-02 07:47:54.844   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-09-02 07:48:08.319   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-09-02 07:48:23.943   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-09-02 07:48:32.235   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-09-02 07:48:52.832   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-09-02 07:49:00.989   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-09-02 07:49:18.933   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-09-02 08:06:24.015   | Booked 3 channels
+maas-gui-client                | 1, 2, 3, 4, 5                  | RELEASE         | 2026-09-02 08:08:00.886   | Released 5 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-09-02 08:08:06.721   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-09-02 08:10:01.163   | Released 3 channels
+maas-gui-client                | 1, 2, 3                        | BOOK            | 2026-09-02 08:10:04.347   | Booked 3 channels
+maas-gui-client                | 1, 2, 3                        | RELEASE         | 2026-09-02 08:12:06.560   | Released 3 channels
+fake-user                      |                                | RELEASE         | 2026-09-02 08:28:58.953   | Released 0 channels
+fake-user                      |                                | RELEASE         | 2026-09-02 08:37:32.682   | Released 0 channels
+fake-user                      |                                | RELEASE         | 2026-09-02 08:37:59.457   | Released 0 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:39:39.722   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:39:41.904   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:39:50.407   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:40:22.881   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:52:24.930   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:52:27.122   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:52:37.120   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:52:55.009   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:52:59.983   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:53:23.238   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:53:33.337   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:53:35.513   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:53:38.443   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:53:40.597   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:53:43.772   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:53:45.935   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:53:48.778   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:53:50.933   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:53:53.988   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:53:56.174   | Released 2 channels
+maas-gui-client                | 1, 2                           | BOOK            | 2026-09-02 08:54:12.604   | Booked 2 channels
+maas-gui-client                | 1, 2                           | RELEASE         | 2026-09-02 08:54:14.813   | Released 2 channels
+maas-gui-client                | 1                              | BOOK            | 2026-09-02 09:34:38.291   | Booked 1 channels
+maas-gui-client                | 1                              | RELEASE         | 2026-09-02 09:34:38.327   | Released 1 channels

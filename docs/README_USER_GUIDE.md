@@ -181,6 +181,38 @@ curl -X POST http://localhost:8000/api/v1/measurements/save-raw-tags \
 
 ---
 
+### 3. Live Time Histograms
+
+Streams StartStop, Histogram, or Correlation measurements in real-time to a Redis channel `measurement:data:{measurement_id}`.
+
+**Endpoints**:
+- `POST /api/v1/measurements/startstop-live`
+- `POST /api/v1/measurements/histogram-live`
+- `POST /api/v1/measurements/correlation-live`
+
+**Request** (Example for Histogram-Live):
+```bash
+curl -X POST http://localhost:8000/api/v1/measurements/histogram-live \
+  -H "Content-Type: application/json" \
+  -d '{
+    "duration_seconds": 60,
+    "metadata": {
+      "click_channel": 1,
+      "start_channel": 2,
+      "user_name": "user-123",
+      "binwidth": 1000,
+      "n_bins": 1000,
+      "refresh_rate": 25
+    }
+  }'
+```
+*(Note: Use `channel1` and `channel2` for `correlation-live` instead of `click_channel` and `start_channel`)*
+
+**Live Streaming**: Connect to a local WebSocket (if applicable) or subscribe directly to Redis pub/sub to receive updates at the specified `refresh_rate` (default 25 Hz).
+Each payload contains `{"data": [...], "index": [...]}`.
+
+---
+
 ## Advanced Usage
 
 ### Polling for Completion (Python Example)
