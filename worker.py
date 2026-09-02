@@ -17,11 +17,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.services.job_processor import JobProcessor
+from app.services.status_manager import StatusManager
 from app.services.count_rate import CountRateMeasurementHandler
 from app.services.count_rate_live import CountRateLiveMeasurementHandler
 from app.services.correlation import CorrelationMeasurementHandler
 from app.services.coincidences import CoincidencesMeasurementHandler
 from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
+from app.services.set_parameters import SetParametersHandler
+from app.services.time_histograms_live import (
+    StartStopLiveMeasurementHandler,
+    HistogramLiveMeasurementHandler,
+    CorrelationLiveMeasurementHandler,
+)
 from app.services.file_logger import FileLogger
 from app.utils.logger import configure_logging
 import time
@@ -35,7 +42,7 @@ class BackendWorker:
 
     def __init__(
         self,
-        redis_host: str = "localhost",
+        redis_host: str = "127.0.0.1",
         redis_port: int = 6379,
         redis_db: int = 0,
         max_retries: int = 5,
@@ -116,10 +123,22 @@ class BackendWorker:
             self.job_processor.register_handler(
                 "save_raw_tags", SaveRawTagsMeasurementHandler
             )
+            self.job_processor.register_handler(
+                "set_parameters", SetParametersHandler
+            )
+            self.job_processor.register_handler(
+                "startstop_live", StartStopLiveMeasurementHandler
+            )
+            self.job_processor.register_handler(
+                "histogram_live", HistogramLiveMeasurementHandler
+            )
+            self.job_processor.register_handler(
+                "correlation_live", CorrelationLiveMeasurementHandler
+            )
 
             logger.info("Backend worker initialized successfully")
             logger.info(
-                "  Handlers registered: count_rate, count_rate_live, correlation, coincidences, save_raw_tags"
+                "  Handlers registered: count_rate, count_rate_live, correlation, coincidences, save_raw_tags, set_parameters, startstop_live, histogram_live, correlation_live"
             )
             self.retry_count = 0
             self.current_retry_delay = 1.0
@@ -175,7 +194,7 @@ class BackendWorker:
         logger.info(f"Configuration:")
         logger.info(f"  Poll timeout: {poll_timeout}s")
         logger.info(f"  Redis: {self.redis_host}:{self.redis_port}")
-        logger.info(f"  Registered handlers: count_rate, count_rate_live, save_raw_tags")
+        logger.info(f"  Registered handlers: count_rate, count_rate_live, save_raw_tags, set_parameters")
         logger.info("=" * 70)
 
         try:
@@ -254,6 +273,13 @@ class BackendWorker:
         logger.info(f"  Success rate: {self._calculate_success_rate():.1f}%")
         logger.info("=" * 70)
 
+        # Stop active jobs gracefully
+        try:
+            if hasattr(self, 'job_processor') and self.job_processor:
+                self.job_processor.shutdown_all_jobs()
+        except Exception as e:
+            logger.error(f"Error shutting down jobs: {e}", exc_info=True)
+
         # Close Redis connection
         try:
             if self.status_manager:
@@ -280,7 +306,7 @@ def main():
     """Entry point for the backend worker."""
     try:
         worker = BackendWorker(
-            redis_host="localhost",
+            redis_host="127.0.0.1",
             redis_port=6379,
             redis_db=0,
             max_retries=5,

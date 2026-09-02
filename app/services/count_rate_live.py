@@ -48,9 +48,10 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
         binwidth = metadata.binwidth
         n_values = metadata.n_values
         target_location = metadata.target_location
+        refresh_rate = getattr(metadata, 'refresh_rate', 25)
         self._target_location = target_location
         logger.debug(
-            f"Count-rate params - channels: {channels}, binwidth: {binwidth}, n_values: {n_values}, target: {target_location}"
+            f"Count-rate params - channels: {channels}, binwidth: {binwidth}, n_values: {n_values}, target: {target_location}, refresh_rate: {refresh_rate}"
         )
         
         self._measurement_task = asyncio.current_task()
@@ -67,11 +68,12 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
             self._stop_event = asyncio.Event()
             
             end_time = asyncio.get_event_loop().time() + duration_seconds
+            timeout = 1.0 / refresh_rate if refresh_rate > 0 else 0.04
             
-            # Loop every 0.04s for 25Hz update rate
+            # Loop at the specified refresh rate
             while not self._stopped and asyncio.get_event_loop().time() < end_time:
                 try:
-                    await asyncio.wait_for(self._stop_event.wait(), timeout=0.04)
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=timeout)
                     break  # if stop_event is set, break
                 except asyncio.TimeoutError:
                     pass

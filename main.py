@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
     # Initialize status manager (includes channel management)
     try:
         status_manager = StatusManager(
-            redis_host="localhost",
+            redis_host="127.0.0.1",
             redis_port=6379,
             redis_db=0,
             file_logger=file_logger,
@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI):
     logger.info("Web API layer initialized successfully")
     logger.info("Job processing delegated to backend worker")
     logger.info("Configuration:")
-    logger.info(f"  Redis: localhost:6379 (DB 0)")
+    logger.info(f"  Redis: 127.0.0.1:6379 (DB 0)")
     logger.info(f"  File logging: enabled")
     logger.info("=" * 70)
 

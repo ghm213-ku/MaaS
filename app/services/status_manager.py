@@ -28,7 +28,7 @@ class StatusManager:
 
     def __init__(
         self,
-        redis_host: str = "localhost",
+        redis_host: str = "127.0.0.1",
         redis_port: int = 6379,
         redis_db: int = 0,
         file_logger: Optional[Any] = None,

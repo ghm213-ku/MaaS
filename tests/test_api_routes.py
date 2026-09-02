@@ -251,16 +251,80 @@ class TestStartMeasurementEndpoint:
         payload = {
             "measurement_type": "count_rate",
             "duration_seconds": 60,
-            "metadata": {"user_name": "test_user", "user_name": "test_user", "channels": [1]},
+            "metadata": {"user_name": "test_user", "channels": [1, 2]},
+        }
+        response = client.post("/api/v1/measurements/count-rate", json=payload)
+        assert "started_at" in response.json()
+
+class TestLiveHistogramEndpoints:
+    """Test live histogram endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_start_startstop_live_success(self, client, mock_service):
+        """Should start startstop-live measurement and return ID."""
+        payload = {
+            "measurement_type": "startstop_live",
+            "duration_seconds": 60,
+            "metadata": {
+                "click_channel": 1,
+                "start_channel": 2,
+                "user_name": "test_user",
+                "binwidth": 1000,
+                "n_bins": 1000,
+                "refresh_rate": 25
+            },
         }
 
-        response = client.post(
-            "/api/v1/measurements/count-rate",
-            json=payload,
-        )
+        response = client.post("/api/v1/measurements/startstop-live", json=payload)
 
+        assert response.status_code == 201
         data = response.json()
-        assert "started_at" in data
+        assert "measurement_id" in data
+        assert data["status"] == "queued"
+        assert data["measurement_type"] == "startstop_live"
+
+    @pytest.mark.asyncio
+    async def test_start_histogram_live_success(self, client, mock_service):
+        """Should start histogram-live measurement and return ID."""
+        payload = {
+            "measurement_type": "histogram_live",
+            "duration_seconds": 60,
+            "metadata": {
+                "click_channel": 1,
+                "start_channel": 2,
+                "user_name": "test_user"
+            },
+        }
+
+        response = client.post("/api/v1/measurements/histogram-live", json=payload)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "measurement_id" in data
+        assert data["status"] == "queued"
+        assert data["measurement_type"] == "histogram_live"
+
+    @pytest.mark.asyncio
+    async def test_start_correlation_live_success(self, client, mock_service):
+        """Should start correlation-live measurement and return ID."""
+        payload = {
+            "measurement_type": "correlation_live",
+            "duration_seconds": 60,
+            "metadata": {
+                "channel1": 1,
+                "channel2": 2,
+                "user_name": "test_user"
+            },
+        }
+
+        response = client.post("/api/v1/measurements/correlation-live", json=payload)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "measurement_id" in data
+        assert data["status"] == "queued"
+        assert data["measurement_type"] == "correlation_live"
+
         # Should be ISO format datetime string
         assert "T" in data["started_at"]
 
@@ -526,3 +590,24 @@ class TestApiIntegration:
             f"/api/v1/measurements/{meas_id}/status",
         )
         assert final_status.json()["status"] in ["stopped", "active"]
+
+    @patch('app.api.routes.aioredis.Redis')
+    def test_websocket_streaming(self, mock_redis, client):
+        mock_redis_instance = MagicMock()
+        mock_pubsub = AsyncMock()
+        mock_redis_instance.aclose = AsyncMock()
+        
+        mock_redis_instance.pubsub.return_value = mock_pubsub
+        mock_redis.return_value = mock_redis_instance
+        
+        mock_pubsub.get_message.side_effect = [
+            {"data": "test_data_1"},
+            None,
+            None,
+        ]
+        
+        with client.websocket_connect("/api/v1/measurements/stream/test_id") as websocket:
+            data = websocket.receive_text()
+            assert data == "test_data_1"
+            
+            mock_pubsub.subscribe.assert_called_once_with("measurement:data:test_id")
