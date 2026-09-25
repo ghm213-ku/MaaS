@@ -47,6 +47,7 @@ class BackendWorker:
         redis_db: int = 0,
         max_retries: int = 5,
         retry_backoff: float = 2.0,
+        testing: bool = False,
     ):
         """Initialize the backend worker.
 
@@ -62,6 +63,7 @@ class BackendWorker:
         self.redis_db = redis_db
         self.max_retries = max_retries
         self.retry_backoff = retry_backoff
+        self.testing = testing
 
         # State tracking
         self.retry_count = 0
@@ -98,11 +100,15 @@ class BackendWorker:
 
             logger.debug("Redis connection verified")
 
-            logger.debug("Initializing TimeTagger...")
-            tagger = TimeTagger.createTimeTagger()
-            tagger.setTestSignal([2, 3, 4], True)
-            tagger.setTriggerLevel(12, 0.0)
-            tagger.setTriggerLevel(16, 0.0)
+            if not self.testing:
+                logger.debug("Initializing TimeTagger...")
+                tagger = TimeTagger.createTimeTagger()
+                tagger.setTestSignal([2, 3, 4], True)
+                tagger.setTriggerLevel(12, 0.0)
+                tagger.setTriggerLevel(16, 0.0)
+            else:
+                logger.debug("Testing mode enabled, skipping TimeTagger initialization")
+                tagger = None
 
             logger.debug("Creating JobProcessor...")
             self.job_processor = JobProcessor(self.status_manager, tagger=tagger)
@@ -304,6 +310,8 @@ class BackendWorker:
 
 def main():
     """Entry point for the backend worker."""
+    import sys
+    testing = "testing" in sys.argv or "--testing" in sys.argv
     try:
         worker = BackendWorker(
             redis_host="127.0.0.1",
@@ -311,6 +319,7 @@ def main():
             redis_db=0,
             max_retries=5,
             retry_backoff=2.0,
+            testing=testing,
         )
         worker.run(poll_timeout=1)
     except Exception as e:

@@ -366,3 +366,4 @@ maas-gui-client                | 2, 3                           | BOOK          
 maas-gui-client                | 2, 3                           | RELEASE         | 2026-09-02 14:20:17.877   | Released 2 channels
 maas-gui-client                | 2, 3                           | BOOK            | 2026-09-02 14:20:22.947   | Booked 2 channels
 maas-gui-client                | 2, 3                           | RELEASE         | 2026-09-02 14:20:59.900   | Released 2 channels
+admin                          | 1, 2, 3                        | BOOK            | 2026-09-25 13:57:33.703   | Booked 3 channels
