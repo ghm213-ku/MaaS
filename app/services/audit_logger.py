@@ -3,6 +3,7 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
+from typing import Optional
 
 # Ensure logs directory exists
 LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
@@ -38,8 +39,8 @@ if not audit_logger.handlers:
     audit_logger.addHandler(handler)
 
 def log_audit_event(
-    user_id: int, 
-    role: str, 
+    user_id: Optional[int], 
+    role: Optional[str], 
     action: str, 
     target_hardware_id: str, 
     http_method: str, 

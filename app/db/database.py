@@ -38,6 +38,19 @@ def init_db():
     for role in roles_to_seed:
         cursor.execute("INSERT OR IGNORE INTO roles (name) VALUES (?)", (role,))
         
+    cursor.execute("SELECT id FROM roles WHERE name = 'admin'")
+    admin_role = cursor.fetchone()
+    if admin_role:
+        admin_role_id = admin_role["id"]
+        cursor.execute("SELECT id FROM users WHERE username = 'admin'")
+        if not cursor.fetchone():
+            from app.services.auth_service import get_password_hash
+            default_password_hash = get_password_hash("admin")
+            cursor.execute("""
+                INSERT INTO users (username, password_hash, role_id)
+                VALUES (?, ?, ?)
+            """, ("admin", default_password_hash, admin_role_id))
+            
     conn.commit()
     conn.close()
 
