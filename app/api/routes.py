@@ -5,12 +5,13 @@ This module provides two main routers:
 - channels_router: For /api/v1/channels (list, book, release channel management)
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Body, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Depends, Body, WebSocket, WebSocketDisconnect, Request, Response
 import redis.asyncio as aioredis
 import asyncio
-from typing import Optional
+from typing import Optional, Callable
 from datetime import datetime
 import uuid
+from fastapi.routing import APIRoute
 
 from app.models import (
     CountRateMeasurementRequest,
@@ -37,13 +38,58 @@ from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager, MeasurementStatus
 from app.services.file_logger import FileLogger
 from app.utils.logger import configure_logging
+from app.services.audit_logger import log_audit_event
 
 logger = configure_logging(__name__)
 
-# Separate routers for measurements and channels
-measurement_router = APIRouter(prefix="/api/v1/measurements", tags=["measurements"])
-channels_router = APIRouter(prefix="/api/v1/channels", tags=["channels"])
-parameters_router = APIRouter(prefix="/api/v1/set-parameters", tags=["parameters"])
+class AuditRoute(APIRoute):
+    def get_route_handler(self) -> Callable:
+        original_route_handler = super().get_route_handler()
+        async def custom_route_handler(request: Request) -> Response:
+            # We only audit state-changing actions
+            is_audit_method = request.method in ["POST", "PUT", "DELETE"]
+            status_code = 500
+            message = "Internal Server Error"
+            try:
+                response = await original_route_handler(request)
+                status_code = response.status_code
+                message = "Success"
+                return response
+            except HTTPException as exc:
+                status_code = exc.status_code
+                message = exc.detail
+                raise exc
+            except Exception as exc:
+                message = str(exc)
+                raise exc
+            finally:
+                if is_audit_method:
+                    user_id = getattr(request.state, "user_id", None)
+                    role = getattr(request.state, "role", None)
+                    action = request.url.path.strip("/").split("/")[-1]
+                    target_hardware_id = "system"
+                    if "measurements/" in request.url.path:
+                        parts = request.url.path.split("/")
+                        if parts[-1] not in ["count-rate", "correlation", "coincidences", "save-raw-tags"]:
+                            target_hardware_id = parts[-1]
+                    
+                    if user_id and role:
+                        log_audit_event(
+                            user_id=user_id,
+                            role=role,
+                            action=action,
+                            target_hardware_id=target_hardware_id,
+                            http_method=request.method,
+                            http_path=request.url.path,
+                            status=status_code,
+                            message=message
+                        )
+        return custom_route_handler
+
+# Separate routers for measurements and channels using AuditRoute
+measurement_router = APIRouter(prefix="/api/v1/measurements", tags=["measurements"], route_class=AuditRoute)
+channels_router = APIRouter(prefix="/api/v1/channels", tags=["channels"], route_class=AuditRoute)
+parameters_router = APIRouter(prefix="/api/v1/set-parameters", tags=["parameters"], route_class=AuditRoute)
 
 # These will be set by main.py
 _job_processor: Optional[JobProcessor] = None

@@ -169,16 +169,7 @@ class StatusManager:
             except Exception as e:
                 logger.error(f"[{status_id}] Failed to log status update: {e}")
 
-        # Release channels when reaching terminal status
-        if status in [
-            MeasurementStatus.COMPLETED.value,
-            MeasurementStatus.STOPPED.value,
-            MeasurementStatus.FAILED.value,
-        ]:
-            try:
-                self.release_channels(status_id)
-            except Exception as e:
-                logger.error(f"[{status_id}] Failed to release channels: {e}")
+
 
         return status_obj
 

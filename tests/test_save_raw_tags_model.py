@@ -465,7 +465,7 @@ class TestSaveRawTagsMeasurementHandlerStop:
         handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
         handler._target_file_path = "test.dat"
         
-        with patch('Swabian.TimeTagger.freeTimeTagger') as mock_free:
+        with patch('app.services.save_raw_tags.TimeTagger.freeTimeTagger') as mock_free:
             # First test successful free
             with patch.object(handler, '_delete_output_file'):
                 await handler.stop()

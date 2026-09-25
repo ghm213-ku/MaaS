@@ -95,6 +95,16 @@ class CountRateMeasurementHandler(MeasurementHandler):
             logger.info("Count-rate measurement cancelled")
             raise
 
+        return {
+            "status": "completed",
+            "duration": (
+                (datetime.utcnow() - self._start_time).total_seconds()
+                if self._start_time
+                else duration_seconds
+            ),
+            "count": self._count,
+        }
+
     async def stop(self) -> Dict[str, Any]:
         """
         Stop count-rate measurement and return results.
