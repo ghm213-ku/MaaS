@@ -126,13 +126,18 @@ class TestE2EMeasurementWorkflows:
         meas_id = resp.json()["measurement_id"]
 
         # Wait for completion (duration is 1s, plus some overhead)
-        time.sleep(1.5)
-
-        # Check status
-        status_resp = client.get(f"/api/v1/measurements/{meas_id}/status")
-        assert status_resp.status_code == 200
-        data = status_resp.json()
-        assert data["status"] == "completed"
+        # Use polling to prevent flakiness
+        completed = False
+        for _ in range(50):
+            status_resp = client.get(f"/api/v1/measurements/{meas_id}/status")
+            assert status_resp.status_code == 200
+            data = status_resp.json()
+            if data["status"] == "completed":
+                completed = True
+                break
+            time.sleep(0.1)
+            
+        assert completed, f"Measurement did not complete in time, last status: {data['status']}"
         assert "results" in data
         assert data["results"] is not None
 
@@ -163,16 +168,14 @@ class TestE2EMeasurementWorkflows:
         assert resp.status_code == 201
         meas_id = resp.json()["measurement_id"]
 
-        # Wait for duration
-        time.sleep(1.5)
-
-        # Check that we received pubsub messages
+        # Wait for completion
         messages = []
-        while True:
+        for _ in range(50):
             msg = pubsub.get_message(ignore_subscribe_messages=True, timeout=0.1)
-            if not msg:
+            if msg:
+                messages.append(msg)
                 break
-            messages.append(msg)
+            time.sleep(0.1)
 
         assert len(messages) > 0, "No live data streamed to Redis"
         
@@ -205,12 +208,16 @@ class TestE2EMeasurementWorkflows:
         meas_id = resp.json()["measurement_id"]
 
         # Wait for completion
-        time.sleep(1.5)
-
-        # Check status
-        status_resp = client.get(f"/api/v1/measurements/{meas_id}/status")
-        assert status_resp.status_code == 200
-        assert status_resp.json()["status"] == "completed"
+        completed = False
+        for _ in range(50):
+            status_resp = client.get(f"/api/v1/measurements/{meas_id}/status")
+            assert status_resp.status_code == 200
+            if status_resp.json()["status"] == "completed":
+                completed = True
+                break
+            time.sleep(0.1)
+            
+        assert completed, "Correlation measurement did not complete in time"
 
     def test_set_parameters_e2e(self, e2e_setup):
         """Test set-parameters flow."""

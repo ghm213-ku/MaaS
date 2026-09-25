@@ -8,6 +8,8 @@ from app.services.job_processor import JobProcessor
 from app.services.file_logger import initialize_file_logger
 from app.api import routes
 from app.utils.logger import configure_logging, configure_root_logging
+from app.middleware.auth_middleware import AuthMiddleware
+from app.api.auth import auth_router
 
 # Configure root logger first - all child loggers will inherit this configuration
 # This ensures all logs from all modules (routes, services, etc.) go to the file
@@ -141,8 +143,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add Auth Middleware
+app.add_middleware(AuthMiddleware)
 
 # Include routers
+app.include_router(auth_router)
 app.include_router(routes.measurement_router)
 app.include_router(routes.channels_router)
 app.include_router(routes.parameters_router)

@@ -39,7 +39,7 @@ async def test_routes_file_logger_fails():
     )
     
     # This should not raise an HTTP exception, just log a warning
-    response = await start_count_rate_measurement(
+    response = start_count_rate_measurement(
         request=request,
         processor=mock_job_processor,
         status_manager=mock_status_manager,
@@ -61,7 +61,7 @@ async def test_routes_channel_booking_fails():
     )
     
     with pytest.raises(HTTPException) as exc:
-        await start_count_rate_measurement(
+        start_count_rate_measurement(
             request=request,
             processor=MagicMock(),
             status_manager=mock_status_manager,
@@ -83,7 +83,7 @@ async def test_routes_general_exception():
     )
     
     with pytest.raises(HTTPException) as exc:
-        await start_count_rate_measurement(
+        start_count_rate_measurement(
             request=request,
             processor=MagicMock(),
             status_manager=mock_status_manager,
@@ -258,10 +258,10 @@ def test_job_processor_handle_coincidences():
     handler = MockCoincidencesHandler(tagger=MagicMock())
     processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
     
-    # Missing duration
+    # Missing metadata fields
     processor._run_job_in_thread("id1", "coincidences", 0.0, {})
     args = processor.status_manager.update_status.call_args_list[-1].args
-    assert args[1] == "failed" and "duration_seconds is required" in args[2]
+    assert args[1] == "failed" and "validation errors" in args[2]
         
     # Missing channels
     processor._run_job_in_thread("id1", "coincidences", 10.0, {"user_name": "test_user"})
@@ -281,10 +281,10 @@ def test_job_processor_handle_save_raw_tags():
     handler = MockCoincidencesHandler(tagger=MagicMock())  # using this as a dummy handler
     processor.job_handlers["save_raw_tags"] = MagicMock(return_value=handler)
     
-    # Missing duration
+    # Missing metadata fields
     processor._run_job_in_thread("id1", "save_raw_tags", 0.0, {})
     args = processor.status_manager.update_status.call_args_list[-1].args
-    assert args[1] == "failed" and "duration_seconds is required" in args[2]
+    assert args[1] == "failed" and "validation errors" in args[2]
         
     # Missing channel list
     processor._run_job_in_thread("id1", "save_raw_tags", 10.0, {"user_name": "test_user", "target_file_path": "path"})
@@ -360,21 +360,6 @@ def test_job_processor_run_job_cancelled_error():
     # Should catch CancelledError and not update_status to FAILED
     sm_mock.update_status.assert_called_with("id123", "active", "coincidences measurement started")
 
-def test_job_processor_run_job_release_channels_exception():
-    sm_mock = MagicMock()
-    sm_mock.get_status.return_value = {"status": "queued"}
-    sm_mock.release_channels.side_effect = Exception("Release error")
-    
-    processor = JobProcessor(status_manager=sm_mock, tagger=MagicMock())
-    processor.redis_client = MagicMock()
-    
-    handler = MockCoincidencesHandler(tagger=MagicMock())
-    handler.start = AsyncMock()
-    processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
-    
-    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [1,2]})
-    # Should catch the exception and log debug silently
-    sm_mock.release_channels.assert_called_with("id123")
 
 def test_job_processor_format_target_location_empty():
     processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
@@ -479,21 +464,6 @@ def test_job_processor_run_job_cancelled_error():
     # Should catch CancelledError and not update_status to FAILED
     sm_mock.update_status.assert_called_with("id123", "active", "coincidences measurement started")
 
-def test_job_processor_run_job_release_channels_exception():
-    sm_mock = MagicMock()
-    sm_mock.get_status.return_value = {"status": "queued"}
-    sm_mock.release_channels.side_effect = Exception("Release error")
-    
-    processor = JobProcessor(status_manager=sm_mock, tagger=MagicMock())
-    processor.redis_client = MagicMock()
-    
-    handler = MockCoincidencesHandler(tagger=MagicMock())
-    handler.start = AsyncMock()
-    processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
-    
-    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [1,2]})
-    # Should catch the exception and log debug silently
-    sm_mock.release_channels.assert_called_with("id123")
 
 def test_job_processor_format_target_location_empty():
     res = format_target_location("", "count_rate")

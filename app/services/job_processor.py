@@ -272,7 +272,7 @@ class JobProcessor:
                 asyncio.set_event_loop(loop)
                 if status_id:
                     self.active_handlers[status_id] = (handler, loop)
-                loop.run_until_complete(
+                result = loop.run_until_complete(
                     handler.start(duration_seconds, parsed_metadata)
                 )
             finally:
@@ -289,6 +289,7 @@ class JobProcessor:
                     status_id,
                     MeasurementStatus.COMPLETED.value,
                     f"{measurement_type} measurement completed successfully",
+                    results=result
                 )
 
                 logger.info(f"[{status_id}] Job completed successfully")
@@ -303,14 +304,6 @@ class JobProcessor:
             )
 
         finally:
-            # Release channels if any were booked
-            try:
-                self.status_manager.release_channels(status_id)
-                logger.info(f"[{status_id}] Channels released after job completion")
-            except Exception as e:
-                logger.debug(
-                    f"[{status_id}] No channels to release or release failed: {e}"
-                )
 
             # Clean up from active jobs and handlers
             if status_id in self.active_jobs:

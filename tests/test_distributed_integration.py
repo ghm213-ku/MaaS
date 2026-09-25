@@ -259,7 +259,8 @@ class TestJobProcessorIntegration:
         )
 
         # Process job (should update status)
-        with patch.object(CountRateMeasurementHandler, "start", new_callable=AsyncMock):
+        mock_handler = AsyncMock(return_value={"status": "completed"})
+        with patch.object(CountRateMeasurementHandler, "start", mock_handler):
             job_processor.process_job(status_id, "count_rate", 2)
 
             # Give thread a moment to complete
@@ -670,7 +671,8 @@ class TestJobQueueing:
         assert job["metadata"] == metadata
 
         # Step 4: Worker processes the job (with mocked handler)
-        with patch.object(CountRateMeasurementHandler, "start", new_callable=AsyncMock):
+        mock_handler = AsyncMock(return_value={"status": "completed"})
+        with patch.object(CountRateMeasurementHandler, "start", mock_handler):
             job_processor.process_job(
                 status_id=job["status_id"],
                 measurement_type=job["measurement_type"],

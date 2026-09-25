@@ -359,7 +359,7 @@ class TestCorrelationHandlerIntegration:
         processor.register_handler("correlation", CorrelationMeasurementHandler)
         
         import TimeTagger
-        with patch("TimeTagger.Correlation", side_effect=Exception("Hardware missing")):
+        with patch("app.services.correlation.TimeTagger.Correlation", side_effect=Exception("Hardware missing")):
             metadata = {"user_name": "test_user", 
                 "channel1": 1,
                 "channel2": 2,
