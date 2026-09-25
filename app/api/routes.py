@@ -73,17 +73,16 @@ class AuditRoute(APIRoute):
                         if parts[-1] not in ["count-rate", "correlation", "coincidences", "save-raw-tags"]:
                             target_hardware_id = parts[-1]
                     
-                    if user_id and role:
-                        log_audit_event(
-                            user_id=user_id,
-                            role=role,
-                            action=action,
-                            target_hardware_id=target_hardware_id,
-                            http_method=request.method,
-                            http_path=request.url.path,
-                            status=status_code,
-                            message=message
-                        )
+                    log_audit_event(
+                        user_id=user_id,
+                        role=role,
+                        action=action,
+                        target_hardware_id=target_hardware_id,
+                        http_method=request.method,
+                        http_path=request.url.path,
+                        status=status_code,
+                        message=message
+                    )
         return custom_route_handler
 
 # Separate routers for measurements and channels using AuditRoute

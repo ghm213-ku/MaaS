@@ -3,6 +3,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from app.services.auth_service import decode_access_token
+from app.services.audit_logger import log_audit_event
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -11,8 +12,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # We only protect /api/v1/ and /auth/users
         # Other paths like /docs, /redoc, /health, /auth/login should be allowed
         if path.startswith("/api/v1/") or path == "/auth/users":
+            def _log_audit_401(msg: str):
+                is_audit_method = request.method in ["POST", "PUT", "DELETE"]
+                if is_audit_method:
+                    action = path.strip("/").split("/")[-1]
+                    target_hardware_id = "system"
+                    if "measurements/" in path:
+                        parts = path.split("/")
+                        if parts[-1] not in ["count-rate", "correlation", "coincidences", "save-raw-tags"]:
+                            target_hardware_id = parts[-1]
+                    log_audit_event(None, None, action, target_hardware_id, request.method, path, 401, msg)
+
             auth_header = request.headers.get("Authorization")
             if not auth_header or not auth_header.startswith("Bearer "):
+                _log_audit_401("Not authenticated")
                 return JSONResponse(
                     status_code=401,
                     content={"detail": "Not authenticated"}
@@ -30,11 +43,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 # The /auth/users endpoint role check is handled inside its route.
                 
             except jwt.ExpiredSignatureError:
+                _log_audit_401("Token expired")
                 return JSONResponse(
                     status_code=401,
                     content={"detail": "Token expired"}
                 )
             except jwt.InvalidTokenError:
+                _log_audit_401("Invalid token")
                 return JSONResponse(
                     status_code=401,
                     content={"detail": "Invalid token"}
