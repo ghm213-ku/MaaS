@@ -245,7 +245,7 @@ class JobProcessor:
                 metadata = self.status_manager.get_metadata(status_id) or {}
 
             # Generic execution pipeline replacing redundant _handle_* methods
-            if duration_seconds is None:
+            if duration_seconds is None and not measurement_type.endswith("_live"):
                 raise ValueError(f"duration_seconds is required for {measurement_type}")
 
             try:

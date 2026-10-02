@@ -149,7 +149,6 @@ class TestE2EMeasurementWorkflows:
 
         payload = {
             "measurement_type": "histogram_live",
-            "duration_seconds": 1,
             "metadata": {
                 "click_channel": 1,
                 "start_channel": 2,
@@ -184,6 +183,9 @@ class TestE2EMeasurementWorkflows:
         assert first_data["status_id"] == meas_id
         assert "data" in first_data
         assert "index" in first_data
+        
+        # Stop measurement
+        client.delete(f"/api/v1/measurements/{meas_id}")
 
     def test_correlation_e2e(self, e2e_setup):
         """Test complete correlation measurement flow."""

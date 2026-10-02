@@ -24,12 +24,10 @@ class TestCountRateLiveMeasurementRequestModel:
         )
         request = CountRateLiveMeasurementRequest(
             measurement_type=MeasurementType.COUNT_RATE_LIVE,
-            duration_seconds=60,
             metadata=metadata,
         )
 
         assert request.measurement_type == MeasurementType.COUNT_RATE_LIVE
-        assert request.duration_seconds == 60
         assert request.channels == [1, 2]
         assert request.user_name == "test_user"
         assert request.binwidth == 1000000000
@@ -39,26 +37,25 @@ class TestCountRateLiveMeasurementRequestModel:
     def test_model_default_measurement_type(self):
         """Should default to COUNT_RATE_LIVE measurement type."""
         metadata = CountRateMetadata(user_name="test_user", channels=[1, 2])
-        request = CountRateLiveMeasurementRequest(duration_seconds=60, metadata=metadata)
+        request = CountRateLiveMeasurementRequest(metadata=metadata)
 
         assert request.measurement_type == MeasurementType.COUNT_RATE_LIVE
 
-    def test_model_requires_duration_seconds(self):
-        """Should require duration_seconds field."""
+    def test_model_ignores_duration_seconds(self):
+        """Should ignore duration_seconds if provided."""
         metadata = CountRateMetadata(user_name="test_user", channels=[1, 2])
         
-        with pytest.raises(ValidationError):
-            CountRateLiveMeasurementRequest(metadata=metadata)
+        request = CountRateLiveMeasurementRequest(duration_seconds=60, metadata=metadata)
+        assert not hasattr(request, "duration_seconds")
 
     def test_model_requires_metadata(self):
         """Should require metadata field."""
         with pytest.raises(ValidationError):
-            CountRateLiveMeasurementRequest(duration_seconds=60)
+            CountRateLiveMeasurementRequest()
 
     def test_wrap_flat_payload(self):
         """Should wrap flat dictionary payload into correct structure."""
         flat_payload = {
-            "duration_seconds": 60,
             "measurement_type": MeasurementType.COUNT_RATE_LIVE,
             "user_name": "test_user",
             "channels": [1, 2],
@@ -70,7 +67,6 @@ class TestCountRateLiveMeasurementRequestModel:
         request = CountRateLiveMeasurementRequest.model_validate(flat_payload)
         
         assert request.measurement_type == MeasurementType.COUNT_RATE_LIVE
-        assert request.duration_seconds == 60
         assert request.user_name == "test_user"
         assert request.channels == [1, 2]
         assert request.binwidth == 1000000000

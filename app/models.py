@@ -309,9 +309,6 @@ class CountRateLiveMeasurementRequest(BaseModel):
     """Request model for live count-rate measurements."""
 
     measurement_type: MeasurementType = MeasurementType.COUNT_RATE_LIVE
-    duration_seconds: int = Field(
-        description="Duration in seconds for the count-rate measurement"
-    )
     metadata: CountRateMetadata = Field(
         description="Metadata containing channels, binwidth, and n_values"
     )
@@ -320,11 +317,11 @@ class CountRateLiveMeasurementRequest(BaseModel):
     @classmethod
     def wrap_flat_payload(cls, data: Any) -> Any:
         if isinstance(data, dict) and "metadata" not in data:
-            duration_seconds = data.pop("duration_seconds", 60)
+            # For backward compatibility, drop duration_seconds if present
+            data.pop("duration_seconds", None)
             measurement_type = data.pop("measurement_type", MeasurementType.COUNT_RATE_LIVE)
             return {
                 "measurement_type": measurement_type,
-                "duration_seconds": duration_seconds,
                 "metadata": data,
             }
         return data
@@ -349,7 +346,6 @@ class CountRateLiveMeasurementRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "measurement_type": "count_rate_live",
-                "duration_seconds": 60,
                 "metadata": {
                     "channels": [1, 2, 3],
                     "user_name": "abc-123-def",
@@ -698,16 +694,15 @@ class ChannelStatsResponse(BaseModel):
 
 class StartStopLiveMeasurementRequest(BaseModel):
     measurement_type: MeasurementType = MeasurementType.STARTSTOP_LIVE
-    duration_seconds: int = Field(description="Duration in seconds")
     metadata: StartStopLiveMetadata = Field(description="Metadata containing channels, binwidth, n_bins")
     
     @model_validator(mode="before")
     @classmethod
     def wrap_flat_payload(cls, data: Any) -> Any:
         if isinstance(data, dict) and "metadata" not in data:
-            duration_seconds = data.pop("duration_seconds", 60)
+            data.pop("duration_seconds", None)
             measurement_type = data.pop("measurement_type", MeasurementType.STARTSTOP_LIVE)
-            return {"measurement_type": measurement_type, "duration_seconds": duration_seconds, "metadata": data}
+            return {"measurement_type": measurement_type, "metadata": data}
         return data
 
     @property
@@ -720,16 +715,15 @@ class StartStopLiveMeasurementRequest(BaseModel):
 
 class HistogramLiveMeasurementRequest(BaseModel):
     measurement_type: MeasurementType = MeasurementType.HISTOGRAM_LIVE
-    duration_seconds: int = Field(description="Duration in seconds")
     metadata: HistogramLiveMetadata = Field(description="Metadata containing channels, binwidth, n_bins")
     
     @model_validator(mode="before")
     @classmethod
     def wrap_flat_payload(cls, data: Any) -> Any:
         if isinstance(data, dict) and "metadata" not in data:
-            duration_seconds = data.pop("duration_seconds", 60)
+            data.pop("duration_seconds", None)
             measurement_type = data.pop("measurement_type", MeasurementType.HISTOGRAM_LIVE)
-            return {"measurement_type": measurement_type, "duration_seconds": duration_seconds, "metadata": data}
+            return {"measurement_type": measurement_type, "metadata": data}
         return data
 
     @property
@@ -742,16 +736,15 @@ class HistogramLiveMeasurementRequest(BaseModel):
 
 class CorrelationLiveMeasurementRequest(BaseModel):
     measurement_type: MeasurementType = MeasurementType.CORRELATION_LIVE
-    duration_seconds: int = Field(description="Duration in seconds")
     metadata: CorrelationLiveMetadata = Field(description="Metadata containing channels, binwidth, n_bins")
     
     @model_validator(mode="before")
     @classmethod
     def wrap_flat_payload(cls, data: Any) -> Any:
         if isinstance(data, dict) and "metadata" not in data:
-            duration_seconds = data.pop("duration_seconds", 60)
+            data.pop("duration_seconds", None)
             measurement_type = data.pop("measurement_type", MeasurementType.CORRELATION_LIVE)
-            return {"measurement_type": measurement_type, "duration_seconds": duration_seconds, "metadata": data}
+            return {"measurement_type": measurement_type, "metadata": data}
         return data
 
     @property

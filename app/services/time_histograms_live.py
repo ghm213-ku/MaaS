@@ -24,13 +24,13 @@ class BaseTimeHistogramLiveHandler(MeasurementHandler):
         logger.debug(f"{self.__class__.__name__} initialized")
 
     async def _run_live_loop(
-        self, duration_seconds: float, refresh_rate: int
+        self, duration_seconds: Optional[float], refresh_rate: int
     ) -> None:
         """Run the live streaming loop pushing data to Redis."""
         import json
         self._stop_event = asyncio.Event()
         
-        end_time = asyncio.get_event_loop().time() + duration_seconds
+        end_time = asyncio.get_event_loop().time() + duration_seconds if duration_seconds is not None else float('inf')
         timeout = 1.0 / refresh_rate if refresh_rate > 0 else 0.04
         
         while not self._stopped and asyncio.get_event_loop().time() < end_time:
@@ -114,7 +114,7 @@ class StartStopLiveMeasurementHandler(BaseTimeHistogramLiveHandler):
         super().__init__(tagger, measurement_name="startstop_live")
 
     async def start(
-        self, duration_seconds: float, metadata: StartStopLiveMetadata
+        self, duration_seconds: Optional[float], metadata: StartStopLiveMetadata
     ) -> None:
         logger.info("Starting StartStop-live measurement")
         self._start_time = datetime.utcnow()
@@ -133,7 +133,8 @@ class StartStopLiveMeasurementHandler(BaseTimeHistogramLiveHandler):
             start_channel=start_channel, 
             binwidth=binwidth
         )
-        self._counter.startFor(duration_seconds * 1e12)
+        if duration_seconds is not None:
+            self._counter.startFor(int(duration_seconds * 1e12))
 
         try:
             await self._run_live_loop(duration_seconds, refresh_rate)
@@ -149,7 +150,7 @@ class HistogramLiveMeasurementHandler(BaseTimeHistogramLiveHandler):
         super().__init__(tagger, measurement_name="histogram_live")
 
     async def start(
-        self, duration_seconds: float, metadata: HistogramLiveMetadata
+        self, duration_seconds: Optional[float], metadata: HistogramLiveMetadata
     ) -> None:
         logger.info("Starting Histogram-live measurement")
         self._start_time = datetime.utcnow()
@@ -169,7 +170,8 @@ class HistogramLiveMeasurementHandler(BaseTimeHistogramLiveHandler):
             binwidth=binwidth, 
             n_bins=n_bins
         )
-        self._counter.startFor(duration_seconds * 1e12)
+        if duration_seconds is not None:
+            self._counter.startFor(int(duration_seconds * 1e12))
 
         try:
             await self._run_live_loop(duration_seconds, refresh_rate)
@@ -185,7 +187,7 @@ class CorrelationLiveMeasurementHandler(BaseTimeHistogramLiveHandler):
         super().__init__(tagger, measurement_name="correlation_live")
 
     async def start(
-        self, duration_seconds: float, metadata: CorrelationLiveMetadata
+        self, duration_seconds: Optional[float], metadata: CorrelationLiveMetadata
     ) -> None:
         logger.info("Starting Correlation-live measurement")
         self._start_time = datetime.utcnow()
@@ -205,7 +207,8 @@ class CorrelationLiveMeasurementHandler(BaseTimeHistogramLiveHandler):
             binwidth=binwidth, 
             n_bins=n_bins
         )
-        self._counter.startFor(duration_seconds * 1e12)
+        if duration_seconds is not None:
+            self._counter.startFor(int(duration_seconds * 1e12))
 
         try:
             await self._run_live_loop(duration_seconds, refresh_rate)

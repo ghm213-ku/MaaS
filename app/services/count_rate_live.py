@@ -25,7 +25,7 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
         logger.debug("CountRateLiveMeasurementHandler initialized")
 
     async def start(
-        self, duration_seconds: float, metadata: CountRateMetadata
+        self, duration_seconds: Optional[float], metadata: CountRateMetadata
     ) -> None:
         """
         Start count-rate measurement.
@@ -61,13 +61,14 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
             tagger=self.tagger, channels=channels, binwidth=binwidth, n_values=n_values
         )
         self._counter = counter
-        counter.startFor(duration_seconds * 1e12)
+        if duration_seconds is not None:
+            counter.startFor(int(duration_seconds * 1e12))
 
         try:
             import json
             self._stop_event = asyncio.Event()
             
-            end_time = asyncio.get_event_loop().time() + duration_seconds
+            end_time = asyncio.get_event_loop().time() + duration_seconds if duration_seconds is not None else float('inf')
             timeout = 1.0 / refresh_rate if refresh_rate > 0 else 0.04
             
             # Loop at the specified refresh rate

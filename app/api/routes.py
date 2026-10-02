@@ -269,7 +269,7 @@ def start_count_rate_live_measurement(
     return _handle_measurement_request(
         request_name="count-rate-live",
         measurement_type=request.measurement_type,
-        duration_seconds=request.duration_seconds,
+        duration_seconds=None,
         metadata_dump=request.metadata.model_dump(),
         channels=request.metadata.channels,
         processor=processor,
@@ -375,7 +375,7 @@ def start_startstop_live_measurement(
     return _handle_measurement_request(
         request_name="startstop-live",
         measurement_type=request.measurement_type,
-        duration_seconds=request.duration_seconds,
+        duration_seconds=None,
         metadata_dump=request.metadata.model_dump(),
         channels=request.channels,
         processor=processor,
@@ -397,7 +397,7 @@ def start_histogram_live_measurement(
     return _handle_measurement_request(
         request_name="histogram-live",
         measurement_type=request.measurement_type,
-        duration_seconds=request.duration_seconds,
+        duration_seconds=None,
         metadata_dump=request.metadata.model_dump(),
         channels=request.channels,
         processor=processor,
@@ -419,7 +419,7 @@ def start_correlation_live_measurement(
     return _handle_measurement_request(
         request_name="correlation-live",
         measurement_type=request.measurement_type,
-        duration_seconds=request.duration_seconds,
+        duration_seconds=None,
         metadata_dump=request.metadata.model_dump(),
         channels=request.channels,
         processor=processor,

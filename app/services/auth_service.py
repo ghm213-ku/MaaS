@@ -7,7 +7,14 @@ from passlib.context import CryptContext
 # Configuration
 JWT_SECRET = os.environ.get("JWT_SECRET")
 if not JWT_SECRET:
-    JWT_SECRET = secrets.token_hex(32)  # 256-bit string
+    secret_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".jwt_secret")
+    if os.path.exists(secret_path):
+        with open(secret_path, "r") as f:
+            JWT_SECRET = f.read().strip()
+    else:
+        JWT_SECRET = secrets.token_hex(32)  # 256-bit string
+        with open(secret_path, "w") as f:
+            f.write(JWT_SECRET)
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_SECONDS = 43200  # 12 hours
