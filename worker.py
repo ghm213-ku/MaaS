@@ -22,6 +22,7 @@ from app.services.count_rate import CountRateMeasurementHandler
 from app.services.count_rate_live import CountRateLiveMeasurementHandler
 from app.services.correlation import CorrelationMeasurementHandler
 from app.services.coincidences import CoincidencesMeasurementHandler
+from app.services.coincidences_live import CoincidencesLiveMeasurementHandler
 from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
 from app.services.set_parameters import SetParametersHandler
 from app.services.time_histograms_live import (
@@ -141,10 +142,13 @@ class BackendWorker:
             self.job_processor.register_handler(
                 "correlation_live", CorrelationLiveMeasurementHandler
             )
+            self.job_processor.register_handler(
+                "coincidences_live", CoincidencesLiveMeasurementHandler
+            )
 
             logger.info("Backend worker initialized successfully")
             logger.info(
-                "  Handlers registered: count_rate, count_rate_live, correlation, coincidences, save_raw_tags, set_parameters, startstop_live, histogram_live, correlation_live"
+                "  Handlers registered: count_rate, count_rate_live, correlation, coincidences, coincidences_live, save_raw_tags, set_parameters, startstop_live, histogram_live, correlation_live"
             )
             self.retry_count = 0
             self.current_retry_delay = 1.0

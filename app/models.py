@@ -10,6 +10,7 @@ class MeasurementType(str, Enum):
     """Supported measurement types. Extensible for future types."""
     COUNT_RATE = "count_rate"
     COUNT_RATE_LIVE = "count_rate_live"
+    COINCIDENCES_LIVE = "coincidences_live"
     SAVE_RAW_TAGS = "save_raw_tags"
     CORRELATION = "correlation"
     COINCIDENCES = "coincidences"
@@ -181,6 +182,10 @@ class CoincidencesMetadata(BaseModel):
         default="desktop/MaasData/{datetime}/{measurement-type}",
         description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
     )
+    refresh_rate: int = Field(
+        default=25,
+        description="Refresh rate in Hz for live measurements",
+    )
 
     class Config:
         json_schema_extra = {
@@ -189,6 +194,7 @@ class CoincidencesMetadata(BaseModel):
                 "binwidth": 1000000000,
                 "n_values": 1,
                 "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                "refresh_rate": 25,
             }
         }
 
@@ -470,6 +476,62 @@ class CoincidencesMeasurementRequest(BaseModel):
             "example": {
                 "measurement_type": "coincidences",
                 "duration_seconds": 60,
+                "metadata": {
+                    "channels": [1, 2, 3],
+                    "user_name": "abc-123-def",
+                    "binwidth": 1000000000,
+                    "n_values": 1,
+                    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                },
+            }
+        }
+
+
+class CoincidencesLiveMeasurementRequest(BaseModel):
+    """Request model for live coincidences measurements."""
+
+    measurement_type: MeasurementType = MeasurementType.COINCIDENCES_LIVE
+    metadata: CoincidencesMetadata = Field(
+        description="Metadata containing channels, binwidth, and n_values"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def wrap_flat_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "metadata" not in data:
+            # Drop duration_seconds if present for backward compatibility
+            data.pop("duration_seconds", None)
+            measurement_type = data.pop("measurement_type", MeasurementType.COINCIDENCES_LIVE)
+            return {
+                "measurement_type": measurement_type,
+                "metadata": data,
+            }
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return self.metadata.channels
+
+    @property
+    def user_name(self) -> str:
+        return self.metadata.user_name
+
+    @property
+    def binwidth(self) -> int:
+        return self.metadata.binwidth
+
+    @property
+    def n_values(self) -> int:
+        return self.metadata.n_values
+
+    @property
+    def target_location(self) -> str:
+        return self.metadata.target_location
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "measurement_type": "coincidences_live",
                 "metadata": {
                     "channels": [1, 2, 3],
                     "user_name": "abc-123-def",

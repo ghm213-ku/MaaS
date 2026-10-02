@@ -23,6 +23,7 @@ from app.services.count_rate import CountRateMeasurementHandler
 from app.services.count_rate_live import CountRateLiveMeasurementHandler
 from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
 from app.services.coincidences import CoincidencesMeasurementHandler
+from app.services.coincidences_live import CoincidencesLiveMeasurementHandler
 from app.services.correlation import CorrelationMeasurementHandler
 from app.services.set_parameters import SetParametersHandler
 from app.services.time_histograms_live import (
@@ -68,6 +69,7 @@ def e2e_setup(redis_client):
     job_processor.register_handler("startstop_live", StartStopLiveMeasurementHandler)
     job_processor.register_handler("histogram_live", HistogramLiveMeasurementHandler)
     job_processor.register_handler("correlation_live", CorrelationLiveMeasurementHandler)
+    job_processor.register_handler("coincidences_live", CoincidencesLiveMeasurementHandler)
 
     # We need to start the background worker loop manually for the test
     # Normally worker.py calls poll_jobs() in a loop. For E2E we'll use a background thread or asyncio task.
