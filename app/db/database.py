@@ -68,6 +68,20 @@ def get_user_by_username(username: str) -> sqlite3.Row:
     finally:
         conn.close()
 
+def get_user_by_id(user_id: int) -> sqlite3.Row:
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT u.id, u.username, u.password_hash, u.is_active, r.name as role_name, r.id as role_id
+            FROM users u
+            JOIN roles r ON u.role_id = r.id
+            WHERE u.id = ?
+        """, (user_id,))
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
 def get_role_by_name(role_name: str) -> sqlite3.Row:
     conn = get_db_connection()
     try:
@@ -93,4 +107,28 @@ def create_user(username: str, password_hash: str, role_id: int):
         conn.close()
 
 # Initialize on import
+def delete_user(username: str) -> bool:
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE username = ?", (username,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+def update_user_password(username: str, password_hash: str) -> bool:
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users
+            SET password_hash = ?
+            WHERE username = ?
+        """, (password_hash, username))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
 init_db()

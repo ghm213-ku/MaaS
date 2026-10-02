@@ -77,7 +77,7 @@ class TestCountRateLiveIntegration:
         status_manager.create_status(
             status_id,
             "count_rate_live",
-            1, # 1 second duration
+            None,
             metadata,
         )
 
@@ -85,7 +85,7 @@ class TestCountRateLiveIntegration:
         job_processor.enqueue_job(
             status_id=status_id,
             measurement_type="count_rate_live",
-            duration_seconds=1,
+            duration_seconds=None,
             metadata=metadata,
         )
         
@@ -125,6 +125,10 @@ class TestCountRateLiveIntegration:
             assert isinstance(data["data"], list)
             assert "timestamp" in data
             
+        # Manually stop since duration_seconds is None
+        job_processor.stop_job(status_id)
+        time.sleep(0.5)
+
         pubsub.unsubscribe()
         pubsub.close()
         pubsub_client.close()
@@ -142,14 +146,14 @@ class TestCountRateLiveIntegration:
         status_manager.create_status(
             status_id,
             "count_rate_live",
-            10, # Long duration
+            None,
             metadata,
         )
 
         job_processor.enqueue_job(
             status_id=status_id,
             measurement_type="count_rate_live",
-            duration_seconds=10,
+            duration_seconds=None,
             metadata=metadata,
         )
         

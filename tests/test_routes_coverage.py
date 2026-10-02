@@ -33,7 +33,6 @@ from app.models import (
 async def test_start_count_rate_live_measurement():
     request = CountRateLiveMeasurementRequest(
         measurement_type=MeasurementType.COUNT_RATE_LIVE,
-        duration_seconds=10.0,
         metadata=CountRateMetadata(user_name="test_user", channels=[1, 2], binwidth=1000000000, n_values=1)
     )
     mock_status_manager = MagicMock()

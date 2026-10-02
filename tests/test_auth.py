@@ -69,7 +69,7 @@ def test_create_user_success(admin_token):
     
     response = client.post(
         "/auth/users", 
-        json={"username": username, "password": "securepwd", "role_id": 2},
+        json={"username": username, "role_id": 2},
         headers={"Authorization": f"Bearer {admin_token}"}
     )
     assert response.status_code == 201
@@ -82,7 +82,7 @@ def test_create_user_forbidden():
     op_token = create_access_token(user_id=1, role="operator")
     response = client.post(
         "/auth/users", 
-        json={"username": username, "password": "securepwd", "role_id": 2},
+        json={"username": username, "role_id": 2},
         headers={"Authorization": f"Bearer {op_token}"}
     )
     assert response.status_code == 403
@@ -115,7 +115,7 @@ def test_create_user_already_exists(admin_token):
     # Create the user once
     response1 = client.post(
         "/auth/users", 
-        json={"username": username, "password": "securepwd", "role_id": 2},
+        json={"username": username, "role_id": 2},
         headers={"Authorization": f"Bearer {admin_token}"}
     )
     assert response1.status_code == 201
@@ -123,8 +123,90 @@ def test_create_user_already_exists(admin_token):
     # Try creating the exact same user again
     response2 = client.post(
         "/auth/users", 
-        json={"username": username, "password": "securepwd", "role_id": 2},
+        json={"username": username, "role_id": 2},
         headers={"Authorization": f"Bearer {admin_token}"}
     )
     assert response2.status_code == 400
     assert response2.json()["detail"] == "Username already exists or invalid role"
+
+def test_delete_user_success(admin_token):
+    username = f"todelete_{uuid.uuid4()}"
+    client.post("/auth/users", json={"username": username, "role_id": 2}, headers={"Authorization": f"Bearer {admin_token}"})
+    
+    response = client.delete(f"/auth/users/{username}", headers={"Authorization": f"Bearer {admin_token}"})
+    assert response.status_code == 200
+    assert response.json()["message"] == "User deleted successfully"
+    
+    # Verify user is actually deleted
+    login_response = client.post("/auth/login", json={"username": username, "password": username})
+    assert login_response.status_code == 401
+
+def test_delete_user_not_found(admin_token):
+    response = client.delete("/auth/users/nonexistent_user", headers={"Authorization": f"Bearer {admin_token}"})
+    assert response.status_code == 404
+
+def test_delete_user_forbidden():
+    op_token = create_access_token(user_id=1, role="operator")
+    response = client.delete("/auth/users/someuser", headers={"Authorization": f"Bearer {op_token}"})
+    assert response.status_code == 403
+
+def test_admin_reset_password(admin_token):
+    username = f"resetme_{uuid.uuid4()}"
+    client.post("/auth/users", json={"username": username, "role_id": 2}, headers={"Authorization": f"Bearer {admin_token}"})
+    
+    response = client.put(f"/auth/users/{username}/password", json={"new_password": "newadminpassword"}, headers={"Authorization": f"Bearer {admin_token}"})
+    assert response.status_code == 200
+    
+    login_response = client.post("/auth/login", json={"username": username, "password": "newadminpassword"})
+    assert login_response.status_code == 200
+    assert "token" in login_response.json()
+
+def test_admin_reset_password_not_found(admin_token):
+    response = client.put("/auth/users/nonexistent/password", json={"new_password": "pwd"}, headers={"Authorization": f"Bearer {admin_token}"})
+    assert response.status_code == 404
+
+def test_admin_reset_password_forbidden():
+    op_token = create_access_token(user_id=1, role="operator")
+    response = client.put("/auth/users/someuser/password", json={"new_password": "pwd"}, headers={"Authorization": f"Bearer {op_token}"})
+    assert response.status_code == 403
+
+def test_update_own_password():
+    username = f"selfupdate_{uuid.uuid4()}"
+    password = "oldpassword"
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO users (username, password_hash, role_id) VALUES (?, ?, ?)", (username, get_password_hash(password), 2))
+    user_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    user_token = create_access_token(user_id, "operator")
+    
+    response = client.put("/auth/password", json={"old_password": password, "new_password": "brandnewpassword"}, headers={"Authorization": f"Bearer {user_token}"})
+    assert response.status_code == 200
+    
+    login_response = client.post("/auth/login", json={"username": username, "password": "brandnewpassword"})
+    assert login_response.status_code == 200
+    assert "token" in login_response.json()
+
+def test_update_own_password_wrong_old():
+    username = f"selfupdate2_{uuid.uuid4()}"
+    password = "oldpassword"
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO users (username, password_hash, role_id) VALUES (?, ?, ?)", (username, get_password_hash(password), 2))
+    user_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    user_token = create_access_token(user_id, "operator")
+    
+    response = client.put("/auth/password", json={"old_password": "wrongpassword", "new_password": "brandnewpassword"}, headers={"Authorization": f"Bearer {user_token}"})
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid current password"
+
+def test_update_own_password_unauthorized():
+    response = client.put("/auth/password", json={"old_password": "pwd", "new_password": "newpwd"})
+    assert response.status_code == 401

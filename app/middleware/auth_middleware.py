@@ -9,9 +9,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         
-        # We only protect /api/v1/ and /auth/users
+        # We only protect /api/v1/ and /auth/users, /auth/password
         # Other paths like /docs, /redoc, /health, /auth/login should be allowed
-        if path.startswith("/api/v1/") or path == "/auth/users":
+        if path.startswith("/api/v1/") or path.startswith("/auth/users") or path == "/auth/password":
             def _log_audit_401(msg: str):
                 is_audit_method = request.method in ["POST", "PUT", "DELETE"]
                 if is_audit_method:
