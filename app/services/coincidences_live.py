@@ -123,7 +123,7 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
         logger.info("Stopping live coincidences measurement")
         self._stopped = True
         
-        if hasattr(self, '_stop_event'):
+        if getattr(self, '_stop_event', None):
             self._stop_event.set()
 
         # Stop the underlying hardware measurement

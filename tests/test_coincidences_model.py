@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from app.models import (
     CoincidencesMeasurementRequest,
+    CoincidencesLiveMeasurementRequest,
     CoincidencesMetadata,
     MeasurementType,
 )
@@ -126,3 +127,50 @@ class TestCoincidencesMetadata:
                 channels=[1, 2, 3],
                 binwidth="invalid",
             )
+
+
+class TestCoincidencesLiveMeasurementRequestModel:
+    """Test CoincidencesLiveMeasurementRequest model validation."""
+
+    def test_model_creation_with_valid_metadata(self):
+        """Should create valid CoincidencesLiveMeasurementRequest."""
+        metadata = CoincidencesMetadata(
+            user_name="test_user", 
+            channels=[1, 2, 3]
+        )
+        request = CoincidencesLiveMeasurementRequest(
+            measurement_type=MeasurementType.COINCIDENCES_LIVE,
+            metadata=metadata
+        )
+        assert request.measurement_type == MeasurementType.COINCIDENCES_LIVE
+        assert request.channels == [1, 2, 3]
+        assert request.user_name == "test_user"
+
+    def test_model_default_measurement_type(self):
+        """Should default to COINCIDENCES_LIVE measurement type."""
+        metadata = CoincidencesMetadata(user_name="test_user", channels=[1, 2, 3])
+        request = CoincidencesLiveMeasurementRequest(metadata=metadata)
+        
+        assert request.measurement_type == MeasurementType.COINCIDENCES_LIVE
+
+    def test_model_requires_metadata(self):
+        """Should raise ValidationError if metadata is missing."""
+        with pytest.raises(ValidationError):
+            CoincidencesLiveMeasurementRequest()
+
+    def test_wrap_flat_payload(self):
+        """Should handle flat payload dictionary."""
+        flat_payload = {
+            "measurement_type": MeasurementType.COINCIDENCES_LIVE,
+            "user_name": "test_user",
+            "channels": [1, 2, 3],
+            "binwidth": 500000,
+            "duration_seconds": 123, # should be dropped
+        }
+        
+        request = CoincidencesLiveMeasurementRequest.model_validate(flat_payload)
+        
+        assert request.measurement_type == MeasurementType.COINCIDENCES_LIVE
+        assert request.channels == [1, 2, 3]
+        assert request.binwidth == 500000
+        assert not hasattr(request, "duration_seconds")

@@ -6,6 +6,7 @@ from app.api.routes import (
     start_save_raw_tags_measurement,
     start_correlation_measurement,
     start_coincidences_measurement,
+    start_coincidences_live_measurement,
     list_all_channels,
     list_available_channels,
     book_channels,
@@ -21,6 +22,7 @@ from app.models import (
     CountRateLiveMeasurementRequest,
     CorrelationMeasurementRequest,
     CoincidencesMeasurementRequest,
+    CoincidencesLiveMeasurementRequest,
     ChannelBookRequest,
     MeasurementType,
     CountRateMetadata,
@@ -136,6 +138,31 @@ async def test_start_coincidences_measurement():
     mock_status_manager.validate_channels.side_effect = Exception("Unknown")
     with pytest.raises(HTTPException) as exc:
         start_coincidences_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
+    assert exc.value.status_code == 500
+
+@pytest.mark.asyncio
+async def test_start_coincidences_live_measurement():
+    request = CoincidencesLiveMeasurementRequest(
+        measurement_type=MeasurementType.COINCIDENCES_LIVE,
+        metadata=CoincidencesMetadata(user_name="test_user", channels=[1, 2])
+    )
+    mock_status_manager = MagicMock()
+    mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user"}
+    mock_status_manager.book_channels.return_value = {"booked_channels": [1, 2], "booking_time": "time"}
+    mock_job_processor = MagicMock()
+    mock_file_logger = MagicMock()
+    
+    res = start_coincidences_live_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
+    assert res.status == "queued"
+    
+    mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
+    with pytest.raises(HTTPException) as exc:
+        start_coincidences_live_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
+    assert exc.value.status_code == 500
+    
+    mock_status_manager.validate_channels.side_effect = Exception("Unknown")
+    with pytest.raises(HTTPException) as exc:
+        start_coincidences_live_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
     assert exc.value.status_code == 500
 
 @pytest.mark.asyncio
