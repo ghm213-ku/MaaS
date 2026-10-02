@@ -33,6 +33,7 @@ from app.models import (
     StartStopLiveMeasurementRequest,
     HistogramLiveMeasurementRequest,
     CorrelationLiveMeasurementRequest,
+    CoincidencesLiveMeasurementRequest,
 )
 from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager, MeasurementStatus
@@ -354,6 +355,29 @@ def start_coincidences_measurement(
         request_name="coincidences",
         measurement_type=request.measurement_type,
         duration_seconds=request.duration_seconds,
+        metadata_dump=request.metadata.model_dump(),
+        channels=request.metadata.channels,
+        processor=processor,
+        status_manager=status_manager,
+        file_logger=file_logger,
+        user_name=request.user_name,
+    )
+
+@measurement_router.post(
+    "/coincidences-live", response_model=MeasurementResponse, status_code=201
+)
+def start_coincidences_live_measurement(
+    request: CoincidencesLiveMeasurementRequest,
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """
+    """
+    return _handle_measurement_request(
+        request_name="coincidences-live",
+        measurement_type=request.measurement_type,
+        duration_seconds=None,
         metadata_dump=request.metadata.model_dump(),
         channels=request.metadata.channels,
         processor=processor,

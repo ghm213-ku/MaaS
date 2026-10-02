@@ -13,6 +13,7 @@ from app.models import (
     StartStopLiveMeasurementRequest,
     HistogramLiveMeasurementRequest,
     CorrelationLiveMeasurementRequest,
+    CoincidencesLiveMeasurementRequest,
 )
 
 # ============================================================================
@@ -150,12 +151,50 @@ class MeasurementPayloadSchemas:
         },
     }
 
+    COINCIDENCES_LIVE_SCHEMA = {
+        "type": "object",
+        "title": "Live Coincidences Measurement Payload",
+        "description": "Payload for starting a live coincidences measurement",
+        "properties": {
+            "channels": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "List of channel numbers to measure (required). E.g., [1, 2, 3]",
+            },
+            "binwidth": {
+                "type": "integer",
+                "description": "Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
+            },
+            "n_values": {
+                "type": "integer",
+                "description": "Number of bins in the histogram. Default: 1",
+            },
+            "target_location": {
+                "type": "string",
+                "description": "Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
+            },
+            "refresh_rate": {
+                "type": "integer",
+                "description": "Refresh rate in Hz. Default: 25",
+            },
+        },
+        "required": ["channels"],
+        "example": {
+            "channels": [1, 2, 3],
+            "binwidth": 1000000000,
+            "n_values": 1,
+            "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            "refresh_rate": 25,
+        },
+    }
+
     # Map of measurement type to schema
     SCHEMAS: Dict[str, Dict[str, Any]] = {
         "count_rate": COUNT_RATE_SCHEMA,
         "count_rate_live": COUNT_RATE_LIVE_SCHEMA,
         "correlation": CORRELATION_SCHEMA,
         "coincidences": COINCIDENCES_SCHEMA,
+        "coincidences_live": COINCIDENCES_LIVE_SCHEMA,
     }
 
 
@@ -173,6 +212,7 @@ class MeasurementPayloadMapper:
         "count_rate_live": CountRateLiveMeasurementRequest,
         "correlation": CorrelationMeasurementRequest,
         "coincidences": CoincidencesMeasurementRequest,
+        "coincidences_live": CoincidencesLiveMeasurementRequest,
         "save_raw_tags": SaveRawTagsMeasurmentRequest,
         "set_parameters": SetParametersRequest,
         "startstop_live": StartStopLiveMeasurementRequest,
