@@ -269,7 +269,7 @@ def test_job_processor_handle_coincidences():
     assert args[1] == "failed" and "channels" in args[2] and "Field required" in args[2]
         
     # Valid
-    processor._run_job_in_thread("id1", "coincidences", 10.0, {"user_name": "test_user", "channels": [1,2]})
+    processor._run_job_in_thread("id1", "coincidences", 10.0, {"user_name": "test_user", "channels": [[1, 2]]})
     # Should complete
     args = processor.status_manager.update_status.call_args_list[-1].args
     assert args[1] == "completed"
@@ -356,7 +356,7 @@ def test_job_processor_run_job_cancelled_error():
     handler.start = AsyncMock(side_effect=asyncio.CancelledError())
     processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
     
-    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [1,2]})
+    processor._run_job_in_thread("id123", "coincidences", 10.0, {"channels": [[1, 2]]})
     # Should catch CancelledError and not update_status to FAILED
     sm_mock.update_status.assert_called_with("id123", "active", "coincidences measurement started")
 
@@ -460,7 +460,7 @@ def test_job_processor_run_job_cancelled_error():
     handler.start = AsyncMock(side_effect=asyncio.CancelledError())
     processor.job_handlers["coincidences"] = MagicMock(return_value=handler)
     
-    processor._run_job_in_thread("id123", "coincidences", 10.0, {"user_name": "test_user", "channels": [1,2]})
+    processor._run_job_in_thread("id123", "coincidences", 10.0, {"user_name": "test_user", "channels": [[1, 2]]})
     # Should catch CancelledError and not update_status to FAILED
     sm_mock.update_status.assert_called_with("id123", "active", "coincidences measurement started")
 

@@ -18,6 +18,8 @@ class MeasurementType(str, Enum):
     STARTSTOP_LIVE = "startstop_live"
     HISTOGRAM_LIVE = "histogram_live"
     CORRELATION_LIVE = "correlation_live"
+    COINCIDENCE = "coincidence"
+    COINCIDENCE_LIVE = "coincidence_live"
 
 
 class CountRateMetadata(BaseModel):
@@ -162,13 +164,30 @@ class CorrelationLiveMetadata(BaseModel):
 
 
 class CoincidencesMetadata(BaseModel):
-    """Metadata model for coincidences measurements with required and optional fields."""
+    """Metadata model for coincidences measurements supporting multiple coincidence channel groups as a list of lists."""
 
-    channels: list[int] = Field(
-        description="List of channel numbers to measure. Required."
+    channels: Optional[list[list[int]]] = Field(
+        default=...,
+        description="List of lists of channel numbers (e.g., [[1, 2]], [[1, 2], [2, 3]]). Required.",
+    )
+    coincidences: Optional[list[list[int]]] = Field(
+        default=None,
+        description="List of lists of channel numbers representing multiple coincidences. E.g., [[1, 2]], [[1, 2], [2, 3, 5]].",
+    )
+    coincidence_groups: Optional[list[list[int]]] = Field(
+        default=None,
+        description="Alias for coincidences following Swabian API naming. List of lists of channel numbers.",
     )
     user_name: str = Field(
         description="The user who booked the channels. Required."
+    )
+    coincidence_window: int = Field(
+        default=1000,
+        description="Coincidence window in picoseconds. Default: 1000 (1 ns)",
+    )
+    timestamp: str = Field(
+        default="Last",
+        description="Timestamp assignment mode for the coincidence virtual channel ('Last', 'First', 'ListedFirst', 'Average'). Default: 'Last'",
     )
     binwidth: int = Field(
         default=int(1e9),
@@ -187,10 +206,88 @@ class CoincidencesMetadata(BaseModel):
         description="Refresh rate in Hz for live measurements",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def validate_coincidences_input(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        data = data.copy()
+
+        # Handle alias coincidenceWindow
+        if "coincidenceWindow" in data and "coincidence_window" not in data:
+            data["coincidence_window"] = data.pop("coincidenceWindow")
+
+        raw_input = None
+        if data.get("coincidences") is not None:
+            raw_input = data["coincidences"]
+        elif data.get("coincidence_groups") is not None:
+            raw_input = data["coincidence_groups"]
+        elif data.get("channels") is not None:
+            raw_input = data["channels"]
+
+        # If neither coincidences, coincidence_groups, nor channels was provided,
+        # return data as-is so Pydantic's missing field validation runs for 'channels'.
+        if raw_input is None:
+            return data
+
+        if not isinstance(raw_input, (list, tuple)):
+            raise ValueError(
+                "Coincidence input must be a list of lists of channel numbers (e.g. [[1, 2], [2, 3]]). "
+                "Simple 1D channel lists are deprecated and no longer supported."
+            )
+
+        if len(raw_input) == 0:
+            raise ValueError(
+                "Coincidence measurement requires a non-empty list of lists of channel numbers (e.g. coincidences=[[1, 2], [2, 3]])."
+            )
+
+        # Deprecate simple 1D lists: reject if any item is not a list or tuple of channels
+        if any(isinstance(item, (int, float, str, bool)) or not isinstance(item, (list, tuple)) for item in raw_input):
+            raise ValueError(
+                "Simple 1D channel lists for coincidence are deprecated and no longer supported. "
+                "Coincidence input must be a list of lists of channel numbers (e.g., [[1, 2]] instead of [1, 2])."
+            )
+
+        # Validate each coincidence group
+        normalized_groups = []
+        for i, group in enumerate(raw_input):
+            if not isinstance(group, (list, tuple)):
+                raise ValueError(
+                    f"Coincidence group at index {i} must be a list of channel numbers, got {type(group).__name__}."
+                )
+            if len(group) < 2:
+                raise ValueError(
+                    f"Coincidence group at index {i} ({group}) must contain at least 2 channels."
+                )
+            for ch in group:
+                if not isinstance(ch, int) or isinstance(ch, bool):
+                    raise ValueError(
+                        f"Channel number {ch} in coincidence group {group} must be an integer."
+                    )
+            normalized_groups.append([int(ch) for ch in group])
+
+        data["coincidences"] = normalized_groups
+        data["coincidence_groups"] = normalized_groups
+        data["channels"] = normalized_groups
+
+        return data
+
+    @property
+    def unique_channels(self) -> list[int]:
+        """Return sorted unique list of channel integers involved in all coincidences."""
+        groups = self.coincidences or []
+        unique = set()
+        for group in groups:
+            unique.update(group)
+        return sorted(list(unique))
+
     class Config:
         json_schema_extra = {
             "example": {
-                "channels": [1, 2, 3],
+                "coincidences": [[1, 2], [2, 3, 5]],
+                "coincidence_window": 1000,
+                "timestamp": "Last",
                 "binwidth": 1000000000,
                 "n_values": 1,
                 "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -452,8 +549,24 @@ class CoincidencesMeasurementRequest(BaseModel):
         return data
 
     @property
-    def channels(self) -> list[int]:
-        return self.metadata.channels
+    def channels(self) -> list[list[int]]:
+        return self.metadata.channels or []
+
+    @property
+    def coincidences(self) -> list[list[int]]:
+        return self.metadata.coincidences or []
+
+    @property
+    def coincidence_groups(self) -> list[list[int]]:
+        return self.metadata.coincidence_groups or []
+
+    @property
+    def unique_channels(self) -> list[int]:
+        return self.metadata.unique_channels
+
+    @property
+    def coincidence_window(self) -> int:
+        return self.metadata.coincidence_window
 
     @property
     def user_name(self) -> str:
@@ -477,8 +590,9 @@ class CoincidencesMeasurementRequest(BaseModel):
                 "measurement_type": "coincidences",
                 "duration_seconds": 60,
                 "metadata": {
-                    "channels": [1, 2, 3],
+                    "coincidences": [[1, 2], [2, 3, 5]],
                     "user_name": "abc-123-def",
+                    "coincidence_window": 1000,
                     "binwidth": 1000000000,
                     "n_values": 1,
                     "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -509,8 +623,24 @@ class CoincidencesLiveMeasurementRequest(BaseModel):
         return data
 
     @property
-    def channels(self) -> list[int]:
-        return self.metadata.channels
+    def channels(self) -> list[list[int]]:
+        return self.metadata.channels or []
+
+    @property
+    def coincidences(self) -> list[list[int]]:
+        return self.metadata.coincidences or []
+
+    @property
+    def coincidence_groups(self) -> list[list[int]]:
+        return self.metadata.coincidence_groups or []
+
+    @property
+    def unique_channels(self) -> list[int]:
+        return self.metadata.unique_channels
+
+    @property
+    def coincidence_window(self) -> int:
+        return self.metadata.coincidence_window
 
     @property
     def user_name(self) -> str:
@@ -533,8 +663,9 @@ class CoincidencesLiveMeasurementRequest(BaseModel):
             "example": {
                 "measurement_type": "coincidences_live",
                 "metadata": {
-                    "channels": [1, 2, 3],
+                    "coincidences": [[1, 2], [2, 3, 5]],
                     "user_name": "abc-123-def",
+                    "coincidence_window": 1000,
                     "binwidth": 1000000000,
                     "n_values": 1,
                     "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -708,6 +839,19 @@ class ChannelBookRequest(BaseModel):
         description="List of channel numbers to book (e.g., [1, 2, 3] or [101, 102])"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def handle_channels_alias(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "channels" in data and "channel_numbers" not in data:
+                data = data.copy()
+                data["channel_numbers"] = data.pop("channels")
+        return data
+
+    @property
+    def channels(self) -> list[int]:
+        return self.channel_numbers
+
     class Config:
         json_schema_extra = {
             "example": {"user_name": "abc-123-def", "channel_numbers": [1, 2, 3]}
@@ -816,3 +960,9 @@ class CorrelationLiveMeasurementRequest(BaseModel):
     @property
     def user_name(self) -> str:
         return self.metadata.user_name
+
+
+# Aliases for singular coincidence terminology
+CoincidenceMetadata = CoincidencesMetadata
+CoincidenceMeasurementRequest = CoincidencesMeasurementRequest
+CoincidenceLiveMeasurementRequest = CoincidencesLiveMeasurementRequest

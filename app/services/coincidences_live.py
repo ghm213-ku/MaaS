@@ -43,21 +43,63 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
 
         # Extract parameters from metadata
         channels = metadata.channels
+        coincidences = metadata.coincidences or []
+        coincidence_window = getattr(metadata, "coincidence_window", 1000)
+        timestamp_str = getattr(metadata, "timestamp", "Last")
         binwidth = metadata.binwidth
         n_values = metadata.n_values
         target_location = metadata.target_location
         refresh_rate = getattr(metadata, 'refresh_rate', 25)
         self._target_location = target_location
         logger.debug(
-            f"Coincidences live params - channels: {channels}, binwidth: {binwidth}, n_values: {n_values}, target: {target_location}, refresh_rate: {refresh_rate}"
+            f"Coincidences live params - coincidences: {coincidences}, channels: {channels}, binwidth: {binwidth}, n_values: {n_values}, target: {target_location}, refresh_rate: {refresh_rate}"
         )
         
         self._measurement_task = asyncio.current_task()
 
-        # TODO: Implement actual Coincidences hardware measurement initialization
-        # self._counter = TimeTagger.Coincidences(...)
-        # if duration_seconds is not None:
-        #     self._counter.startFor(int(duration_seconds * 1e12))
+        if self.tagger is not None:
+            try:
+                from Swabian import TimeTagger
+                timestamp_map = {
+                    "last": getattr(TimeTagger, "CoincidenceTimestamp_Last", 0),
+                    "first": getattr(TimeTagger, "CoincidenceTimestamp_First", 1),
+                    "listedfirst": getattr(TimeTagger, "CoincidenceTimestamp_ListedFirst", 2),
+                    "average": getattr(TimeTagger, "CoincidenceTimestamp_Average", 3),
+                }
+                if hasattr(TimeTagger, "CoincidenceTimestamp"):
+                    timestamp_map = {
+                        "last": TimeTagger.CoincidenceTimestamp.Last,
+                        "first": TimeTagger.CoincidenceTimestamp.First,
+                        "listedfirst": TimeTagger.CoincidenceTimestamp.ListedFirst,
+                        "average": TimeTagger.CoincidenceTimestamp.Average,
+                    }
+                tt_timestamp = timestamp_map.get(str(timestamp_str).lower(), timestamp_map.get("last", 0))
+
+                if len(coincidences) == 1:
+                    self._coincidence = TimeTagger.Coincidence(
+                        self.tagger,
+                        channels=coincidences[0],
+                        coincidenceWindow=coincidence_window,
+                        timestamp=tt_timestamp,
+                    )
+                    v_channels = [self._coincidence.getChannel()]
+                else:
+                    self._coincidence = TimeTagger.Coincidences(
+                        self.tagger,
+                        coincidenceGroups=coincidences,
+                        coincidenceWindow=coincidence_window,
+                        timestamp=tt_timestamp,
+                    )
+                    v_channels = list(self._coincidence.getChannels())
+
+                self._counter = TimeTagger.Countrate(
+                    tagger=self.tagger,
+                    channels=v_channels,
+                )
+                if duration_seconds is not None:
+                    self._counter.startFor(int(duration_seconds * 1e12))
+            except Exception as e:
+                logger.warning(f"Coincidences live hardware initialization skipped or failed: {e}")
 
         try:
             import json
@@ -75,16 +117,19 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
                     pass
                 
                 # Fetch data and push to redis
-                # TODO: Get actual data from TimeTagger Coincidences class
                 try:
                     if hasattr(self, 'redis_client') and self.redis_client and hasattr(self, 'status_id'):
                         pub_channel = f"measurement:data:{self.status_id}"
-                        # Mock data for now since hardware implementation is pending
-                        mock_data = [0] * len(channels)
+                        if self._counter is not None and hasattr(self._counter, 'getData'):
+                            data = list(self._counter.getData())
+                        else:
+                            # Mock data for testing/fallback
+                            num_items = len(coincidences) if coincidences else len(channels)
+                            data = [0] * num_items
                         payload = json.dumps({
                             "type": "coincidences_live",
                             "status_id": self.status_id,
-                            "data": mock_data,
+                            "data": data,
                             "timestamp": datetime.utcnow().isoformat()
                         })
                         self.redis_client.publish(pub_channel, payload)

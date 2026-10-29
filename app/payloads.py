@@ -124,10 +124,30 @@ class MeasurementPayloadSchemas:
         "title": "Coincidences Measurement Payload",
         "description": "Payload for starting a coincidences measurement",
         "properties": {
+            "coincidences": {
+                "type": "array",
+                "items": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                },
+                "description": "List of lists of channel numbers to measure (required). E.g., [[1, 2], [2, 3, 5]]",
+            },
             "channels": {
                 "type": "array",
-                "items": {"type": "integer"},
-                "description": "List of channel numbers to measure (required). E.g., [1, 2, 3]",
+                "items": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "minItems": 2,
+                },
+                "description": "List of lists of channel numbers (e.g. [[1, 2], [2, 3]]). Simple 1D channel lists are deprecated and no longer supported.",
+            },
+            "coincidence_window": {
+                "type": "integer",
+                "description": "Coincidence window in picoseconds. Default: 1000",
+            },
+            "timestamp": {
+                "type": "string",
+                "description": "Timestamp mode ('Last', 'First', 'ListedFirst', 'Average'). Default: 'Last'",
             },
             "binwidth": {
                 "type": "integer",
@@ -142,9 +162,10 @@ class MeasurementPayloadSchemas:
                 "description": "Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
             },
         },
-        "required": ["channels"],
         "example": {
-            "channels": [1, 2, 3],
+            "coincidences": [[1, 2], [2, 3, 5]],
+            "coincidence_window": 1000,
+            "timestamp": "Last",
             "binwidth": 1000000000,
             "n_values": 1,
             "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -156,10 +177,30 @@ class MeasurementPayloadSchemas:
         "title": "Live Coincidences Measurement Payload",
         "description": "Payload for starting a live coincidences measurement",
         "properties": {
+            "coincidences": {
+                "type": "array",
+                "items": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                },
+                "description": "List of lists of channel numbers to measure (required). E.g., [[1, 2], [2, 3, 5]]",
+            },
             "channels": {
                 "type": "array",
-                "items": {"type": "integer"},
-                "description": "List of channel numbers to measure (required). E.g., [1, 2, 3]",
+                "items": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "minItems": 2,
+                },
+                "description": "List of lists of channel numbers (e.g. [[1, 2], [2, 3]]). Simple 1D channel lists are deprecated and no longer supported.",
+            },
+            "coincidence_window": {
+                "type": "integer",
+                "description": "Coincidence window in picoseconds. Default: 1000",
+            },
+            "timestamp": {
+                "type": "string",
+                "description": "Timestamp mode ('Last', 'First', 'ListedFirst', 'Average'). Default: 'Last'",
             },
             "binwidth": {
                 "type": "integer",
@@ -178,9 +219,10 @@ class MeasurementPayloadSchemas:
                 "description": "Refresh rate in Hz. Default: 25",
             },
         },
-        "required": ["channels"],
         "example": {
-            "channels": [1, 2, 3],
+            "coincidences": [[1, 2], [2, 3, 5]],
+            "coincidence_window": 1000,
+            "timestamp": "Last",
             "binwidth": 1000000000,
             "n_values": 1,
             "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
@@ -195,6 +237,8 @@ class MeasurementPayloadSchemas:
         "correlation": CORRELATION_SCHEMA,
         "coincidences": COINCIDENCES_SCHEMA,
         "coincidences_live": COINCIDENCES_LIVE_SCHEMA,
+        "coincidence": COINCIDENCES_SCHEMA,
+        "coincidence_live": COINCIDENCES_LIVE_SCHEMA,
     }
 
 
@@ -213,6 +257,8 @@ class MeasurementPayloadMapper:
         "correlation": CorrelationMeasurementRequest,
         "coincidences": CoincidencesMeasurementRequest,
         "coincidences_live": CoincidencesLiveMeasurementRequest,
+        "coincidence": CoincidencesMeasurementRequest,
+        "coincidence_live": CoincidencesLiveMeasurementRequest,
         "save_raw_tags": SaveRawTagsMeasurmentRequest,
         "set_parameters": SetParametersRequest,
         "startstop_live": StartStopLiveMeasurementRequest,

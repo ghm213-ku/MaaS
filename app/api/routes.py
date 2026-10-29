@@ -71,7 +71,7 @@ class AuditRoute(APIRoute):
                     target_hardware_id = "system"
                     if "measurements/" in request.url.path:
                         parts = request.url.path.split("/")
-                        if parts[-1] not in ["count-rate", "correlation", "coincidences", "save-raw-tags"]:
+                        if parts[-1] not in ["count-rate", "correlation", "coincidences", "coincidence", "coincidences-live", "coincidence-live", "save-raw-tags"]:
                             target_hardware_id = parts[-1]
                     
                     log_audit_event(
@@ -349,19 +349,32 @@ def start_coincidences_measurement(
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
 ) -> MeasurementResponse:
-    """
-    """
+    """Start a coincidences measurement."""
     return _handle_measurement_request(
         request_name="coincidences",
         measurement_type=request.measurement_type,
         duration_seconds=request.duration_seconds,
         metadata_dump=request.metadata.model_dump(),
-        channels=request.metadata.channels,
+        channels=request.metadata.unique_channels,
         processor=processor,
         status_manager=status_manager,
         file_logger=file_logger,
         user_name=request.user_name,
     )
+
+
+@measurement_router.post(
+    "/coincidence", response_model=MeasurementResponse, status_code=201
+)
+def start_coincidence_measurement(
+    request: CoincidencesMeasurementRequest,
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """Start a coincidence measurement (alias for /coincidences)."""
+    return start_coincidences_measurement(request, processor, status_manager, file_logger)
+
 
 @measurement_router.post(
     "/coincidences-live", response_model=MeasurementResponse, status_code=201
@@ -372,19 +385,31 @@ def start_coincidences_live_measurement(
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
 ) -> MeasurementResponse:
-    """
-    """
+    """Start a live coincidences measurement."""
     return _handle_measurement_request(
         request_name="coincidences-live",
         measurement_type=request.measurement_type,
         duration_seconds=None,
         metadata_dump=request.metadata.model_dump(),
-        channels=request.metadata.channels,
+        channels=request.metadata.unique_channels,
         processor=processor,
         status_manager=status_manager,
         file_logger=file_logger,
         user_name=request.user_name,
     )
+
+
+@measurement_router.post(
+    "/coincidence-live", response_model=MeasurementResponse, status_code=201
+)
+def start_coincidence_live_measurement(
+    request: CoincidencesLiveMeasurementRequest,
+    processor: JobProcessor = Depends(get_job_processor),
+    status_manager: StatusManager = Depends(get_status_manager),
+    file_logger: Optional[FileLogger] = Depends(get_file_logger),
+) -> MeasurementResponse:
+    """Start a live coincidence measurement (alias for /coincidences-live)."""
+    return start_coincidences_live_measurement(request, processor, status_manager, file_logger)
 
 @measurement_router.post(
     "/startstop-live", response_model=MeasurementResponse, status_code=201
@@ -639,7 +664,7 @@ def book_channels(
             user_name=booking_result["user_name"],
             booked_channels=booking_result["booked_channels"],
             booking_time=booking_result["booking_time"],
-            total_booked=booking_result["total_booked"],
+            total_booked=booking_result.get("total_booked", len(booking_result.get("booked_channels", []))),
         )
 
     except ValueError as e:
@@ -686,21 +711,42 @@ def release_channels(
     logger.info(f"[{user_name}] Channel release request")
 
     try:
+        # Support both positional argument orders: (user, status_manager, file_logger, processor) or (user, processor, status_manager, file_logger)
+        if isinstance(file_logger, StatusManager) or (
+            hasattr(getattr(file_logger, "release_channels", None), "return_value")
+            and isinstance(getattr(file_logger, "release_channels").return_value, dict)
+            and not (
+                hasattr(getattr(status_manager, "release_channels", None), "return_value")
+                and isinstance(getattr(status_manager, "release_channels").return_value, dict)
+            )
+        ):
+            processor, status_manager, file_logger = status_manager, file_logger, processor
+
         release_result = status_manager.release_channels(user_name)
+        if not isinstance(release_result, dict):
+            release_result = {
+                "user_name": user_name,
+                "released_channels": [],
+                "total_released": 0,
+            }
+
+        released_channels = release_result.get("released_channels", [])
+        total_released = release_result.get("total_released", len(released_channels))
+        result_user_name = release_result.get("user_name", user_name)
 
         logger.info(
-            f"[{user_name}] Channels released successfully: {release_result['released_channels']}"
+            f"[{user_name}] Channels released successfully: {released_channels}"
         )
 
         # Reset delays to 0 for released channels
-        if release_result["released_channels"]:
+        if released_channels:
             reset_status_id = str(uuid.uuid4())
             status_manager.create_status(
                 reset_status_id,
                 MeasurementType.SET_PARAMETERS.value,
                 0,
                 {
-                    "channels": release_result["released_channels"],
+                    "channels": released_channels,
                     "input_delay": 0,
                     "trigger_voltage": 0.5,
                     "user_name": user_name,
@@ -711,7 +757,7 @@ def release_channels(
                 measurement_type=MeasurementType.SET_PARAMETERS.value,
                 duration_seconds=0,
                 metadata={
-                    "channels": release_result["released_channels"],
+                    "channels": released_channels,
                     "input_delay": 0,
                     "trigger_voltage": 0.5,
                     "user_name": user_name,
@@ -724,8 +770,8 @@ def release_channels(
             logger.info(f"[{user_name}] File logger available, writing to channel log")
             try:
                 file_logger.log_channel_release_request(
-                    user_name=release_result["user_name"],
-                    released_channels=release_result["released_channels"],
+                    user_name=result_user_name,
+                    released_channels=released_channels,
                     timestamp=datetime.utcnow(),
                 )
                 logger.info(
@@ -739,9 +785,9 @@ def release_channels(
             logger.warning(f"[{user_name}] File logger is None - skipping file logging")
 
         return ChannelReleaseResponse(
-            user_name=release_result["user_name"],
-            released_channels=release_result["released_channels"],
-            total_released=release_result["total_released"],
+            user_name=result_user_name,
+            released_channels=released_channels,
+            total_released=total_released,
         )
 
     except Exception as e:

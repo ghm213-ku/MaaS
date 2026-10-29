@@ -370,3 +370,7 @@ admin                          | 1, 2, 3                        | BOOK          
 admin                          | 1, 2, 3                        | RELEASE         | 2026-09-25 14:46:26.908   | Released 3 channels
 admin                          | 1, 2                           | BOOK            | 2026-10-02 07:51:44.112   | Booked 2 channels
 admin                          | 1, 2                           | RELEASE         | 2026-10-02 07:51:58.275   | Released 2 channels
+admin                          | 1, 2                           | BOOK            | 2026-10-02 10:33:07.364   | Booked 2 channels
+admin                          | 1, 2                           | RELEASE         | 2026-10-02 10:33:07.427   | Released 2 channels
+admin                          | 3, 2                           | BOOK            | 2026-10-02 10:33:23.427   | Booked 2 channels
+admin                          | 2, 3                           | RELEASE         | 2026-10-02 10:33:23.461   | Released 2 channels

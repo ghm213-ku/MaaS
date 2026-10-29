@@ -21,7 +21,7 @@ class TestCoincidencesMeasurementHandler:
         handler = CoincidencesMeasurementHandler(tagger=mock_tagger)
         metadata = CoincidencesMetadata(user_name="test_user", 
             coincidenceWindow=1000,
-            channels=[1, 2]
+            coincidences=[[1, 2]]
         )
 
         task = asyncio.create_task(handler.start(0.01, metadata))
@@ -58,3 +58,41 @@ class TestCoincidencesMeasurementHandler:
         results = await handler.stop()
         
         assert results["status"] == "stopped"
+
+    @pytest.mark.asyncio
+    async def test_start_multiple_coincidences_with_virtual_tagger(self):
+        """Should run multiple coincidences with Virtual TimeTagger."""
+        from Swabian import TimeTagger
+        tagger = TimeTagger.createTimeTaggerVirtual()
+        try:
+            handler = CoincidencesMeasurementHandler(tagger=tagger)
+            metadata = CoincidencesMetadata(
+                user_name="test_user",
+                coincidences=[[1, 2], [2, 3]],
+                coincidence_window=1000,
+                target_location="desktop/MaasData/test_multiple_coinc",
+            )
+            result = await handler.start(0.01, metadata)
+            assert result["status"] == "completed"
+            assert "duration" in result
+            assert "count" in result
+        finally:
+            TimeTagger.freeTimeTagger(tagger)
+
+    @pytest.mark.asyncio
+    async def test_start_single_coincidence_with_virtual_tagger(self):
+        """Should run single coincidence defined as list of lists with Virtual TimeTagger."""
+        from Swabian import TimeTagger
+        tagger = TimeTagger.createTimeTaggerVirtual()
+        try:
+            handler = CoincidencesMeasurementHandler(tagger=tagger)
+            metadata = CoincidencesMetadata(
+                user_name="test_user",
+                coincidences=[[1, 2]],
+                coincidence_window=1000,
+                target_location="desktop/MaasData/test_single_coinc",
+            )
+            result = await handler.start(0.01, metadata)
+            assert result["status"] == "completed"
+        finally:
+            TimeTagger.freeTimeTagger(tagger)

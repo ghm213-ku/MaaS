@@ -63,6 +63,7 @@ MaaS/
 │   │   ├── count_rate.py        ← Count-rate measurement handler
 │   │   ├── save_raw_tags.py     ← Save-raw-tags measurement handler
 │   │   ├── coincidences.py      ← Coincidences measurement handler
+│   │   ├── coincidences_live.py ← Live streaming for Coincidences
 │   │   ├── correlation.py       ← Correlation measurement handler
 │   │   ├── time_histograms_live.py ← Live streaming for StartStop, Histogram, Correlation
 │   │   ├── measurement.py       ← Original monolithic service (legacy)
@@ -228,6 +229,25 @@ class SaveRawTagsMeasurementHandler:
     def start(self, target_file_path, channels, duration_seconds)
         # Save events to file for duration_seconds
         # Return {"file_path": path, "total_events": N, ...}
+```
+
+**coincidences.py**:
+```python
+class CoincidencesMeasurementHandler:
+    def start(self, duration_seconds, coincidences: list[list[int]], coincidence_window=1000, timestamp="Last", **metadata)
+        # Input strictly requires list[list[int]] (e.g. [[1, 2]] or [[1, 2], [2, 3]]). Simple 1D lists are deprecated.
+        # Configures Swabian TimeTagger.Coincidences virtual channels
+        # Measures coincidence counts using TimeTagger.Counter and saves output
+        # Return {"status": "completed", "duration": N, "count": N}
+```
+
+**coincidences_live.py**:
+```python
+class CoincidencesLiveMeasurementHandler:
+    def start(self, duration_seconds, coincidences: list[list[int]], coincidence_window=1000, refresh_rate=25, **metadata)
+        # Input strictly requires list[list[int]] (e.g. [[1, 2]] or [[1, 2], [2, 3]]). Simple 1D lists are deprecated.
+        # Configures Swabian TimeTagger.Coincidences virtual channels
+        # Streams live count rate data to Redis at refresh_rate Hz
 ```
 
 **To create new handler**: See README_EXTENDING.md

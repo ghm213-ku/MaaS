@@ -119,7 +119,7 @@ async def test_start_coincidences_measurement():
     request = CoincidencesMeasurementRequest(
         measurement_type=MeasurementType.COINCIDENCES,
         duration_seconds=10.0,
-        metadata=CoincidencesMetadata(user_name="test_user", channels=[1, 2])
+        metadata=CoincidencesMetadata(user_name="test_user", coincidences=[[1, 2]])
     )
     mock_status_manager = MagicMock()
     mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user", 3: "test_user", 4: "test_user"}
@@ -144,7 +144,7 @@ async def test_start_coincidences_measurement():
 async def test_start_coincidences_live_measurement():
     request = CoincidencesLiveMeasurementRequest(
         measurement_type=MeasurementType.COINCIDENCES_LIVE,
-        metadata=CoincidencesMetadata(user_name="test_user", channels=[1, 2])
+        metadata=CoincidencesMetadata(user_name="test_user", coincidences=[[1, 2]])
     )
     mock_status_manager = MagicMock()
     mock_status_manager.get_booked_channels.return_value = {1: "test_user", 2: "test_user"}

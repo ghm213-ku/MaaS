@@ -128,6 +128,9 @@ class BackendWorker:
                 "coincidences", CoincidencesMeasurementHandler
             )
             self.job_processor.register_handler(
+                "coincidence", CoincidencesMeasurementHandler
+            )
+            self.job_processor.register_handler(
                 "save_raw_tags", SaveRawTagsMeasurementHandler
             )
             self.job_processor.register_handler(
@@ -145,10 +148,13 @@ class BackendWorker:
             self.job_processor.register_handler(
                 "coincidences_live", CoincidencesLiveMeasurementHandler
             )
+            self.job_processor.register_handler(
+                "coincidence_live", CoincidencesLiveMeasurementHandler
+            )
 
             logger.info("Backend worker initialized successfully")
             logger.info(
-                "  Handlers registered: count_rate, count_rate_live, correlation, coincidences, coincidences_live, save_raw_tags, set_parameters, startstop_live, histogram_live, correlation_live"
+                "  Handlers registered: count_rate, count_rate_live, correlation, coincidences, coincidence, coincidences_live, coincidence_live, save_raw_tags, set_parameters, startstop_live, histogram_live, correlation_live"
             )
             self.retry_count = 0
             self.current_retry_delay = 1.0
