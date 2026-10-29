@@ -31,7 +31,7 @@ class TestCoincidencesLiveMeasurementHandler:
         handler = CoincidencesLiveMeasurementHandler(tagger=mock_tagger)
         handler.redis_client = mock_redis
         handler.status_id = "test_status_id"
-        metadata = CoincidencesMetadata(user_name="test_user", channels=[1, 2], refresh_rate=100) # fast refresh
+        metadata = CoincidencesMetadata(user_name="test_user", coincidences=[[1, 2]], refresh_rate=100) # fast refresh
 
         # Start measurement in background
         task = asyncio.create_task(handler.start(duration_seconds=0.1, metadata=metadata))
@@ -64,7 +64,7 @@ class TestCoincidencesLiveMeasurementHandler:
     @pytest.mark.asyncio
     async def test_start_cancellation(self, mock_tagger):
         handler = CoincidencesLiveMeasurementHandler(tagger=mock_tagger)
-        metadata = CoincidencesMetadata(user_name="test_user", channels=[1, 2])
+        metadata = CoincidencesMetadata(user_name="test_user", coincidences=[[1, 2]])
         
         task = asyncio.create_task(handler.start(duration_seconds=10, metadata=metadata))
         await asyncio.sleep(0.05)
@@ -74,3 +74,26 @@ class TestCoincidencesLiveMeasurementHandler:
             await task
             
         assert handler._stopped is True
+
+    @pytest.mark.asyncio
+    async def test_multiple_coincidences_live_with_virtual_tagger(self, mock_redis):
+        """Should run multiple coincidences live measurement with Virtual TimeTagger."""
+        from Swabian import TimeTagger
+        tagger = TimeTagger.createTimeTaggerVirtual()
+        try:
+            handler = CoincidencesLiveMeasurementHandler(tagger=tagger)
+            handler.redis_client = mock_redis
+            handler.status_id = "test_multiple_live_id"
+            metadata = CoincidencesMetadata(
+                user_name="test_user",
+                coincidences=[[1, 2], [2, 3, 5]],
+                refresh_rate=100,
+            )
+            task = asyncio.create_task(handler.start(duration_seconds=0.1, metadata=metadata))
+            await asyncio.sleep(0.05)
+            result = await handler.stop()
+            await task
+            assert result["status"] == "stopped"
+            assert mock_redis.publish.called
+        finally:
+            TimeTagger.freeTimeTagger(tagger)

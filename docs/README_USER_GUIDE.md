@@ -181,7 +181,54 @@ curl -X POST http://localhost:8000/api/v1/measurements/save-raw-tags \
 
 ---
 
-### 3. Live Time Histograms
+### 3. Coincidences Measurement
+
+Measures coincidence events across multiple channel groups within a specified coincidence window using Swabian Instruments TimeTagger virtual coincidence channels.
+
+The coincidence API model supports taking **multiple coincidences as a list of lists of channel numbers** (e.g., `[[1, 2], [2, 3, 5]]`). Under the hood, this integrates directly with Swabian's `Coincidences` virtual channel class to generate dedicated virtual channels for each coincidence group with maximum performance.
+
+**Endpoints**:
+- Standard: `POST /api/v1/measurements/coincidences` (alias: `POST /api/v1/measurements/coincidence`)
+- Live Streaming: `POST /api/v1/measurements/coincidences-live` (alias: `POST /api/v1/measurements/coincidence-live`)
+
+**Request**:
+```bash
+curl -X POST http://localhost:8000/api/v1/measurements/coincidences \
+  -H "Content-Type: application/json" \
+  -d '{
+    "duration_seconds": 60,
+    "metadata": {
+      "user_name": "user-123",
+      "coincidences": [[1, 2], [2, 3, 5]],
+      "coincidence_window": 1000,
+      "timestamp": "Last",
+      "binwidth": 1000000000,
+      "n_values": 1,
+      "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+    }
+  }'
+```
+
+**Metadata Fields**:
+- `coincidences` (required if `channels` not provided): List of lists of channel numbers representing each coincidence group. E.g., `[[1, 2]]` for a single coincidence or `[[1, 2], [2, 3, 5]]` for multiple coincidences. Simple 1D lists are deprecated and rejected.
+- `channels` (optional): List of lists of channel numbers (e.g. `[[1, 2]]` or `[[1, 2], [2, 3]]`). *Note: The old method of simple 1D channel lists (e.g. `[1, 2]`) is deprecated and no longer supported.*
+- `coincidence_groups` (optional): Alias for `coincidences` matching Swabian parameter naming (`list[list[int]]`).
+- `user_name` (required): The user ID who booked all required channels.
+- `coincidence_window` / `coincidenceWindow` (optional): Maximum time window between events for a coincidence in picoseconds. Default: `1000` (1 ns).
+- `timestamp` (optional): Timestamp mode for coincidence virtual channel (`"Last"`, `"First"`, `"ListedFirst"`, `"Average"`). Default: `"Last"`.
+- `binwidth` (optional): Histogram bin width in picoseconds. Default: `1000000000` (1 second).
+- `n_values` (optional): Number of histogram bins. Default: `1`.
+- `target_location` (optional): Target file path. Supports `{datetime}` and `{measurement-type}` placeholders.
+- `refresh_rate` (optional): Streaming update frequency in Hz for live coincidence measurements. Default: `25`.
+
+**Results**:
+- `status`: `"completed"` or `"stopped"`
+- `duration`: Measurement duration in seconds
+- `count`: Total coincidence counts detected across channels
+
+---
+
+### 4. Live Time Histograms
 
 Streams StartStop, Histogram, or Correlation measurements in real-time to a Redis channel `measurement:data:{measurement_id}`.
 

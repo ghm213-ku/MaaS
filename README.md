@@ -157,6 +157,29 @@ curl -X POST http://localhost:8000/api/v1/measurements/save-raw-tags \
   }'
 ```
 
+### Coincidences
+
+Detects coincidence clicks across channel groups within a configurable coincidence window (in picoseconds) using Swabian TimeTagger virtual channels (`TimeTagger.Coincidences`). Coincidence inputs strictly require a list of lists of channel numbers (`list[list[int]]`, e.g., `[[1, 2]]` or `[[1, 2], [2, 3, 5]]`). *Note: The old method of simple 1D lists (e.g., `[1, 2]`) has been deprecated and is no longer supported.*
+
+```bash
+curl -X POST http://localhost:8000/api/v1/measurements/coincidences \
+  -H "Content-Type: application/json" \
+  -d '{
+    "duration_seconds": 60,
+    "metadata": {
+      "user_name": "user-123",
+      "coincidences": [[1, 2], [2, 3, 5]],
+      "coincidence_window": 1000,
+      "timestamp": "Last",
+      "binwidth": 1000000000,
+      "n_values": 1,
+      "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
+    }
+  }'
+```
+
+Live streaming is also available via `POST /api/v1/measurements/coincidences-live` (or alias `/coincidence-live`).
+
 ### Custom Measurements
 
 Add your own! See [README_EXTENDING.md](README_EXTENDING.md)
