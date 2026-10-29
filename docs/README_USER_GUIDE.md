@@ -226,6 +226,53 @@ curl -X POST http://localhost:8000/api/v1/measurements/coincidences \
 - `duration`: Measurement duration in seconds
 - `count`: Total coincidence counts detected across channels
 
+#### Live Streaming Output Streams (`coincidences-live`)
+
+In Swabian TimeTagger, each coincidence group in `coincidences` (e.g. `[[1, 2], [2, 3, 5]]`) instantiates an independent virtual channel (queried via `coinc.getChannels()`). The live measurement handler reads counts/rates from all virtual channels and publishes:
+
+1. **Multiplexed Channel** (`measurement:data:{measurement_id}`):
+```json
+{
+  "type": "coincidences_live",
+  "status_id": "8a32b694-8149-4702-86ee-7cfa5b66d628",
+  "coincidences": [[1, 2], [2, 3, 5]],
+  "virtual_channels": [20, 21],
+  "streams": [
+    {
+      "stream_index": 0,
+      "coincidence": [1, 2],
+      "virtual_channel": 20,
+      "rate": 1542.0,
+      "data": 1542.0
+    },
+    {
+      "stream_index": 1,
+      "coincidence": [2, 3, 5],
+      "virtual_channel": 21,
+      "rate": 28.5,
+      "data": 28.5
+    }
+  ],
+  "data": [1542.0, 28.5],
+  "timestamp": "2026-10-29T12:00:00.123456"
+}
+```
+
+2. **Per-Stream Sub-Channels** (`measurement:data:{measurement_id}:stream_{index}`):
+When multiple coincidence groups are provided, individual streams are also published to dedicated sub-channels for clients that wish to subscribe to a specific coincidence group directly:
+```json
+{
+  "type": "coincidences_live_stream",
+  "status_id": "8a32b694-8149-4702-86ee-7cfa5b66d628",
+  "stream_index": 0,
+  "coincidence": [1, 2],
+  "virtual_channel": 20,
+  "rate": 1542.0,
+  "data": 1542.0,
+  "timestamp": "2026-10-29T12:00:00.123456"
+}
+```
+
 ---
 
 ### 4. Live Time Histograms

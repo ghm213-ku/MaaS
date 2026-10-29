@@ -95,5 +95,30 @@ class TestCoincidencesLiveMeasurementHandler:
             await task
             assert result["status"] == "stopped"
             assert mock_redis.publish.called
+
+            import json
+            # Verify the main channel payload format
+            main_calls = [c for c in mock_redis.publish.call_args_list if c[0][0] == "measurement:data:test_multiple_live_id"]
+            assert len(main_calls) > 0
+            payload = json.loads(main_calls[-1][0][1])
+            assert payload["type"] == "coincidences_live"
+            assert payload["status_id"] == "test_multiple_live_id"
+            assert payload["coincidences"] == [[1, 2], [2, 3, 5]]
+            assert len(payload["virtual_channels"]) == 2
+            assert len(payload["streams"]) == 2
+            assert payload["streams"][0]["coincidence"] == [1, 2]
+            assert payload["streams"][0]["virtual_channel"] == payload["virtual_channels"][0]
+            assert payload["streams"][1]["coincidence"] == [2, 3, 5]
+            assert payload["streams"][1]["virtual_channel"] == payload["virtual_channels"][1]
+            assert "data" in payload
+            assert "timestamp" in payload
+
+            # Verify individual stream sub-channel publishing
+            stream_0_calls = [c for c in mock_redis.publish.call_args_list if c[0][0] == "measurement:data:test_multiple_live_id:stream_0"]
+            assert len(stream_0_calls) > 0
+            s0 = json.loads(stream_0_calls[-1][0][1])
+            assert s0["type"] == "coincidences_live_stream"
+            assert s0["coincidence"] == [1, 2]
+            assert s0["virtual_channel"] == payload["virtual_channels"][0]
         finally:
             TimeTagger.freeTimeTagger(tagger)

@@ -74,22 +74,13 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
                     }
                 tt_timestamp = timestamp_map.get(str(timestamp_str).lower(), timestamp_map.get("last", 0))
 
-                if len(coincidences) == 1:
-                    self._coincidence = TimeTagger.Coincidence(
-                        self.tagger,
-                        channels=coincidences[0],
-                        coincidenceWindow=coincidence_window,
-                        timestamp=tt_timestamp,
-                    )
-                    v_channels = [self._coincidence.getChannel()]
-                else:
-                    self._coincidence = TimeTagger.Coincidences(
-                        self.tagger,
-                        coincidenceGroups=coincidences,
-                        coincidenceWindow=coincidence_window,
-                        timestamp=tt_timestamp,
-                    )
-                    v_channels = list(self._coincidence.getChannels())
+                self._coincidence = TimeTagger.Coincidences(
+                    self.tagger,
+                    coincidences,
+                    coincidence_window,
+                    tt_timestamp,
+                )
+                v_channels = list(self._coincidence.getChannels())
 
                 self._counter = TimeTagger.Counter(
                     tagger=self.tagger,

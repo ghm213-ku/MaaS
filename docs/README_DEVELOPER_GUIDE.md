@@ -245,9 +245,12 @@ class CoincidencesMeasurementHandler:
 ```python
 class CoincidencesLiveMeasurementHandler:
     def start(self, duration_seconds, coincidences: list[list[int]], coincidence_window=1000, refresh_rate=25, **metadata)
-        # Input strictly requires list[list[int]] (e.g. [[1, 2]] or [[1, 2], [2, 3]]). Simple 1D lists are deprecated.
-        # Configures Swabian TimeTagger.Coincidences virtual channels
-        # Streams live count rate data to Redis at refresh_rate Hz
+        # Input strictly requires list[list[int]] (e.g. [[1, 2]] or [[1, 2], [2, 3, 5]]). Simple 1D lists are deprecated.
+        # Configures Swabian TimeTagger.Coincidences(tagger, coincidences, coincidence_window, timestamp)
+        # Obtains virtual channels for each coincidence group via coinc.getChannels()
+        # Reads live count rates across all virtual channels and publishes:
+        #   - Multiplexed channel measurement:data:{status_id} with full "streams" metadata
+        #   - Dedicated per-stream sub-channels measurement:data:{status_id}:stream_{index}
 ```
 
 **To create new handler**: See README_EXTENDING.md

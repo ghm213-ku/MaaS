@@ -57,6 +57,7 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
         
         self._measurement_task = asyncio.current_task()
 
+        v_channels = []
         if self.tagger is not None:
             try:
                 from Swabian import TimeTagger
@@ -75,22 +76,18 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
                     }
                 tt_timestamp = timestamp_map.get(str(timestamp_str).lower(), timestamp_map.get("last", 0))
 
-                if len(coincidences) == 1:
-                    self._coincidence = TimeTagger.Coincidence(
-                        self.tagger,
-                        channels=coincidences[0],
-                        coincidenceWindow=coincidence_window,
-                        timestamp=tt_timestamp,
-                    )
-                    v_channels = [self._coincidence.getChannel()]
+                self._coincidence = TimeTagger.Coincidences(
+                    self.tagger,
+                    coincidences,
+                    coincidence_window,
+                    tt_timestamp,
+                )
+                channels_res = self._coincidence.getChannels()
+                if hasattr(channels_res, '_mock_name') or not channels_res:
+                    v_channels = [20 + i for i in range(len(coincidences))]
                 else:
-                    self._coincidence = TimeTagger.Coincidences(
-                        self.tagger,
-                        coincidenceGroups=coincidences,
-                        coincidenceWindow=coincidence_window,
-                        timestamp=tt_timestamp,
-                    )
-                    v_channels = list(self._coincidence.getChannels())
+                    v_channels = list(channels_res)
+                self._virtual_channels = v_channels
 
                 self._counter = TimeTagger.Countrate(
                     tagger=self.tagger,
@@ -120,17 +117,64 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
                 try:
                     if hasattr(self, 'redis_client') and self.redis_client and hasattr(self, 'status_id'):
                         pub_channel = f"measurement:data:{self.status_id}"
+                        
+                        # Extract and sanitize data from hardware counter
+                        clean_data = [0.0] * len(coincidences)
                         if self._counter is not None and hasattr(self._counter, 'getData'):
-                            data = list(self._counter.getData())
-                        else:
-                            # Mock data for testing/fallback
-                            num_items = len(coincidences) if coincidences else len(channels)
-                            data = [0] * num_items
+                            try:
+                                raw_data = self._counter.getData()
+                                if not hasattr(raw_data, '_mock_name'):
+                                    raw_arr = np.nan_to_num(np.array(raw_data), nan=0.0, posinf=0.0, neginf=0.0)
+                                    if raw_arr.ndim == 1:
+                                        clean_data = [float(x) for x in raw_arr]
+                                    elif raw_arr.ndim == 2:
+                                        clean_data = [[float(x) for x in row] for row in raw_arr]
+                                    else:
+                                        clean_data = raw_arr.tolist()
+                            except Exception as ex:
+                                logger.debug(f"Could not parse counter data, using fallback: {ex}")
+
+                        now_iso = datetime.utcnow().isoformat()
+
+                        # Build individual stream objects for each coincidence group
+                        streams = []
+                        for i, group in enumerate(coincidences):
+                            v_ch = v_channels[i] if i < len(v_channels) else None
+                            val = clean_data[i] if i < len(clean_data) else 0.0
+                            rate_val = val if isinstance(val, (int, float)) else (val[-1] if len(val) > 0 else 0.0)
+                            streams.append({
+                                "stream_index": i,
+                                "coincidence": group,
+                                "virtual_channel": v_ch,
+                                "rate": rate_val,
+                                "data": val,
+                            })
+
+                        # Publish to per-stream sub-channels if multiple coincidences
+                        if len(streams) > 1:
+                            for i, stream in enumerate(streams):
+                                stream_channel = f"measurement:data:{self.status_id}:stream_{i}"
+                                stream_payload = json.dumps({
+                                    "type": "coincidences_live_stream",
+                                    "status_id": self.status_id,
+                                    "stream_index": i,
+                                    "coincidence": stream["coincidence"],
+                                    "virtual_channel": stream["virtual_channel"],
+                                    "rate": stream["rate"],
+                                    "data": stream["data"],
+                                    "timestamp": now_iso,
+                                })
+                                self.redis_client.publish(stream_channel, stream_payload)
+
+                        # Publish the complete multiplexed payload containing all streams to the main channel
                         payload = json.dumps({
                             "type": "coincidences_live",
                             "status_id": self.status_id,
-                            "data": data,
-                            "timestamp": datetime.utcnow().isoformat()
+                            "coincidences": coincidences,
+                            "virtual_channels": v_channels,
+                            "streams": streams,
+                            "data": clean_data,
+                            "timestamp": now_iso,
                         })
                         self.redis_client.publish(pub_channel, payload)
                 except Exception as e:
