@@ -37,6 +37,9 @@ python -m uvicorn main:app --reload --port 8000
 ### Step 3: In Another Terminal, Start Worker
 ```bash
 python worker.py
+
+# Without detectors attached: enable the TimeTagger test signal on channels 1-5
+python worker.py --testing
 ```
 
 ### Step 4: Test API
@@ -104,6 +107,9 @@ sudo systemctl start maas-web
 ```
 
 #### 4. Start Backend Worker(s)
+
+- [ ] Start production workers **without** `--testing`. A normal run switches the TimeTagger test signal off on all channels, and `--testing` would inject the test signal into channels 1-5.
+
 ```bash
 # Single worker
 python worker.py

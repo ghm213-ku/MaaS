@@ -76,6 +76,7 @@ The application uses a distributed architecture with clear separation of concern
 - Monitors Redis connection health
 - Polls job queue and spawns threads for measurements
 - Can be scaled to multiple instances for parallel processing
+- Configures the TimeTagger test signal at startup: off on all channels by default, or on for channels 1-5 with `--testing`
 
 ---
 
@@ -133,6 +134,11 @@ python worker.py
 ```
 
 You can run multiple worker instances for parallel processing.
+
+**Worker flags:**
+- `python worker.py`: normal run. The TimeTagger test signal is **off** on all channels.
+- `python worker.py --testing`: the test signal is **on** for channels 1-5, so you can measure without detectors.
+- `python worker.py --no-hardware`: doesn't connect to a TimeTagger. Jobs that need hardware will fail.
 
 ---
 
@@ -522,6 +528,10 @@ Worker (worker.py - Backend)
 ```
 Worker (worker.py) - Initialization Phase
    │
+   ├─→ createTimeTagger()  (skipped with --no-hardware)
+   ├─→ configure_test_signals()
+   │     ├─ default:   setTestSignal(all channels, False)
+   │     └─ --testing: setTestSignal(all channels, False), then setTestSignal([1..5], True)
    ├─→ register_handler("count_rate", CountRateMeasurementHandler)
    ├─→ register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
    │
