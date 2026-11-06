@@ -41,7 +41,12 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 # Terminal 2: Backend worker
 python worker.py
+
+# ...or, without detectors attached, with the test signal on channels 1-5:
+python worker.py --testing
 ```
+
+A normal run (no flag) switches the TimeTagger test signal off on all channels. `--no-hardware` starts the worker without a TimeTagger, and any job that needs hardware will fail.
 
 ---
 
