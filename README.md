@@ -239,6 +239,18 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 python worker.py
 ```
 
+### Worker Run Modes
+
+The backend worker owns the TimeTagger, and its flags control the device's built-in test signal:
+
+| Command | TimeTagger | Test signal |
+|---|---|---|
+| `python worker.py` | Connected | **Off on all channels**, so only real detector signals are measured |
+| `python worker.py --testing` | Connected | **On for channels 1–5**, off on all others, so you get data without detectors attached |
+| `python worker.py --no-hardware` | Not connected | n/a. Jobs that need hardware fail, which is useful for exercising Redis and the job queue only |
+
+`python worker.py --help` lists the flags. The channels used in testing mode are set by `TEST_SIGNAL_CHANNELS` in `worker.py`.
+
 ### With Docker
 
 ```dockerfile

@@ -705,8 +705,10 @@ def release_channels(
         Release confirmation with released channels count
 
     Note:
-        Channels are automatically released when a measurement completes, stops, or fails.
-        This endpoint allows explicit manual release if needed.
+        Channels stay booked after a measurement completes, stops, or fails; they
+        are only freed by calling this endpoint. Releasing also enqueues a
+        set-parameters job that resets the released channels to their defaults
+        (input_delay=0, trigger_voltage=0.5).
     """
     logger.info(f"[{user_name}] Channel release request")
 

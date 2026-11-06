@@ -687,12 +687,10 @@ class TestLogFormatting:
 
 class TestFileLoggerCoverage:
     def test_format_timestamp_fallback(self):
-        logger = FileLogger("dummy", "dummy")
-        assert logger._format_timestamp(123456.789) == "123456.789"
+        assert FileLogger._format_timestamp(123456.789) == "123456.789"
         
     def test_format_timestamp_other_type(self):
-        logger = FileLogger("dummy", "dummy")
-        assert logger._format_timestamp({"a": 1}) == "{'a': 1}"
+        assert FileLogger._format_timestamp({"a": 1}) == "{'a': 1}"
 
     def test_log_channel_booking_for_measurement(self):
         with tempfile.TemporaryDirectory() as temp_dir:
