@@ -123,8 +123,9 @@ class StatusManager:
         """Update measurement status and log the change.
 
         Status updates are logged to file on every change. The measurement
-        remains in Redis until the TTL expires. When reaching a terminal status,
-        booked channels are automatically released.
+        remains in Redis until the TTL expires. Reaching a terminal status does
+        not release booked channels or reset their parameters; that happens
+        only via release_channels().
         """
         status_key = f"{self.status_prefix}{status_id}"
         status_data = self.redis_client.get(status_key)
