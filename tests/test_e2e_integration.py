@@ -105,7 +105,7 @@ def e2e_setup(redis_client):
 class TestE2EMeasurementWorkflows:
     """E2E tests for measurement APIs."""
 
-    def test_count_rate_e2e(self, e2e_setup):
+    def test_count_rate_e2e(self, e2e_setup, tmp_path):
         """Test complete count-rate measurement flow."""
         client, status_manager, r = e2e_setup
 
@@ -118,7 +118,8 @@ class TestE2EMeasurementWorkflows:
                 "user_name": "e2e_test",
                 "channels": [1, 2],
                 "binwidth": 1000,
-                "n_values": 1
+                "n_values": 1,
+                "target_location": str(tmp_path / "{datetime}" / "{measurement-type}"),
             }
         }
         
@@ -189,7 +190,7 @@ class TestE2EMeasurementWorkflows:
         # Stop measurement
         client.delete(f"/api/v1/measurements/{meas_id}")
 
-    def test_correlation_e2e(self, e2e_setup):
+    def test_correlation_e2e(self, e2e_setup, tmp_path):
         """Test complete correlation measurement flow."""
         client, status_manager, r = e2e_setup
 
@@ -202,7 +203,7 @@ class TestE2EMeasurementWorkflows:
                 "channel1": 1,
                 "channel2": 2,
                 "user_name": "e2e_test",
-                "target_location": "desktop/test_corr_{datetime}.csv"
+                "target_location": str(tmp_path / "test_corr_{datetime}.csv"),
             }
         }
         

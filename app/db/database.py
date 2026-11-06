@@ -2,8 +2,10 @@ import sqlite3
 import os
 import threading
 
-# Use a specific path for the db
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "maas_auth.db")
+# Use a specific path for the db (overridable via MAAS_DB_PATH, e.g. for tests)
+DB_PATH = os.environ.get("MAAS_DB_PATH") or os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "maas_auth.db"
+)
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
