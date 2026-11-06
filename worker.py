@@ -37,6 +37,26 @@ from Swabian import TimeTagger
 
 logger = configure_logging(__name__, log_file="logs/services/worker.log")
 
+# Channels that get the built-in test signal when the worker runs with --testing
+TEST_SIGNAL_CHANNELS = [1, 2, 3, 4, 5]
+
+
+def configure_test_signals(tagger, testing: bool) -> None:
+    """Set the TimeTagger's built-in test signal for this run mode.
+
+    Normal run: the test signal is switched off on every input channel so only
+    real detector signals are measured.
+    Testing run: the test signal is switched on for TEST_SIGNAL_CHANNELS (and off
+    on all other channels), so measurements produce data without detectors.
+    """
+    all_channels = list(tagger.getChannelList(TimeTagger.ChannelEdge.Rising))
+    tagger.setTestSignal(all_channels, False)
+    if testing:
+        tagger.setTestSignal(TEST_SIGNAL_CHANNELS, True)
+        logger.info(f"Testing mode: test signal enabled on channels {TEST_SIGNAL_CHANNELS}")
+    else:
+        logger.info("Test signal disabled on all channels")
+
 
 class BackendWorker:
     """Backend worker service that processes measurement jobs."""
@@ -49,6 +69,7 @@ class BackendWorker:
         max_retries: int = 5,
         retry_backoff: float = 2.0,
         testing: bool = False,
+        no_hardware: bool = False,
     ):
         """Initialize the backend worker.
 
@@ -58,6 +79,10 @@ class BackendWorker:
             redis_db: Redis database index
             max_retries: Maximum retry attempts before failing
             retry_backoff: Backoff multiplier for exponential retry (e.g., 2.0 = doubles each time)
+            testing: Enable the TimeTagger test signal on channels 1-5
+                (TEST_SIGNAL_CHANNELS). When False, the test signal is off on all channels.
+            no_hardware: Don't connect to a TimeTagger at all (jobs needing
+                hardware will fail). Useful for exercising Redis/queue plumbing.
         """
         self.redis_host = redis_host
         self.redis_port = redis_port
@@ -65,6 +90,7 @@ class BackendWorker:
         self.max_retries = max_retries
         self.retry_backoff = retry_backoff
         self.testing = testing
+        self.no_hardware = no_hardware
 
         # State tracking
         self.retry_count = 0
@@ -101,14 +127,14 @@ class BackendWorker:
 
             logger.debug("Redis connection verified")
 
-            if not self.testing:
+            if not self.no_hardware:
                 logger.debug("Initializing TimeTagger...")
                 tagger = TimeTagger.createTimeTagger()
-                tagger.setTestSignal([2, 3, 4], True)
+                configure_test_signals(tagger, self.testing)
                 tagger.setTriggerLevel(12, 0.0)
                 tagger.setTriggerLevel(16, 0.0)
             else:
-                logger.debug("Testing mode enabled, skipping TimeTagger initialization")
+                logger.debug("No-hardware mode enabled, skipping TimeTagger initialization")
                 tagger = None
 
             logger.debug("Creating JobProcessor...")
@@ -318,10 +344,28 @@ class BackendWorker:
         return (self.jobs_processed / total) * 100.0
 
 
+def parse_args(argv=None):
+    """Parse worker command-line flags."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MaaS backend worker")
+    parser.add_argument(
+        "--testing",
+        action="store_true",
+        help="Enable the TimeTagger test signal on channels 1-5 "
+        "(default: test signal off on all channels)",
+    )
+    parser.add_argument(
+        "--no-hardware",
+        action="store_true",
+        help="Run without connecting to a TimeTagger (jobs needing hardware will fail)",
+    )
+    return parser.parse_args(argv)
+
+
 def main():
     """Entry point for the backend worker."""
-    import sys
-    testing = "testing" in sys.argv or "--testing" in sys.argv
+    args = parse_args()
     try:
         worker = BackendWorker(
             redis_host="127.0.0.1",
@@ -329,7 +373,8 @@ def main():
             redis_db=0,
             max_retries=5,
             retry_backoff=2.0,
-            testing=testing,
+            testing=args.testing,
+            no_hardware=args.no_hardware,
         )
         worker.run(poll_timeout=1)
     except Exception as e:

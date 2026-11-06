@@ -60,7 +60,7 @@ class TestCoincidencesMeasurementHandler:
         assert results["status"] == "stopped"
 
     @pytest.mark.asyncio
-    async def test_start_multiple_coincidences_with_virtual_tagger(self):
+    async def test_start_multiple_coincidences_with_virtual_tagger(self, tmp_path):
         """Should run multiple coincidences with Virtual TimeTagger."""
         from Swabian import TimeTagger
         tagger = TimeTagger.createTimeTaggerVirtual()
@@ -70,7 +70,7 @@ class TestCoincidencesMeasurementHandler:
                 user_name="test_user",
                 coincidences=[[1, 2], [2, 3]],
                 coincidence_window=1000,
-                target_location="desktop/MaasData/test_multiple_coinc",
+                target_location=str(tmp_path / "test_multiple_coinc"),
             )
             result = await handler.start(0.01, metadata)
             assert result["status"] == "completed"
@@ -80,7 +80,7 @@ class TestCoincidencesMeasurementHandler:
             TimeTagger.freeTimeTagger(tagger)
 
     @pytest.mark.asyncio
-    async def test_start_single_coincidence_with_virtual_tagger(self):
+    async def test_start_single_coincidence_with_virtual_tagger(self, tmp_path):
         """Should run single coincidence defined as list of lists with Virtual TimeTagger."""
         from Swabian import TimeTagger
         tagger = TimeTagger.createTimeTaggerVirtual()
@@ -90,7 +90,7 @@ class TestCoincidencesMeasurementHandler:
                 user_name="test_user",
                 coincidences=[[1, 2]],
                 coincidence_window=1000,
-                target_location="desktop/MaasData/test_single_coinc",
+                target_location=str(tmp_path / "test_single_coinc"),
             )
             result = await handler.start(0.01, metadata)
             assert result["status"] == "completed"

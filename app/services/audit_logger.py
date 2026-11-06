@@ -5,8 +5,10 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
 from typing import Optional
 
-# Ensure logs directory exists
-LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
+# Ensure logs directory exists (overridable via MAAS_LOGS_DIR, e.g. for tests)
+LOGS_DIR = os.environ.get("MAAS_LOGS_DIR") or os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs"
+)
 os.makedirs(LOGS_DIR, exist_ok=True)
 AUDIT_LOG_FILE = os.path.join(LOGS_DIR, "audit.log")
 
