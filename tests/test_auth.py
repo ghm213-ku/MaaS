@@ -27,7 +27,13 @@ def admin_token():
     conn.close()
     
     token = create_access_token(user_id, "admin")
-    return token
+    yield token
+
+    # Remove the user this fixture created
+    conn = get_db_connection()
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
 
 def test_login_success():
     username = f"user_{uuid.uuid4()}"
