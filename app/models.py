@@ -462,6 +462,16 @@ class CountRateLiveMeasurementRequest(BaseModel):
     """Request model for live count-rate measurements."""
 
     measurement_type: MeasurementType = MeasurementType.COUNT_RATE_LIVE
+    duration_seconds: Optional[float] = Field(
+        None,
+        gt=0,
+        description=(
+            "Optional acquisition time in seconds. When set, the counter runs for "
+            "exactly this long (Time Tagger startFor), a last update flagged "
+            "\"final\": true is published, and the job completes. Omit to stream "
+            "until stopped."
+        ),
+    )
     metadata: CountRateMetadata = Field(
         description="Metadata containing channels, binwidth, and n_values"
     )
@@ -470,11 +480,11 @@ class CountRateLiveMeasurementRequest(BaseModel):
     @classmethod
     def wrap_flat_payload(cls, data: Any) -> Any:
         if isinstance(data, dict) and "metadata" not in data:
-            # For backward compatibility, drop duration_seconds if present
-            data.pop("duration_seconds", None)
+            duration_seconds = data.pop("duration_seconds", None)
             measurement_type = data.pop("measurement_type", MeasurementType.COUNT_RATE_LIVE)
             return {
                 "measurement_type": measurement_type,
+                "duration_seconds": duration_seconds,
                 "metadata": data,
             }
         return data
@@ -655,6 +665,16 @@ class CoincidencesLiveMeasurementRequest(BaseModel):
     """Request model for live coincidences measurements."""
 
     measurement_type: MeasurementType = MeasurementType.COINCIDENCES_LIVE
+    duration_seconds: Optional[float] = Field(
+        None,
+        gt=0,
+        description=(
+            "Optional acquisition time in seconds. When set, the counter runs for "
+            "exactly this long (Time Tagger startFor), a last update flagged "
+            "\"final\": true is published, and the job completes. Omit to stream "
+            "until stopped."
+        ),
+    )
     metadata: CoincidencesMetadata = Field(
         description="Metadata containing channels, binwidth, and n_values"
     )
@@ -663,11 +683,11 @@ class CoincidencesLiveMeasurementRequest(BaseModel):
     @classmethod
     def wrap_flat_payload(cls, data: Any) -> Any:
         if isinstance(data, dict) and "metadata" not in data:
-            # Drop duration_seconds if present for backward compatibility
-            data.pop("duration_seconds", None)
+            duration_seconds = data.pop("duration_seconds", None)
             measurement_type = data.pop("measurement_type", MeasurementType.COINCIDENCES_LIVE)
             return {
                 "measurement_type": measurement_type,
+                "duration_seconds": duration_seconds,
                 "metadata": data,
             }
         return data
@@ -849,6 +869,9 @@ class MeasurementStatusResponse(BaseModel):
     results: Optional[dict[str, Any]] = Field(
         None, description="Preliminary results (if available)"
     )
+    message: Optional[str] = Field(
+        None, description="Latest status message, e.g. the error of a failed job"
+    )
 
 
 class ErrorResponse(BaseModel):
@@ -948,6 +971,28 @@ class ChannelReleaseResponse(BaseModel):
     user_name: str
     released_channels: list[int]
     total_released: int
+    parameter_reset_id: Optional[str] = Field(
+        None,
+        description=(
+            "ID of the queued set-parameters job that resets the released channels "
+            "to trigger 0.5 V / delay 0 ps. Poll GET /api/v1/measurements/{id}/status "
+            "to see when it has been applied."
+        ),
+    )
+
+
+class ChannelParameters(BaseModel):
+    """Current trigger level and input delay of one channel, as read from the Time Tagger."""
+
+    channel_number: int
+    trigger_voltage: float = Field(description="Trigger level in V")
+    input_delay: int = Field(description="Input delay in ps")
+
+
+class ChannelParametersResponse(BaseModel):
+    """Current trigger level and input delay of every channel the worker has reported."""
+
+    channels: list[ChannelParameters]
 
 
 class ChannelListResponse(BaseModel):

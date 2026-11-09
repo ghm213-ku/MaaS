@@ -31,6 +31,7 @@ from app.services.time_histograms_live import (
     CorrelationLiveMeasurementHandler,
 )
 from app.services.file_logger import FileLogger
+from app.services.channel_parameters import record_channel_parameters
 from app.utils.logger import configure_logging
 import time
 from Swabian import TimeTagger
@@ -133,6 +134,12 @@ class BackendWorker:
                 configure_test_signals(tagger, self.testing)
                 tagger.setTriggerLevel(12, 0.0)
                 tagger.setTriggerLevel(16, 0.0)
+                # Publish every channel's starting trigger/delay for GET /channels/parameters
+                record_channel_parameters(
+                    self.status_manager.redis_client,
+                    tagger,
+                    tagger.getChannelList(TimeTagger.ChannelEdge.Rising),
+                )
             else:
                 logger.debug("No-hardware mode enabled, skipping TimeTagger initialization")
                 tagger = None

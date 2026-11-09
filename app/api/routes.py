@@ -35,7 +35,11 @@ from app.models import (
     HistogramLiveMeasurementRequest,
     CorrelationLiveMeasurementRequest,
     CoincidencesLiveMeasurementRequest,
+    ChannelParametersResponse,
 )
+import jwt
+from app.services.auth_service import decode_access_token
+from app.services.channel_parameters import get_channel_parameters
 from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager, MeasurementStatus
 from app.services.file_logger import FileLogger
@@ -275,7 +279,7 @@ def start_count_rate_live_measurement(
     return _handle_measurement_request(
         request_name="count-rate-live",
         measurement_type=request.measurement_type,
-        duration_seconds=None,
+        duration_seconds=request.duration_seconds,
         metadata_dump=request.metadata.model_dump(),
         channels=request.metadata.channels,
         processor=processor,
@@ -394,7 +398,7 @@ def start_coincidences_live_measurement(
     return _handle_measurement_request(
         request_name="coincidences-live",
         measurement_type=request.measurement_type,
-        duration_seconds=None,
+        duration_seconds=request.duration_seconds,
         metadata_dump=request.metadata.model_dump(),
         channels=request.metadata.unique_channels,
         processor=processor,
@@ -527,6 +531,7 @@ def start_set_parameters(
 
 
 @channels_router.get("/", response_model=ChannelListResponse)
+@channels_router.get("", response_model=ChannelListResponse, include_in_schema=False)
 def list_all_channels(
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> ChannelListResponse:
@@ -556,6 +561,27 @@ def list_all_channels(
             status_code=500,
             detail=str(e),
         )
+
+
+@channels_router.get("/parameters", response_model=ChannelParametersResponse)
+def list_channel_parameters(
+    status_manager: StatusManager = Depends(get_status_manager),
+) -> ChannelParametersResponse:
+    """
+    Current trigger level (V) and input delay (ps) of each channel.
+
+    Values are read back from the Time Tagger by the worker at startup and after
+    every set-parameters job (including the reset queued when channels are
+    released), so they reflect the hardware rather than what a client last sent.
+    Channels the worker has not reported yet are omitted.
+    """
+    try:
+        return ChannelParametersResponse(
+            channels=get_channel_parameters(status_manager.redis_client)
+        )
+    except Exception as e:
+        logger.error(f"Failed to read channel parameters: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @channels_router.get("/available", response_model=ChannelStatsResponse)
@@ -811,6 +837,7 @@ def release_channels(
         )
 
         # Reset delays to 0 for released channels
+        reset_status_id = None
         if released_channels:
             reset_status_id = str(uuid.uuid4())
             status_manager.create_status(
@@ -860,6 +887,7 @@ def release_channels(
             user_name=result_user_name,
             released_channels=released_channels,
             total_released=total_released,
+            parameter_reset_id=reset_status_id,
         )
 
     except ValueError as e:
@@ -991,7 +1019,27 @@ def stop_measurement(
 async def stream_measurement_data(websocket: WebSocket, measurement_id: str):
     """
     Stream live measurement data via WebSocket.
+
+    Requires the same JWT as the REST API, sent either as an
+    ``Authorization: Bearer <token>`` header or as a ``?token=<token>`` query
+    parameter (for clients that cannot set WebSocket headers). Connections
+    without a valid token are closed with code 1008 (policy violation).
     """
+    auth_header = websocket.headers.get("authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else websocket.query_params.get("token")
+    if not token:
+        logger.warning(f"Rejected unauthenticated WebSocket connection for {measurement_id}")
+        await websocket.close(code=1008, reason="Not authenticated")
+        return
+    try:
+        decode_access_token(token)
+    except jwt.ExpiredSignatureError:
+        await websocket.close(code=1008, reason="Token expired")
+        return
+    except jwt.InvalidTokenError:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+
     await websocket.accept()
     
     # Initialize async redis connection
@@ -1070,6 +1118,7 @@ def get_measurement_status(
             duration_so_far=max(0, duration_so_far),  # Ensure non-negative
             metadata=metadata,
             results=results,
+            message=status_obj.get("message"),
         )
 
     except HTTPException:
@@ -1114,6 +1163,7 @@ def list_measurements(
             "channel_endpoints": {
                 "list_channels": "GET /api/v1/channels/",
                 "list_available": "GET /api/v1/channels/available",
+                "channel_parameters": "GET /api/v1/channels/parameters",
                 "book_channels": "POST /api/v1/channels/book",
                 "release_channels": "POST /api/v1/channels/release/{booked_by}",
             },

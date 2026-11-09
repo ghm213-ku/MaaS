@@ -185,7 +185,7 @@ class TestCoincidencesLiveMeasurementRequestModel:
             "user_name": "test_user",
             "coincidences": [[1, 2, 3]],
             "binwidth": 500000,
-            "duration_seconds": 123, # should be dropped
+            "duration_seconds": 123,  # timed (startFor) acquisition
         }
         
         request = CoincidencesLiveMeasurementRequest.model_validate(flat_payload)
@@ -194,7 +194,7 @@ class TestCoincidencesLiveMeasurementRequestModel:
         assert request.channels == [[1, 2, 3]]
         assert request.coincidences == [[1, 2, 3]]
         assert request.binwidth == 500000
-        assert not hasattr(request, "duration_seconds")
+        assert request.duration_seconds == 123
 
 
 class TestMultipleCoincidencesModel:
