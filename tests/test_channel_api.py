@@ -122,13 +122,19 @@ def client():
             }
 
         # Release channels
-        def release_channels_side_effect(user_name):
-            """Release all channels booked by an identifier."""
+        def release_channels_side_effect(user_name, channel_numbers):
+            """Release the listed channels booked by an identifier."""
+            owned = [ch for ch, by in booked_channels.items() if by == user_name]
+            to_release = list(dict.fromkeys(channel_numbers))
+            not_owned = [ch for ch in to_release if ch not in owned]
+            if not_owned:
+                raise ValueError(
+                    f"Cannot release channels {not_owned} - not booked by {user_name}"
+                )
             released = []
-            for ch, by in list(booked_channels.items()):
-                if by == user_name:
-                    del booked_channels[ch]
-                    released.append(ch)
+            for ch in to_release:
+                del booked_channels[ch]
+                released.append(ch)
 
             return {
                 "user_name": user_name,
@@ -399,7 +405,10 @@ class TestReleaseChannels:
         )
 
         # Release channels
-        response = client.post("/api/v1/channels/release/measurement-010")
+        response = client.post(
+            "/api/v1/channels/release/measurement-010",
+            json={"channel_numbers": [1, 2, 3]},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -421,7 +430,10 @@ class TestReleaseChannels:
         )
 
         # Release channels
-        response = client.post("/api/v1/channels/release/measurement-reset")
+        response = client.post(
+            "/api/v1/channels/release/measurement-reset",
+            json={"channel_numbers": [4, 5]},
+        )
         assert response.status_code == 200
         
         # Verify enqueue_job was called
@@ -434,16 +446,27 @@ class TestReleaseChannels:
         assert call_kwargs["metadata"]["user_name"] == "measurement-reset"
 
     def test_release_channels_not_booked(self, client):
-        """Should handle release of non-booked identifier gracefully."""
-        response = client.post("/api/v1/channels/release/measurement-nonexistent")
+        """Releasing channels the identifier never booked is rejected."""
+        response = client.post(
+            "/api/v1/channels/release/measurement-nonexistent",
+            json={"channel_numbers": [40]},
+        )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response.status_code == 409
+        assert "40" in response.json()["detail"]
 
-        # Should return empty release
-        assert data["user_name"] == "measurement-nonexistent"
-        assert data["released_channels"] == []
-        assert data["total_released"] == 0
+    def test_release_without_channel_list_is_rejected(self, client):
+        """The channel list is required; a bare POST no longer releases everything."""
+        client.post(
+            "/api/v1/channels/book",
+            json={"user_name": "no-body-user", "channel_numbers": [31, 32]},
+        )
+
+        assert client.post("/api/v1/channels/release/no-body-user").status_code == 422
+        assert client.post("/api/v1/channels/release/no-body-user", json={}).status_code == 422
+
+        available = client.get("/api/v1/channels/available").json()["available_channel_numbers"]
+        assert 31 not in available and 32 not in available
 
     def test_release_channels_clears_availability(self, client):
         """Should restore channels to available after release."""
@@ -460,7 +483,10 @@ class TestReleaseChannels:
         assert list1["available_channels"] == 45
 
         # Release
-        client.post(f"/api/v1/channels/release/{measurement_id}")
+        client.post(
+            f"/api/v1/channels/release/{measurement_id}",
+            json={"channel_numbers": [10, 11, 12]},
+        )
 
         # Verify available again
         list2 = client.get("/api/v1/channels/available").json()
@@ -484,7 +510,10 @@ class TestReleaseChannels:
         )
 
         # Release measurement 1
-        client.post("/api/v1/channels/release/measurement-012")
+        client.post(
+            "/api/v1/channels/release/measurement-012",
+            json={"channel_numbers": [1, 2]},
+        )
 
         # Verify only measurement 1 channels are released
         list_response = client.get("/api/v1/channels/available").json()
@@ -493,6 +522,84 @@ class TestReleaseChannels:
         assert 2 in list_response["available_channel_numbers"]
         assert 5 not in list_response["available_channel_numbers"]
         assert 6 not in list_response["available_channel_numbers"]
+
+    def test_release_selected_channels_only(self, client):
+        """With channel_numbers in the body, only those channels are released."""
+        from app.api.routes import _job_processor
+        _job_processor.enqueue_job.reset_mock()
+
+        client.post(
+            "/api/v1/channels/book",
+            json={"user_name": "partial-user", "channel_numbers": [1, 2, 3]},
+        )
+
+        response = client.post(
+            "/api/v1/channels/release/partial-user",
+            json={"channel_numbers": [1, 3]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["released_channels"] == [1, 3]
+        assert data["total_released"] == 2
+
+        available = client.get("/api/v1/channels/available").json()["available_channel_numbers"]
+        assert 1 in available and 3 in available
+        assert 2 not in available
+
+        # Only the released channels get their parameters reset
+        assert _job_processor.enqueue_job.call_args.kwargs["metadata"]["channels"] == [1, 3]
+
+        # The kept channel can still be released afterwards
+        rest = client.post(
+            "/api/v1/channels/release/partial-user", json={"channel_numbers": [2]}
+        ).json()
+        assert rest["released_channels"] == [2]
+
+    def test_release_selected_channels_accepts_channels_alias(self, client):
+        """The body also accepts 'channels' as an alias, like booking."""
+        client.post(
+            "/api/v1/channels/book",
+            json={"user_name": "alias-user", "channel_numbers": [7, 8]},
+        )
+        response = client.post(
+            "/api/v1/channels/release/alias-user", json={"channels": [8]}
+        )
+        assert response.status_code == 200
+        assert response.json()["released_channels"] == [8]
+
+    def test_release_channel_not_owned_is_rejected(self, client):
+        """Releasing a channel booked by someone else fails and frees nothing."""
+        client.post(
+            "/api/v1/channels/book",
+            json={"user_name": "owner-a", "channel_numbers": [20, 21]},
+        )
+        client.post(
+            "/api/v1/channels/book",
+            json={"user_name": "owner-b", "channel_numbers": [22]},
+        )
+
+        response = client.post(
+            "/api/v1/channels/release/owner-a",
+            json={"channel_numbers": [20, 22]},
+        )
+
+        assert response.status_code == 409
+        assert "22" in response.json()["detail"]
+        available = client.get("/api/v1/channels/available").json()["available_channel_numbers"]
+        assert 20 not in available and 21 not in available and 22 not in available
+
+    def test_release_empty_channel_list_is_rejected(self, client):
+        """An empty channel list is a validation error."""
+        client.post(
+            "/api/v1/channels/book",
+            json={"user_name": "empty-user", "channel_numbers": [30]},
+        )
+        response = client.post(
+            "/api/v1/channels/release/empty-user", json={"channel_numbers": []}
+        )
+        assert response.status_code == 422
+        assert 30 not in client.get("/api/v1/channels/available").json()["available_channel_numbers"]
 
 
 class TestChannelIntegration:
@@ -520,7 +627,10 @@ class TestChannelIntegration:
         assert response3.json()["booked_channels"] == 3
 
         # 4. Release channels
-        response4 = client.post(f"/api/v1/channels/release/{measurement_id}")
+        response4 = client.post(
+            f"/api/v1/channels/release/{measurement_id}",
+            json={"channel_numbers": [5, 10, 15]},
+        )
         assert response4.json()["total_released"] == 3
 
         # 5. Verify released
@@ -549,7 +659,7 @@ class TestChannelIntegration:
         assert stats["available_channels"] == 39
 
         # Release one
-        client.post("/api/v1/channels/release/meas-a")
+        client.post("/api/v1/channels/release/meas-a", json={"channel_numbers": [1, 2, 3]})
 
         # Verify partial release
         stats2 = client.get("/api/v1/channels/available").json()

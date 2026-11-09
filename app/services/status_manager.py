@@ -360,19 +360,35 @@ class StatusManager:
             "total_booked": len(channel_numbers),
         }
 
-    def release_channels(self, user_name: str) -> Dict[str, Any]:
-        """Release all channels booked by a user.
+    def release_channels(
+        self,
+        user_name: str,
+        channel_numbers: List[int],
+    ) -> Dict[str, Any]:
+        """Release the listed channels booked by a user.
 
         Args:
             user_name: The identifier (user) whose channels to release
+            channel_numbers: Which of the user's channels to release
 
         Returns:
             Dict with released channels info
+
+        Raises:
+            ValueError: If any requested channel is not booked by the user
+                (nothing is released in that case)
         """
         booked = self.redis_client.hgetall(self.booked_channels_key)
-        channels_to_release = [
+        user_channels = {
             int(ch) for ch, booker in booked.items() if booker == user_name
-        ]
+        }
+
+        channels_to_release = list(dict.fromkeys(int(ch) for ch in channel_numbers))
+        not_owned = [ch for ch in channels_to_release if ch not in user_channels]
+        if not_owned:
+            raise ValueError(
+                f"Cannot release channels {not_owned} - not booked by {user_name}"
+            )
 
         if not channels_to_release:
             logger.info(f"[{user_name}] No channels to release")

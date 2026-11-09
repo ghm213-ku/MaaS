@@ -24,6 +24,7 @@ from app.models import (
     CoincidencesMeasurementRequest,
     CoincidencesLiveMeasurementRequest,
     ChannelBookRequest,
+    ChannelReleaseRequest,
     MeasurementType,
     CountRateMetadata,
     SaveRawTagsMetadata,
@@ -215,12 +216,13 @@ async def test_channels_endpoints():
 
     mock_sm = MagicMock()
     mock_sm.release_channels.return_value = {"released_channels": [1], "user_name": "test_user", "total_released": 1}
-    res = release_channels("test_user", mock_sm, MagicMock(), MagicMock())
+    release_req = ChannelReleaseRequest(channel_numbers=[1])
+    res = release_channels("test_user", release_req, mock_sm, MagicMock(), MagicMock())
     assert res.released_channels == [1]
     
     mock_sm.release_channels.side_effect = Exception("Err")
     with pytest.raises(HTTPException):
-        release_channels("me", status_manager=mock_sm, file_logger=MagicMock(), processor=MagicMock())
+        release_channels("me", release_req, status_manager=mock_sm, file_logger=MagicMock(), processor=MagicMock())
 
     mock_sm = MagicMock()
     mock_sm.get_booked_channels_by.return_value = [1]
