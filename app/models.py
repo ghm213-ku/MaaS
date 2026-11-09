@@ -867,6 +867,31 @@ class ChannelBookResponse(BaseModel):
     total_booked: int
 
 
+class ChannelReleaseRequest(BaseModel):
+    """Body for a channel release: which of the user's channels to free."""
+
+    channel_numbers: list[int] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Channel numbers to release (e.g., [1, 2]). All must be booked by the "
+            "user; otherwise nothing is released."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_channels_alias(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "channels" in data and "channel_numbers" not in data:
+                data = data.copy()
+                data["channel_numbers"] = data.pop("channels")
+        return data
+
+    class Config:
+        json_schema_extra = {"example": {"channel_numbers": [1, 2]}}
+
+
 class ChannelReleaseResponse(BaseModel):
     """Response after releasing channels."""
 
