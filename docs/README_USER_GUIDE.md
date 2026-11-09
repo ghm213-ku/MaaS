@@ -636,7 +636,7 @@ All channel operations are at `/api/v1/channels/` (separate from measurements):
 | `/api/v1/channels/` | GET | List all channels with status |
 | `/api/v1/channels/available` | GET | List available channels and statistics |
 | `/api/v1/channels/book` | POST | Manually book channels |
-| `/api/v1/channels/release/{id}` | POST | Manually release channels |
+| `/api/v1/channels/release/{id}` | POST | Release the listed channels (`{"channel_numbers": [...]}`) |
 
 ### Automatic Channel Booking (Save-Raw-Tags)
 
@@ -751,7 +751,7 @@ curl -X POST http://localhost:8000/api/v1/channels/book \
 
 **Release Channels**:
 ```bash
-curl -X POST http://localhost:8000/api/v1/channels/release/my-user-id
+curl -X POST http://localhost:8000/api/v1/channels/release/my-user-id   -H "Content-Type: application/json"   -d '{"channel_numbers": [5, 6]}'
 ```
 
 ### Channel Booking Errors

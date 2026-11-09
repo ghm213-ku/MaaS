@@ -169,11 +169,40 @@ def test_status_manager_release_channels_success():
     
     manager = StatusManager()
     manager.redis_client = redis_mock
-    res = manager.release_channels("user1")
-    
+    res = manager.release_channels("user1", [1, 2])
+
     assert res["released_channels"] == [1, 2]
     assert res["total_released"] == 2
     assert pipeline_mock.execute.called
+
+def test_status_manager_release_selected_channels():
+    """Only the listed channels are released; duplicates are collapsed."""
+    redis_mock = MagicMock()
+    redis_mock.hgetall.return_value = {"1": "user1", "2": "user1", "3": "user2"}
+    pipeline_mock = MagicMock()
+    redis_mock.pipeline.return_value = pipeline_mock
+
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    res = manager.release_channels("user1", [2, 2])
+
+    assert res["released_channels"] == [2]
+    assert res["total_released"] == 1
+    pipeline_mock.hdel.assert_any_call(manager.booked_channels_key, "2")
+    assert all(c.args[1] != "1" for c in pipeline_mock.hdel.call_args_list)
+
+def test_status_manager_release_channel_not_owned():
+    """Asking for a channel the user did not book raises and releases nothing."""
+    redis_mock = MagicMock()
+    redis_mock.hgetall.return_value = {"1": "user1", "3": "user2"}
+    pipeline_mock = MagicMock()
+    redis_mock.pipeline.return_value = pipeline_mock
+
+    manager = StatusManager()
+    manager.redis_client = redis_mock
+    with pytest.raises(ValueError, match=r"\[3, 5\]"):
+        manager.release_channels("user1", [1, 3, 5])
+    assert not pipeline_mock.execute.called
 
 def test_status_manager_get_booked_channels_by():
     """Test get_booked_channels_by."""

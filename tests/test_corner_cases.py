@@ -75,7 +75,7 @@ def test_handle_measurement_request_user_mismatch():
     assert "not booked by user" in exc.value.detail
 
 from app.api.routes import book_channels, release_channels, stop_measurement
-from app.models import ChannelBookRequest
+from app.models import ChannelBookRequest, ChannelReleaseRequest
 
 def test_book_channels_file_logger_exception():
     mock_sm = MagicMock()
@@ -96,7 +96,7 @@ def test_release_channels_file_logger_exception():
     mock_processor = MagicMock()
     
     # This should not raise an exception
-    res = release_channels("user", mock_processor, mock_sm, mock_fl)
+    res = release_channels("user", ChannelReleaseRequest(channel_numbers=[1]), mock_processor, mock_sm, mock_fl)
     assert res.released_channels == [1]
 
 def test_stop_measurement_exception():

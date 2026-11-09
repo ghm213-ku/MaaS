@@ -8,7 +8,7 @@ This module provides two main routers:
 from fastapi import APIRouter, HTTPException, Depends, Body, WebSocket, WebSocketDisconnect, Request, Response
 import redis.asyncio as aioredis
 import asyncio
-from typing import Optional, Callable
+from typing import Annotated, Optional, Callable
 from datetime import datetime
 import uuid
 from fastapi.routing import APIRoute
@@ -24,6 +24,7 @@ from app.models import (
     ErrorResponse,
     ChannelBookRequest,
     ChannelBookResponse,
+    ChannelReleaseRequest,
     ChannelReleaseResponse,
     ChannelListResponse,
     ChannelStatsResponse,
@@ -689,20 +690,26 @@ def book_channels(
 )
 def release_channels(
     user_name: str,
+    request: Annotated[ChannelReleaseRequest, Body()],
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
     processor: JobProcessor = Depends(get_job_processor),
 ) -> ChannelReleaseResponse:
     """
-    Release (free up) all channels booked by a measurement or user.
+    Release (free up) the listed channels booked by a user.
 
     Endpoint: POST /api/v1/channels/release/{user_name}
 
     Args:
         user_name: The identifier (user) whose channels to release
+        request: JSON body {"channel_numbers": [...]} naming which of the
+            user's channels to release (non-empty)
 
     Returns:
         Release confirmation with released channels count
+
+    Raises:
+        409: If any requested channel is not booked by the user (nothing is released)
 
     Note:
         Channels stay booked after a measurement completes, stops, or fails; they
@@ -710,7 +717,7 @@ def release_channels(
         set-parameters job that resets the released channels to their defaults
         (input_delay=0, trigger_voltage=0.5).
     """
-    logger.info(f"[{user_name}] Channel release request")
+    logger.info(f"[{user_name}] Channel release request: {request.channel_numbers}")
 
     try:
         # Support both positional argument orders: (user, status_manager, file_logger, processor) or (user, processor, status_manager, file_logger)
@@ -724,7 +731,7 @@ def release_channels(
         ):
             processor, status_manager, file_logger = status_manager, file_logger, processor
 
-        release_result = status_manager.release_channels(user_name)
+        release_result = status_manager.release_channels(user_name, request.channel_numbers)
         if not isinstance(release_result, dict):
             release_result = {
                 "user_name": user_name,
@@ -792,6 +799,9 @@ def release_channels(
             total_released=total_released,
         )
 
+    except ValueError as e:
+        logger.warning(f"[{user_name}] Channel release validation failed: {e}")
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         logger.error(f"[{user_name}] Channel release failed: {e}", exc_info=True)
         raise HTTPException(
