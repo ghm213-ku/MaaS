@@ -52,7 +52,7 @@ class MeasurementPayloadSchemas:
             "channels": [1, 2, 3],
             "binwidth": 1000000000,
             "n_values": 1,
-            "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
         },
     }
 
@@ -98,11 +98,11 @@ class MeasurementPayloadSchemas:
             },
             "binwidth": {
                 "type": "integer",
-                "description": "Bin width in picoseconds for histogram. Default: 1e9 (1 second)",
+                "description": "Bin width in picoseconds for histogram. Default: 1000 (1 ns)",
             },
             "n_values": {
                 "type": "integer",
-                "description": "Number of bins in the histogram. Default: 100",
+                "description": "Number of bins in the histogram (TimeTagger's n_bins; 'n_bins' is accepted too). Default: 1000",
             },
             "target_location": {
                 "type": "string",
@@ -115,7 +115,7 @@ class MeasurementPayloadSchemas:
             "channel2": 2,
             "binwidth": 1000000000,
             "n_values": 100,
-            "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
         },
     }
 
@@ -168,7 +168,7 @@ class MeasurementPayloadSchemas:
             "timestamp": "Last",
             "binwidth": 1000000000,
             "n_values": 1,
-            "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
         },
     }
 
@@ -225,7 +225,7 @@ class MeasurementPayloadSchemas:
             "timestamp": "Last",
             "binwidth": 1000000000,
             "n_values": 1,
-            "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+            "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
             "refresh_rate": 25,
         },
     }

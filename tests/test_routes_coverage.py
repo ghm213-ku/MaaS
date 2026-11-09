@@ -52,7 +52,7 @@ async def test_start_count_rate_live_measurement():
     mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
     with pytest.raises(HTTPException) as exc:
         start_count_rate_live_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 400
     
     # Exception
     mock_status_manager.validate_channels.side_effect = Exception("Unknown")
@@ -81,7 +81,7 @@ async def test_start_save_raw_tags_measurement():
     mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
     with pytest.raises(HTTPException) as exc:
         start_save_raw_tags_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 400
     
     # Exception
     mock_status_manager.validate_channels.side_effect = Exception("Unknown")
@@ -108,7 +108,7 @@ async def test_start_correlation_measurement():
     mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
     with pytest.raises(HTTPException) as exc:
         start_correlation_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 400
     
     mock_status_manager.validate_channels.side_effect = Exception("Unknown")
     with pytest.raises(HTTPException) as exc:
@@ -134,7 +134,7 @@ async def test_start_coincidences_measurement():
     mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
     with pytest.raises(HTTPException) as exc:
         start_coincidences_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 400
     
     mock_status_manager.validate_channels.side_effect = Exception("Unknown")
     with pytest.raises(HTTPException) as exc:
@@ -159,7 +159,7 @@ async def test_start_coincidences_live_measurement():
     mock_status_manager.validate_channels.side_effect = ValueError("Booking failed")
     with pytest.raises(HTTPException) as exc:
         start_coincidences_live_measurement(request, mock_job_processor, mock_status_manager, mock_file_logger)
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 400
     
     mock_status_manager.validate_channels.side_effect = Exception("Unknown")
     with pytest.raises(HTTPException) as exc:
