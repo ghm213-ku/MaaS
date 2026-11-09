@@ -210,6 +210,8 @@ if __name__ == "__main__":
             host="0.0.0.0",
             port=8000,
             log_level="info",
+            # Don't hang forever on Ctrl+C if a client keeps a connection open
+            timeout_graceful_shutdown=5,
         )
     except KeyboardInterrupt:
         # Graceful shutdown - uvicorn already handles cleanup via lifespan
