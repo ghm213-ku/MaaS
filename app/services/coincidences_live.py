@@ -8,6 +8,7 @@ import numpy as np
 from app.models import CoincidencesMetadata
 from app.services.coincidences import create_coincidence_counter
 from app.services.measurement import MeasurementHandler
+from app.services.counter_utils import wait_until_finished
 from app.utils.logger import configure_logging
 
 logger = configure_logging(__name__)
@@ -32,8 +33,13 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
         self._stopped = False
         logger.debug("CoincidencesLiveMeasurementHandler initialized")
 
-    def _publish(self, coincidences: list[list[int]]) -> None:
-        """Read the counter and publish one update to Redis."""
+    def _publish(self, coincidences: list[list[int]], final: bool = False) -> None:
+        """Read the counter and publish one update to Redis.
+
+        ``final`` marks the last update of a timed (startFor) acquisition.
+        Each group is also published on its own ``:stream_{i}`` channel, also
+        when there is only one group.
+        """
         if not (getattr(self, "redis_client", None) and hasattr(self, "status_id")):
             return
 
@@ -58,17 +64,17 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
                 "data": row,
             })
 
-        if len(streams) > 1:
-            for stream in streams:
-                self.redis_client.publish(
-                    f"measurement:data:{self.status_id}:stream_{stream['stream_index']}",
-                    json.dumps({
-                        "type": "coincidences_live_stream",
-                        "status_id": self.status_id,
-                        **stream,
-                        "timestamp": now_iso,
-                    }),
-                )
+        for stream in streams:
+            self.redis_client.publish(
+                f"measurement:data:{self.status_id}:stream_{stream['stream_index']}",
+                json.dumps({
+                    "type": "coincidences_live_stream",
+                    "status_id": self.status_id,
+                    **stream,
+                    "final": final,
+                    "timestamp": now_iso,
+                }),
+            )
 
         self.redis_client.publish(
             f"measurement:data:{self.status_id}",
@@ -79,6 +85,7 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
                 "virtual_channels": self._virtual_channels,
                 "streams": streams,
                 "data": rows,
+                "final": final,
                 "timestamp": now_iso,
             }),
         )
@@ -141,6 +148,14 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
             if self._stopped:
                 logger.info("Live coincidences measurement was stopped")
                 self._stop_counter()
+            elif duration_seconds is not None:
+                # Timed acquisition: let startFor finish, then publish the
+                # complete buffer once so clients get every bin.
+                await wait_until_finished(self._counter)
+                try:
+                    self._publish(coincidences, final=True)
+                except Exception as e:
+                    logger.warning(f"Failed to publish final coincidences data: {e}")
         except asyncio.CancelledError:
             logger.info("Live coincidences measurement cancelled")
             self._stopped = True
