@@ -3,7 +3,7 @@
 import asyncio
 from typing import Optional, Dict, Any
 from datetime import datetime
-import TimeTagger
+from Swabian import TimeTagger
 from app.models import CorrelationMetadata
 from app.services.measurement import MeasurementHandler
 from app.utils.logger import configure_logging
@@ -34,8 +34,8 @@ class CorrelationMeasurementHandler(MeasurementHandler):
             metadata: Measurement metadata containing:
                 - channel1: First channel number (required)
                 - channel2: Second channel number (required)
-                - binwidth: Bin width in picoseconds (default: 1e9)
-                - n_values: Number of bins (default: 100)
+                - binwidth: Bin width in picoseconds (default: 1e3)
+                - n_values: Number of bins (default: 1000)
                 - target_location: Target file path (default: desktop/MaasData/{datetime}/{measurement-type})
         """
         logger.info("Starting correlation measurement")
