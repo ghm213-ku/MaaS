@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from app.models import CountRateMetadata
 from app.services.measurement import MeasurementHandler
-from app.services.counter_utils import counter_summary
+from app.services.counter_utils import counter_summary, wait_until_finished
 from app.utils.logger import configure_logging
 from Swabian import TimeTagger
 
@@ -26,6 +26,27 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
         self._binwidth: int = 0
         self._summary: Dict[str, Any] = {}
         logger.debug("CountRateLiveMeasurementHandler initialized")
+
+    def _publish(self, final: bool = False) -> None:
+        """Read the counter and publish one update to Redis.
+
+        ``final`` marks the last update of a timed (startFor) acquisition: the
+        counter has finished and the data covers exactly n_values bins.
+        """
+        if not (getattr(self, "redis_client", None) and hasattr(self, "status_id")):
+            return
+        import json
+        data = self._counter.getData()
+        self.redis_client.publish(
+            f"measurement:data:{self.status_id}",
+            json.dumps({
+                "type": "count_rate",
+                "status_id": self.status_id,
+                "data": np.array(data).tolist(),
+                "final": final,
+                "timestamp": datetime.utcnow().isoformat(),
+            }),
+        )
 
     async def start(
         self, duration_seconds: Optional[float], metadata: CountRateMetadata
@@ -69,7 +90,6 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
             counter.startFor(int(duration_seconds * 1e12))
 
         try:
-            import json
             self._stop_event = asyncio.Event()
             
             end_time = asyncio.get_event_loop().time() + duration_seconds if duration_seconds is not None else float('inf')
@@ -86,16 +106,7 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
                 # Fetch data and push to redis
                 if self._counter:
                     try:
-                        data = self._counter.getData()
-                        if hasattr(self, 'redis_client') and self.redis_client and hasattr(self, 'status_id'):
-                            pub_channel = f"measurement:data:{self.status_id}"
-                            payload = json.dumps({
-                                "type": "count_rate",
-                                "status_id": self.status_id,
-                                "data": np.array(data).tolist(),
-                                "timestamp": datetime.utcnow().isoformat()
-                            })
-                            self.redis_client.publish(pub_channel, payload)
+                        self._publish()
                     except Exception as e:
                         logger.warning(f"Failed to fetch or publish count-rate data: {e}")
 
@@ -108,6 +119,15 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
                     except Exception as e:
                         logger.error(f"Failed to stop count-rate measurement: {e}")
                 return
+
+            if self._counter and duration_seconds is not None:
+                # Timed acquisition: let startFor finish, then publish the
+                # complete buffer once so clients get every bin.
+                await wait_until_finished(self._counter)
+                try:
+                    self._publish(final=True)
+                except Exception as e:
+                    logger.warning(f"Failed to publish final count-rate data: {e}")
 
             if self._counter:
                 self._summary = counter_summary(self._counter, self._binwidth)
@@ -170,3 +190,4 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
         )
 
         return results
+

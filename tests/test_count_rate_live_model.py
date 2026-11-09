@@ -41,12 +41,14 @@ class TestCountRateLiveMeasurementRequestModel:
 
         assert request.measurement_type == MeasurementType.COUNT_RATE_LIVE
 
-    def test_model_ignores_duration_seconds(self):
-        """Should ignore duration_seconds if provided."""
+    def test_model_keeps_duration_seconds(self):
+        """duration_seconds is optional and kept, so a timed acquisition can use startFor."""
         metadata = CountRateMetadata(user_name="test_user", channels=[1, 2])
-        
-        request = CountRateLiveMeasurementRequest(duration_seconds=60, metadata=metadata)
-        assert not hasattr(request, "duration_seconds")
+
+        assert CountRateLiveMeasurementRequest(duration_seconds=0.5, metadata=metadata).duration_seconds == 0.5
+        assert CountRateLiveMeasurementRequest(metadata=metadata).duration_seconds is None
+        with pytest.raises(ValidationError):
+            CountRateLiveMeasurementRequest(duration_seconds=0, metadata=metadata)
 
     def test_model_requires_metadata(self):
         """Should require metadata field."""

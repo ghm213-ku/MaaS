@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from app.models import SetParametersMetadata
 from app.services.measurement import MeasurementHandler
+from app.services.channel_parameters import record_channel_parameters
 from app.utils.logger import configure_logging
 from Swabian import TimeTagger
 
@@ -52,7 +53,12 @@ class SetParametersHandler(MeasurementHandler):
         if trigger_voltage is not None:
             for channel in channels:
                 self.tagger.setTriggerLevel(int(channel), float(trigger_voltage))
-            
+
+        # Record what the hardware now reports so clients can read it back
+        redis_client = getattr(self, "redis_client", None)
+        if redis_client is not None:
+            record_channel_parameters(redis_client, self.tagger, channels)
+
         logger.info("Set parameters finished")
 
     async def stop(self) -> Dict[str, Any]:
