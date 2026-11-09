@@ -148,25 +148,31 @@ Book (reserve) channels for a measurement or user.
 ```
 
 #### 4. **POST /api/v1/channels/release/{booked_by}**
-Release all channels booked by a measurement or user identifier.
+Release the listed channels booked by a measurement or user identifier.
 
 **Endpoint**: `POST /api/v1/channels/release/{booked_by}`
+
+**Request body (required):**
+```json
+{
+  "channel_numbers": [1, 2]
+}
+```
+Only the listed channels are released (`channels` is accepted as an alias for `channel_numbers`). Every listed channel must be booked by the identifier, otherwise the request fails with **409** and nothing is released. A missing body or an empty list is rejected with **422**.
 
 **Response (200):**
 ```json
 {
-  "booked_by": "measurement-abc-123",
-  "released_channels": [1, 2, 3],
-  "total_released": 3
+  "user_name": "measurement-abc-123",
+  "released_channels": [1, 2],
+  "total_released": 2
 }
 ```
 
-**Note**: If the identifier has no booked channels, returns with empty release:
+**Response (409)** — a listed channel is not booked by the identifier (nothing is released):
 ```json
 {
-  "booked_by": "unknown-id",
-  "released_channels": [],
-  "total_released": 0
+  "detail": "Cannot release channels [3] - not booked by measurement-abc-123"
 }
 ```
 
@@ -268,7 +274,7 @@ All channel state is stored in Redis with the following characteristics:
 Since channels are released immediately after job completion, there's minimal risk of orphaned bookings. However, if the application crashes during measurement:
 
 1. Channels remain booked under the measurement_id
-2. Channels can be manually released via: `POST /api/v1/channels/release/{measurement_id}`
+2. Channels can be manually released via: `POST /api/v1/channels/release/{measurement_id}` with body `{"channel_numbers": [...]}`
 3. Consider implementing a cleanup job for stale bookings (measurements in FAILED/STOPPED state for >1 hour)
 
 ---
@@ -307,7 +313,7 @@ Since channels are released immediately after job completion, there's minimal ri
 
 **If Channels Won't Release:**
 1. Verify measurement is completed: `GET /api/v1/measurements/{measurement_id}/status`
-2. Manually release if stuck: `POST /api/v1/channels/release/{measurement_id}`
+2. Manually release if stuck: `POST /api/v1/channels/release/{measurement_id}` with body `{"channel_numbers": [...]}`
 3. Check Redis connectivity: `GET /api/v1/channels/available` (returns health status)
 
 ---
