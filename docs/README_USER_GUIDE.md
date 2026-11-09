@@ -635,8 +635,8 @@ All channel operations are at `/api/v1/channels/` (separate from measurements):
 |----------|--------|---------|
 | `/api/v1/channels/` | GET | List all channels with status |
 | `/api/v1/channels/available` | GET | List available channels and statistics |
-| `/api/v1/channels/book` | POST | Manually book channels |
-| `/api/v1/channels/release/{id}` | POST | Release the listed channels (`{"channel_numbers": [...]}`) |
+| `/api/v1/channels/book` | POST | Manually book channels under your own username |
+| `/api/v1/channels/release/{user_name}` | POST | Release the listed channels (`{"channel_numbers": [...]}`); your own, or any user's if you are an admin |
 
 ### Automatic Channel Booking (Save-Raw-Tags)
 
@@ -737,21 +737,31 @@ curl http://localhost:8000/api/v1/channels/
 
 ### Manual Channel Management
 
-For advanced scenarios, you can manually book/release channels:
+For advanced scenarios, you can manually book/release channels.
 
-**Book Channels**:
+**Permissions** (the caller is identified from the bearer token):
+
+| Action | Normal user | Admin |
+|--------|-------------|-------|
+| Book | Only under your own username | Only under your own username (no bypass) |
+| Release | Only your own channels | Any user's channels (name the owner in the path) |
+
+Breaking these rules returns **HTTP 403** and changes nothing.
+
+**Book Channels** (`user_name` must be your own username):
 ```bash
 curl -X POST http://localhost:8000/api/v1/channels/book \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "booked_by": "my-user-id",
+    "user_name": "my-username",
     "channel_numbers": [5, 6, 7]
   }'
 ```
 
-**Release Channels**:
+**Release Channels** (your own; admins may put any user's username in the path):
 ```bash
-curl -X POST http://localhost:8000/api/v1/channels/release/my-user-id   -H "Content-Type: application/json"   -d '{"channel_numbers": [5, 6]}'
+curl -X POST http://localhost:8000/api/v1/channels/release/my-username   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"channel_numbers": [5, 6]}'
 ```
 
 ### Channel Booking Errors
@@ -786,11 +796,25 @@ If channels are already booked:
 }
 ```
 
+If you book under someone else's username, or (as a non-admin) release someone else's channels:
+
+**Response** (HTTP 403):
+```json
+{
+  "detail": "You can only book channels under your own username"
+}
+```
+```json
+{
+  "detail": "You can only release your own channels"
+}
+```
+
 ### Channel Management Best Practices
 
 ✅ **DO**:
 - Check available channels before booking
-- Use descriptive identifiers for booked_by (e.g., measurement ID)
+- Book under your own username (bookings under any other name are rejected)
 - Release channels when done with measurements
 - Monitor channel utilization
 

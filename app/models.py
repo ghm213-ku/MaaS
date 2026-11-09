@@ -833,7 +833,7 @@ class ChannelBookRequest(BaseModel):
     """Request to book channels."""
 
     user_name: str = Field(
-        description="Who is booking the channels (user identifier)"
+        description="Who is booking the channels; must be the authenticated caller's username"
     )
     channel_numbers: list[int] = Field(
         description="List of channel numbers to book (e.g., [1, 2, 3] or [101, 102])"
