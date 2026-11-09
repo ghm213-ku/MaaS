@@ -2,8 +2,13 @@
 
 from enum import Enum
 from typing import Any, Optional, Union
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
+
+
+# Default results folder: the worker user's Desktop ("~" is expanded when the
+# job runs), not a "desktop" folder under the worker's working directory.
+DEFAULT_TARGET_LOCATION = "~/Desktop/MaasData/{datetime}/{measurement-type}"
 
 
 class MeasurementType(str, Enum):
@@ -40,7 +45,7 @@ class CountRateMetadata(BaseModel):
         description="Number of bins in the histogram. Default: 1",
     )
     target_location: str = Field(
-        default="desktop/MaasData/{datetime}/{measurement-type}",
+        default=DEFAULT_TARGET_LOCATION,
         description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
     )
     refresh_rate: int = Field(
@@ -54,7 +59,7 @@ class CountRateMetadata(BaseModel):
                 "channels": [1, 2, 3],
                 "binwidth": 1000000000,
                 "n_values": 1,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
             }
         }
 
@@ -71,12 +76,21 @@ class CorrelationMetadata(BaseModel):
     )
     n_values: int = Field(
         default=1000,
-        description="Number of bins in the histogram. Default: 1000",
+        description="Number of bins in the histogram (TimeTagger's n_bins; 'n_bins' is accepted too). Default: 1000",
     )
     target_location: str = Field(
-        default="desktop/MaasData/{datetime}/{measurement-type}",
+        default=DEFAULT_TARGET_LOCATION,
         description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_n_bins(cls, data: Any) -> Any:
+        """Accept TimeTagger's name 'n_bins' (also used by /correlation-live)."""
+        if isinstance(data, dict) and "n_bins" in data and "n_values" not in data:
+            data = data.copy()
+            data["n_values"] = data.pop("n_bins")
+        return data
 
     class Config:
         json_schema_extra = {
@@ -86,7 +100,7 @@ class CorrelationMetadata(BaseModel):
                 "user_name": "abc-123-def",
                 "binwidth": 1000000000,
                 "n_values": 100,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
             }
         }
 
@@ -94,20 +108,44 @@ class CorrelationMetadata(BaseModel):
 class TimeHistogramLiveMetadata(BaseModel):
     """Base metadata model for live time histogram measurements (StartStop, Histogram)."""
 
-    click_channel: int = Field(description="Click channel number. Required.")
+    click_channel: int = Field(description="Click (stop) channel number. Required.")
     start_channel: int = Field(description="Start channel number. Required.")
     user_name: str = Field(description="The user who booked the channels. Required.")
     binwidth: int = Field(
         default=int(1e3),
         description="Bin width in picoseconds for histogram. Default: 1e3 (1 ns)",
     )
-    n_bins: int = Field(
-        default=1000,
-        description="Number of bins in the histogram. Default: 1000",
-    )
     refresh_rate: int = Field(
         default=25,
         description="Refresh rate in Hz for live measurements",
+    )
+
+
+class StartStopLiveMetadata(TimeHistogramLiveMetadata):
+    """Metadata model for live StartStop measurements.
+
+    TimeTagger's StartStop has no bin count: its range grows to the largest
+    time difference seen, and it returns only non-empty bins.
+    """
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "click_channel": 1,
+                "start_channel": 2,
+                "user_name": "abc-123-def",
+                "binwidth": 1000000,
+                "refresh_rate": 25,
+            }
+        }
+
+
+class HistogramLiveMetadata(TimeHistogramLiveMetadata):
+    """Metadata model for live Histogram measurements."""
+
+    n_bins: int = Field(
+        default=1000,
+        description="Number of bins in the histogram. Default: 1000",
     )
 
     class Config:
@@ -121,14 +159,6 @@ class TimeHistogramLiveMetadata(BaseModel):
                 "refresh_rate": 25,
             }
         }
-
-class StartStopLiveMetadata(TimeHistogramLiveMetadata):
-    """Metadata model for live StartStop measurements."""
-    pass
-
-class HistogramLiveMetadata(TimeHistogramLiveMetadata):
-    """Metadata model for live Histogram measurements."""
-    pass
 
 class CorrelationLiveMetadata(BaseModel):
     """Metadata model for live correlation measurements."""
@@ -161,6 +191,9 @@ class CorrelationLiveMetadata(BaseModel):
             }
         }
 
+
+
+COINCIDENCE_TIMESTAMPS = ("Last", "First", "ListedFirst", "Average")
 
 
 class CoincidencesMetadata(BaseModel):
@@ -198,13 +231,30 @@ class CoincidencesMetadata(BaseModel):
         description="Number of bins in the histogram. Default: 1",
     )
     target_location: str = Field(
-        default="desktop/MaasData/{datetime}/{measurement-type}",
+        default=DEFAULT_TARGET_LOCATION,
         description="Target file path for saving results. Supports {datetime} and {measurement-type} placeholders",
     )
     refresh_rate: int = Field(
         default=25,
         description="Refresh rate in Hz for live measurements",
     )
+
+    @field_validator("timestamp", mode="before")
+    @classmethod
+    def validate_timestamp(cls, value: Any) -> str:
+        """Accept only TimeTagger's CoincidenceTimestamp names (case-insensitive).
+
+        TimeTagger rejects an unknown timestamp type, so MaaS does too instead
+        of silently falling back to 'Last'.
+        """
+        canonical = {name.lower(): name for name in COINCIDENCE_TIMESTAMPS}
+        key = str(value).lower() if isinstance(value, str) else None
+        if key not in canonical:
+            raise ValueError(
+                f"Invalid coincidence timestamp {value!r}. "
+                f"Must be one of {list(COINCIDENCE_TIMESTAMPS)}."
+            )
+        return canonical[key]
 
     @model_validator(mode="before")
     @classmethod
@@ -290,7 +340,7 @@ class CoincidencesMetadata(BaseModel):
                 "timestamp": "Last",
                 "binwidth": 1000000000,
                 "n_values": 1,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
                 "refresh_rate": 25,
             }
         }
@@ -402,7 +452,7 @@ class CountRateMeasurementRequest(BaseModel):
                     "user_name": "abc-123-def",
                     "binwidth": 1000000000,
                     "n_values": 1,
-                    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                    "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
                 },
             }
         }
@@ -518,7 +568,7 @@ class CorrelationMeasurementRequest(BaseModel):
                     "user_name": "abc-123-def",
                     "binwidth": 1000000000,
                     "n_values": 100,
-                    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                    "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
                 },
             }
         }
@@ -595,7 +645,7 @@ class CoincidencesMeasurementRequest(BaseModel):
                     "coincidence_window": 1000,
                     "binwidth": 1000000000,
                     "n_values": 1,
-                    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                    "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
                 },
             }
         }
@@ -668,7 +718,7 @@ class CoincidencesLiveMeasurementRequest(BaseModel):
                     "coincidence_window": 1000,
                     "binwidth": 1000000000,
                     "n_values": 1,
-                    "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                    "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
                 },
             }
         }

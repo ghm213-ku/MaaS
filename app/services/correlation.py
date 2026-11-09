@@ -36,7 +36,7 @@ class CorrelationMeasurementHandler(MeasurementHandler):
                 - channel2: Second channel number (required)
                 - binwidth: Bin width in picoseconds (default: 1e3)
                 - n_values: Number of bins (default: 1000)
-                - target_location: Target file path (default: desktop/MaasData/{datetime}/{measurement-type})
+                - target_location: Target file path (default: ~/Desktop/MaasData/{datetime}/{measurement-type})
         """
         logger.info("Starting correlation measurement")
         self._start_time = datetime.utcnow()
@@ -86,15 +86,31 @@ class CorrelationMeasurementHandler(MeasurementHandler):
                 return
 
             if self._counter:
-                counter_data = self._counter.getData()
-                data = np.array(counter_data)
+                counts = np.asarray(self._counter.getData()).ravel()
+                # Correlation.getIndex() is the bin time in ps, centred on
+                # zero delay (e.g. [-20, -10, 0, 10]); without it the counts
+                # can't be placed on the time axis.
+                index = np.asarray(self._counter.getIndex()).ravel()
+                data = np.column_stack([index, counts])
                 logger.info(
                     f"Correlation measurement finished for duration: {duration_seconds} seconds"
                 )
                 if self._target_location:
                     os.makedirs(os.path.dirname(os.path.abspath(self._target_location)), exist_ok=True)
-                    np.savetxt(self._target_location, data, delimiter=",")
+                    np.savetxt(
+                        self._target_location,
+                        data,
+                        delimiter=",",
+                        header="time_ps,counts",
+                        fmt="%d",
+                    )
                     logger.info(f"Correlation data saved to {self._target_location}")
+                return {
+                    "status": "completed",
+                    "duration": (datetime.utcnow() - self._start_time).total_seconds(),
+                    "total_counts": int(counts.sum()),
+                    "n_bins": int(counts.size),
+                }
         except asyncio.CancelledError:
             logger.info("Correlation measurement cancelled")
             raise

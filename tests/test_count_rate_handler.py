@@ -8,6 +8,21 @@ from app.services.count_rate import CountRateMeasurementHandler
 from app.models import CountRateMetadata
 
 
+@pytest.fixture(autouse=True)
+def fake_counter():
+    """Patch TimeTagger.Counter with a counter that has seen events."""
+    from unittest.mock import MagicMock, patch
+
+    counter = MagicMock()
+    counter.getData.return_value = [[100], [200]]
+    counter.getDataTotalCounts.return_value = [1000, 2000]
+    counter.getCaptureDuration.return_value = int(10e12)  # 10 s
+    tt = MagicMock()
+    tt.Counter.return_value = counter
+    with patch("app.services.count_rate.TimeTagger", tt):
+        yield counter
+
+
 async def safe_await(task):
     try:
         await task
@@ -97,13 +112,13 @@ class TestCountRateMeasurementHandler:
         results = await handler.stop()
         await safe_await(task)
 
-        duration = results["duration_seconds"]
-        total_count = results["total_count"]
-        count_rate = results["count_rate_cps"]
-
-        # Verify calculation (with small tolerance for timing)
-        expected_rate = total_count / duration if duration > 0 else 0
-        assert abs(count_rate - expected_rate) < 0.01
+        # Totals come from getDataTotalCounts; the rate divides them by the
+        # time the TimeTagger actually integrated (10 completed 1 s bins).
+        assert results["total_count"] == 3000
+        assert results["counts_per_channel"] == [1000, 2000]
+        assert results["integration_time_seconds"] == pytest.approx(10.0)
+        assert results["count_rate_cps"] == pytest.approx(300.0)
+        assert results["count_rate_cps_per_channel"] == pytest.approx([100.0, 200.0])
 
     @pytest.mark.asyncio
     async def test_stop_without_start(self, handler):
@@ -258,14 +273,15 @@ class TestCountRateMeasurementHandlerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_count_rate_handles_getData_failure(self):
-        """Should handle getData() throwing an exception during stop gracefully."""
+        """Should handle the counter failing to read during stop gracefully."""
         from unittest.mock import MagicMock, patch
         mock_tagger = MagicMock()
         mock_tagger.setTestSignal = MagicMock()
-        
-        # We need to simulate Counter initialization and then getData throwing exception
+
+        # We need to simulate Counter initialization and then reads throwing exception
         mock_counter = MagicMock()
         mock_counter.getData.side_effect = Exception("Hardware timeout")
+        mock_counter.getDataTotalCounts.side_effect = Exception("Hardware timeout")
         
         with patch("app.services.count_rate.TimeTagger.Counter", return_value=mock_counter):
             handler = CountRateMeasurementHandler(tagger=mock_tagger)

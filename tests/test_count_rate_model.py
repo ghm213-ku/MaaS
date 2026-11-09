@@ -112,7 +112,7 @@ class TestCountRateMetadata:
         )
         assert metadata.binwidth == int(1e9)
         assert metadata.n_values == 1
-        assert metadata.target_location == "desktop/MaasData/{datetime}/{measurement-type}"
+        assert metadata.target_location == "~/Desktop/MaasData/{datetime}/{measurement-type}"
         assert metadata.refresh_rate == 25
 
     def test_invalid_types(self):
