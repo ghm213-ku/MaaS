@@ -41,6 +41,7 @@ from app.services.status_manager import StatusManager, MeasurementStatus
 from app.services.file_logger import FileLogger
 from app.utils.logger import configure_logging
 from app.services.audit_logger import log_audit_event
+from app.db.database import get_user_by_id
 
 logger = configure_logging(__name__)
 
@@ -684,6 +685,28 @@ def book_channels(
         )
 
 
+def _authorize_channel_release(http_request: Request, user_name: str) -> None:
+    """Allow a release only for the caller's own channels, unless they are an admin.
+
+    Raises:
+        HTTPException 403: caller is not an admin and user_name is not their username
+    """
+    role = getattr(http_request.state, "role", None)
+    if role == "admin":
+        return
+
+    caller_id = getattr(http_request.state, "user_id", None)
+    caller = get_user_by_id(caller_id) if caller_id is not None else None
+    if caller is None or caller["username"] != user_name:
+        logger.warning(
+            f"[{user_name}] Channel release denied for user_id={caller_id} (role={role})"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="You can only release your own channels",
+        )
+
+
 @channels_router.post(
     "/release/{user_name}",
     response_model=ChannelReleaseResponse,
@@ -694,6 +717,7 @@ def release_channels(
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
     processor: JobProcessor = Depends(get_job_processor),
+    http_request: Request = None,
 ) -> ChannelReleaseResponse:
     """
     Release (free up) the listed channels booked by a user.
@@ -709,6 +733,8 @@ def release_channels(
         Release confirmation with released channels count
 
     Raises:
+        403: If the caller is not an admin and user_name is not the caller's
+            own username
         409: If any requested channel is not booked by the user (nothing is released)
 
     Note:
@@ -718,6 +744,9 @@ def release_channels(
         (input_delay=0, trigger_voltage=0.5).
     """
     logger.info(f"[{user_name}] Channel release request: {request.channel_numbers}")
+
+    if http_request is not None:
+        _authorize_channel_release(http_request, user_name)
 
     try:
         # Support both positional argument orders: (user, status_manager, file_logger, processor) or (user, processor, status_manager, file_logger)

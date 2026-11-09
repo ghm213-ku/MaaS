@@ -602,6 +602,62 @@ class TestReleaseChannels:
         assert 30 not in client.get("/api/v1/channels/available").json()["available_channel_numbers"]
 
 
+class TestReleaseChannelsAuthorization:
+    """Only the booking user or an admin may release a user's channels."""
+
+    OPERATOR_ROLE_ID = 2
+
+    @pytest.fixture
+    def operator(self, mock_auth_middleware):
+        """Create an operator user and make requests authenticate as them."""
+        import uuid
+        from app.db.database import create_user
+
+        username = f"operator_{uuid.uuid4().hex[:8]}"
+        user_id = create_user(username, "unused-hash", self.OPERATOR_ROLE_ID)
+        mock_auth_middleware.return_value = {"sub": user_id, "role": "operator"}
+        return username
+
+    def _available(self, client):
+        return client.get("/api/v1/channels/available").json()["available_channel_numbers"]
+
+    def test_user_can_release_own_channels(self, client, operator):
+        client.post("/api/v1/channels/book", json={"user_name": operator, "channel_numbers": [1]})
+
+        response = client.post(f"/api/v1/channels/release/{operator}", json={"channel_numbers": [1]})
+
+        assert response.status_code == 200
+        assert response.json()["released_channels"] == [1]
+        assert 1 in self._available(client)
+
+    def test_user_cannot_release_another_users_channels(self, client, operator):
+        client.post("/api/v1/channels/book", json={"user_name": "someone-else", "channel_numbers": [2]})
+
+        response = client.post("/api/v1/channels/release/someone-else", json={"channel_numbers": [2]})
+
+        assert response.status_code == 403
+        assert 2 not in self._available(client)
+
+    def test_unknown_caller_cannot_release(self, client, mock_auth_middleware):
+        mock_auth_middleware.return_value = {"sub": 999999, "role": "operator"}
+        client.post("/api/v1/channels/book", json={"user_name": "owner-x", "channel_numbers": [3]})
+
+        response = client.post("/api/v1/channels/release/owner-x", json={"channel_numbers": [3]})
+
+        assert response.status_code == 403
+        assert 3 not in self._available(client)
+
+    def test_admin_can_release_another_users_channels(self, client, mock_auth_middleware):
+        mock_auth_middleware.return_value = {"sub": 1, "role": "admin"}
+        client.post("/api/v1/channels/book", json={"user_name": "someone-else", "channel_numbers": [4]})
+
+        response = client.post("/api/v1/channels/release/someone-else", json={"channel_numbers": [4]})
+
+        assert response.status_code == 200
+        assert response.json()["released_channels"] == [4]
+        assert 4 in self._available(client)
+
+
 class TestChannelIntegration:
     """Integration tests for channel management workflows."""
 
