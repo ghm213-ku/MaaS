@@ -1047,19 +1047,39 @@ async def stream_measurement_data(websocket: WebSocket, measurement_id: str):
     pubsub = redis_client.pubsub()
     channel_name = f"measurement:data:{measurement_id}"
     
-    try:
-        await pubsub.subscribe(channel_name)
-        logger.info(f"WebSocket client connected and subscribed to {channel_name}")
-        
-        # Listen for messages
+    async def forward_messages():
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
             if message is not None:
                 await websocket.send_text(message['data'])
-                
-            # Allow cancellation checking
             await asyncio.sleep(0.01)
-            
+
+    async def wait_for_disconnect():
+        # The forwarding loop never reads from the socket, so on its own it
+        # would not notice a client disconnect or server shutdown while no
+        # data is being published (e.g. after the measurement has stopped).
+        # Uvicorn then waits forever for this handler on Ctrl+C.
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+
+    try:
+        await pubsub.subscribe(channel_name)
+        logger.info(f"WebSocket client connected and subscribed to {channel_name}")
+
+        forward_task = asyncio.create_task(forward_messages())
+        disconnect_task = asyncio.create_task(wait_for_disconnect())
+        done, pending = await asyncio.wait(
+            {forward_task, disconnect_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            task.result()  # re-raise anything the finished task hit
+        logger.info(f"WebSocket client disconnected from {channel_name}")
+
     except WebSocketDisconnect:
         logger.info(f"WebSocket client disconnected from {channel_name}")
     except Exception as e:
