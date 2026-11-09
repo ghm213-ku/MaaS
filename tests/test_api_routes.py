@@ -606,8 +606,48 @@ class TestApiIntegration:
             None,
         ]
         
-        with client.websocket_connect("/api/v1/measurements/stream/test_id") as websocket:
+        with patch("app.api.routes.decode_access_token", return_value={"sub": 1, "role": "admin"}) as mock_decode,                 client.websocket_connect(
+                    "/api/v1/measurements/stream/test_id",
+                    headers={"Authorization": "Bearer good_token"},
+                ) as websocket:
             data = websocket.receive_text()
             assert data == "test_data_1"
-            
+
             mock_pubsub.subscribe.assert_called_once_with("measurement:data:test_id")
+            mock_decode.assert_called_once_with("good_token")
+
+    @patch('app.api.routes.aioredis.Redis')
+    def test_websocket_accepts_token_query_param(self, mock_redis, client):
+        mock_redis_instance = MagicMock()
+        mock_pubsub = AsyncMock()
+        mock_redis_instance.aclose = AsyncMock()
+        mock_redis_instance.pubsub.return_value = mock_pubsub
+        mock_redis.return_value = mock_redis_instance
+        mock_pubsub.get_message.side_effect = [{"data": "x"}, None, None]
+
+        with patch("app.api.routes.decode_access_token", return_value={"sub": 1}) as mock_decode,                 client.websocket_connect("/api/v1/measurements/stream/test_id?token=qtoken") as websocket:
+            assert websocket.receive_text() == "x"
+        mock_decode.assert_called_once_with("qtoken")
+
+    @patch('app.api.routes.aioredis.Redis')
+    def test_websocket_rejects_missing_token(self, mock_redis, client):
+        from starlette.websockets import WebSocketDisconnect
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/api/v1/measurements/stream/test_id"):
+                pass
+        assert exc.value.code == 1008
+        mock_redis.assert_not_called()
+
+    @patch('app.api.routes.aioredis.Redis')
+    def test_websocket_rejects_invalid_token(self, mock_redis, client):
+        import jwt
+        from starlette.websockets import WebSocketDisconnect
+        with patch("app.api.routes.decode_access_token", side_effect=jwt.InvalidTokenError("bad")):
+            with pytest.raises(WebSocketDisconnect) as exc:
+                with client.websocket_connect(
+                    "/api/v1/measurements/stream/test_id",
+                    headers={"Authorization": "Bearer bad"},
+                ):
+                    pass
+        assert exc.value.code == 1008
+        mock_redis.assert_not_called()

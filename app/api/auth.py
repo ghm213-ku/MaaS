@@ -82,7 +82,17 @@ async def create_new_user(req: CreateUserRequest, request: Request):
             detail="Username already exists or invalid role"
         )
         
-    return {"message": "User created successfully", "user_id": user_id}
+    # New accounts start with their username as password; say so, so the admin
+    # can tell the user and ask them to change it after the first login.
+    return {
+        "message": "User created successfully",
+        "user_id": user_id,
+        "initial_password": "username",
+        "initial_password_note": (
+            f"The initial password is the username ('{req.username}'). "
+            "Ask the user to change it after their first login."
+        ),
+    }
 
 @auth_router.delete("/users/{username}", status_code=status.HTTP_200_OK)
 async def delete_existing_user(username: str, request: Request):

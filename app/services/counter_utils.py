@@ -7,6 +7,8 @@ every event since the counter was last cleared (startFor clears it), excluding
 the bin still being integrated.
 """
 
+import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -53,3 +55,17 @@ def _capture_duration_ps(counter: Any) -> Optional[int]:
         return int(counter.getCaptureDuration())
     except Exception:
         return None
+
+
+async def wait_until_finished(counter: Any, timeout_ms: int = 2000) -> None:
+    """Wait, off the event loop, for a startFor acquisition to finish.
+
+    Uses the Time Tagger's waitUntilFinished(timeout) (timeout in ms) so the
+    caller can read the complete buffer afterwards.
+    """
+    try:
+        await asyncio.get_event_loop().run_in_executor(
+            None, counter.waitUntilFinished, timeout_ms
+        )
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"waitUntilFinished failed: {e}")

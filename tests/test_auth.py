@@ -80,6 +80,9 @@ def test_create_user_success(admin_token):
     )
     assert response.status_code == 201
     assert "user_id" in response.json()
+    # The admin must be able to tell the new user their initial password
+    assert response.json()["initial_password"] == "username"
+    assert username in response.json()["initial_password_note"]
 
 def test_create_user_forbidden():
     username = f"newuser_{uuid.uuid4()}"
