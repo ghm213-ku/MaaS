@@ -110,15 +110,29 @@ Get available channels and channel statistics.
 
 ### Channel Booking/Release Endpoints
 
+#### Who may book and release channels
+
+Both endpoints require a valid `Authorization: Bearer <token>`. The caller's username is
+looked up from the user id in the token.
+
+| Action | Normal user (operator / viewer) | Admin |
+|--------|---------------------------------|-------|
+| Book channels | Only under **their own username** (`user_name` must equal the caller's username) | Same rule: only under **their own username**. Admins have no bypass. |
+| Release channels | Only channels booked under **their own username** (`{user_name}` in the path must equal the caller's username) | Channels booked by **any user**: put the owner's username in the path |
+
+A request that breaks these rules is rejected with **403** and changes nothing.
+
 #### 3. **POST /api/v1/channels/book**
-Book (reserve) channels for a measurement or user.
+Book (reserve) channels under the caller's own username.
 
 **Endpoint**: `POST /api/v1/channels/book`
+
+`user_name` must be the authenticated caller's username. This applies to admins as well; nobody can book channels on behalf of another user.
 
 **Request:**
 ```json
 {
-  "booked_by": "measurement-abc-123",
+  "user_name": "alice",
   "channel_numbers": [1, 2, 3]
 }
 ```
@@ -126,7 +140,7 @@ Book (reserve) channels for a measurement or user.
 **Response (201):**
 ```json
 {
-  "booked_by": "measurement-abc-123",
+  "user_name": "alice",
   "booked_channels": [1, 2, 3],
   "booking_time": "2026-05-14T10:30:45.123456",
   "total_booked": 3
@@ -140,6 +154,13 @@ Book (reserve) channels for a measurement or user.
 }
 ```
 
+**Error (403) - Booking Under Another Username:**
+```json
+{
+  "detail": "You can only book channels under your own username"
+}
+```
+
 **Error (409) - Channels Already Booked:**
 ```json
 {
@@ -148,9 +169,11 @@ Book (reserve) channels for a measurement or user.
 ```
 
 #### 4. **POST /api/v1/channels/release/{booked_by}**
-Release the listed channels booked by a measurement or user identifier.
+Release the listed channels booked by a user.
 
 **Endpoint**: `POST /api/v1/channels/release/{booked_by}`
+
+A normal user may only release their own channels, so `{booked_by}` must be their own username. An admin may release channels booked by any user by putting that user's username in the path.
 
 **Request body (required):**
 ```json
@@ -166,6 +189,13 @@ Only the listed channels are released (`channels` is accepted as an alias for `c
   "user_name": "measurement-abc-123",
   "released_channels": [1, 2],
   "total_released": 2
+}
+```
+
+**Response (403)** — a non-admin caller named another user in the path (nothing is released):
+```json
+{
+  "detail": "You can only release your own channels"
 }
 ```
 
@@ -274,7 +304,7 @@ All channel state is stored in Redis with the following characteristics:
 Since channels are released immediately after job completion, there's minimal risk of orphaned bookings. However, if the application crashes during measurement:
 
 1. Channels remain booked under the measurement_id
-2. Channels can be manually released via: `POST /api/v1/channels/release/{measurement_id}` with body `{"channel_numbers": [...]}`
+2. Channels can be manually released via: `POST /api/v1/channels/release/{user_name}` with body `{"channel_numbers": [...]}` (by the booking user, or by an admin for any user)
 3. Consider implementing a cleanup job for stale bookings (measurements in FAILED/STOPPED state for >1 hour)
 
 ---
@@ -301,6 +331,7 @@ Since channels are released immediately after job completion, there's minimal ri
 |--------|----------|----------|
 | 201 | Channels booked successfully | Measurement proceeds |
 | 400 | Invalid channel numbers | User provides invalid channel range |
+| 403 | Booking under another username, or a non-admin releasing another user's channels | Book under your own username; ask an admin to release other users' channels |
 | 409 | Channel already booked | Retry with different channels or wait for release |
 | 500 | Redis unavailable | System down, check Redis connectivity |
 
@@ -313,7 +344,7 @@ Since channels are released immediately after job completion, there's minimal ri
 
 **If Channels Won't Release:**
 1. Verify measurement is completed: `GET /api/v1/measurements/{measurement_id}/status`
-2. Manually release if stuck: `POST /api/v1/channels/release/{measurement_id}` with body `{"channel_numbers": [...]}`
+2. Manually release if stuck: `POST /api/v1/channels/release/{user_name}` with body `{"channel_numbers": [...]}`. Normal users can release only their own channels; an admin can release another user's stuck channels.
 3. Check Redis connectivity: `GET /api/v1/channels/available` (returns health status)
 
 ---

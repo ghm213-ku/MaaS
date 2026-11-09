@@ -50,8 +50,13 @@ def redis_client():
 
 
 @pytest.fixture
-def e2e_setup(redis_client):
+def e2e_setup(redis_client, mock_auth_middleware):
     """Sets up StatusManager, JobProcessor, and TestClient for E2E testing."""
+    # Authenticate as "e2e_test": channels can only be booked under the caller's username
+    from app.db.database import create_user
+    e2e_user_id = create_user("e2e_test", "unused-hash", 2)  # operator
+    mock_auth_middleware.return_value = {"sub": e2e_user_id, "role": "operator"}
+
     # 1. Real Status Manager
     status_manager = StatusManager(redis_host="127.0.0.1", redis_port=6379, redis_db=15)
 

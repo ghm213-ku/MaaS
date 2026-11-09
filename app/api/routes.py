@@ -606,6 +606,7 @@ def book_channels(
     request: ChannelBookRequest,
     status_manager: StatusManager = Depends(get_status_manager),
     file_logger: Optional[FileLogger] = Depends(get_file_logger),
+    http_request: Request = None,
 ) -> ChannelBookResponse:
     """
     Book (reserve) channels for a measurement or user.
@@ -620,11 +621,15 @@ def book_channels(
 
     Raises:
         400: If channel numbers are invalid
+        403: If user_name is not the caller's own username (applies to admins too)
         409: If any channels are already booked
     """
     logger.info(
         f"[{request.user_name}] Channel booking request for channels: {request.channel_numbers}"
     )
+
+    if http_request is not None:
+        _authorize_channel_booking(http_request, request.user_name)
 
     try:
         # Validate channels
@@ -685,6 +690,33 @@ def book_channels(
         )
 
 
+def _get_caller_username(http_request: Request) -> Optional[str]:
+    """Return the username of the authenticated caller, or None if unknown."""
+    caller_id = getattr(http_request.state, "user_id", None)
+    if caller_id is None:
+        return None
+    caller = get_user_by_id(caller_id)
+    return caller["username"] if caller is not None else None
+
+
+def _authorize_channel_booking(http_request: Request, user_name: str) -> None:
+    """Allow a booking only under the caller's own username (no admin bypass).
+
+    Raises:
+        HTTPException 403: user_name is not the caller's username
+    """
+    if _get_caller_username(http_request) != user_name:
+        logger.warning(
+            f"[{user_name}] Channel booking denied for "
+            f"user_id={getattr(http_request.state, 'user_id', None)} "
+            f"(role={getattr(http_request.state, 'role', None)})"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="You can only book channels under your own username",
+        )
+
+
 def _authorize_channel_release(http_request: Request, user_name: str) -> None:
     """Allow a release only for the caller's own channels, unless they are an admin.
 
@@ -695,11 +727,10 @@ def _authorize_channel_release(http_request: Request, user_name: str) -> None:
     if role == "admin":
         return
 
-    caller_id = getattr(http_request.state, "user_id", None)
-    caller = get_user_by_id(caller_id) if caller_id is not None else None
-    if caller is None or caller["username"] != user_name:
+    if _get_caller_username(http_request) != user_name:
         logger.warning(
-            f"[{user_name}] Channel release denied for user_id={caller_id} (role={role})"
+            f"[{user_name}] Channel release denied for "
+            f"user_id={getattr(http_request.state, 'user_id', None)} (role={role})"
         )
         raise HTTPException(
             status_code=403,
