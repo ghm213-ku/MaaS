@@ -272,7 +272,7 @@ def test_job_processor_tagger_none():
     processor.redis_client = MagicMock()
     processor.register_handler("save_raw_tags", MagicMock())
     processor._run_job_in_thread(status_id="id123", measurement_type="save_raw_tags", duration_seconds=10.0, metadata={"user_name": "test_user", })
-    sm_mock.update_status.assert_called_with("id123", MeasurementStatus.FAILED.value, "Job failed: SaveRawTagsMeasurementHandler requires tagger but none was provided to JobProcessor")
+    sm_mock.update_status.assert_called_with("id123", MeasurementStatus.FAILED.value, "Job failed: save_raw_tags measurement requires a Time Tagger but none was provided to JobProcessor")
 
 class MockCoincidencesHandler(MeasurementHandler):
     async def start(self, duration_seconds: float, metadata: CoincidencesMetadata) -> None:

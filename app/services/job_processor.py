@@ -229,7 +229,7 @@ class JobProcessor:
             # Pass tagger to handlers that need it
             if self.tagger is None:
                 raise RuntimeError(
-                    "SaveRawTagsMeasurementHandler requires tagger but none was provided to JobProcessor"
+                    f"{measurement_type} measurement requires a Time Tagger but none was provided to JobProcessor"
                 )
             handler = handler_class(tagger=self.tagger)
 

@@ -260,7 +260,7 @@ def mock_timetagger_classes():
     sys.modules['TimeTagger'] = MagicMock()
 
     with patch("Swabian.TimeTagger.Counter", return_value=mock_counter), \
-         patch("TimeTagger.Correlation", return_value=mock_correlation):
+         patch("Swabian.TimeTagger.Correlation", return_value=mock_correlation):
         yield
 
 @pytest.fixture(autouse=True)

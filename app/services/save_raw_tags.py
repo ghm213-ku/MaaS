@@ -1,4 +1,4 @@
-"""Count-rate measurement handler implementation."""
+"""Save-raw-tags measurement handler implementation."""
 
 import asyncio
 from typing import Optional, Dict, Any
@@ -67,12 +67,13 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
                         logger.error(f"Failed to stop file writer: {e}")
                 return
         finally:
-            # Only free real TimeTagger instances (not mocks from tests)
-            try:
-                TimeTagger.freeTimeTagger(self.tagger)
-            except TypeError:
-                # Mock objects will raise TypeError when passed to freeTimeTagger
-                pass
+            # The tagger is shared by every job on this worker and is owned by
+            # the worker, so it must not be freed here. Release the writer only.
+            if self._fileWriter is not None and not self._stopped:
+                try:
+                    self._fileWriter.stop()
+                except Exception as e:
+                    logger.error(f"Failed to stop file writer: {e}")
         logger.info(
             f"Save raw tags completed for {duration_seconds} seconds on channels {channel_list} at {target_file_path}"
         )
@@ -91,12 +92,6 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
                 self._fileWriter.stop()
             except Exception as e:
                 logger.error(f"Failed to stop file writer: {e}")
-
-        # Only free real TimeTagger instances (not mocks from tests)
-        try:
-            TimeTagger.freeTimeTagger(self.tagger)
-        except TypeError:
-            pass
 
         # Delete any raw tags file that was already written for this measurement
         self._delete_output_file(self._target_file_path)

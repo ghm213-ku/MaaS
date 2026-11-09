@@ -218,7 +218,7 @@ curl -X POST http://localhost:8000/api/v1/measurements/coincidences \
 - `timestamp` (optional): Timestamp mode for coincidence virtual channel (`"Last"`, `"First"`, `"ListedFirst"`, `"Average"`). Default: `"Last"`.
 - `binwidth` (optional): Histogram bin width in picoseconds. Default: `1000000000` (1 second).
 - `n_values` (optional): Number of histogram bins. Default: `1`.
-- `target_location` (optional): Target file path. Supports `{datetime}` and `{measurement-type}` placeholders.
+- `target_location` (optional): Target file path. Supports `{datetime}` and `{measurement-type}` placeholders. Not used by `coincidences-live`, which only streams.
 - `refresh_rate` (optional): Streaming update frequency in Hz for live coincidence measurements. Default: `25`.
 
 **Results**:
@@ -228,7 +228,7 @@ curl -X POST http://localhost:8000/api/v1/measurements/coincidences \
 
 #### Live Streaming Output Streams (`coincidences-live`)
 
-In Swabian TimeTagger, each coincidence group in `coincidences` (e.g. `[[1, 2], [2, 3, 5]]`) instantiates an independent virtual channel (queried via `coinc.getChannels()`). The live measurement handler reads counts/rates from all virtual channels and publishes:
+In Swabian TimeTagger, each coincidence group in `coincidences` (e.g. `[[1, 2], [2, 3, 5]]`) instantiates an independent virtual channel (queried via `coinc.getChannels()`). The live handler uses the same setup as the one-shot measurement (`Coincidences` feeding a `Counter` with `binwidth` and `n_values`) and publishes the counter's current bins at `refresh_rate`. Each stream's `data` holds the counts in its last `n_values` bins (oldest first), and `rate` is the most recent bin in counts per second:
 
 1. **Multiplexed Channel** (`measurement:data:{measurement_id}`):
 ```json
@@ -243,17 +243,17 @@ In Swabian TimeTagger, each coincidence group in `coincidences` (e.g. `[[1, 2], 
       "coincidence": [1, 2],
       "virtual_channel": 20,
       "rate": 1542.0,
-      "data": 1542.0
+      "data": [1530.0, 1538.0, 1542.0]
     },
     {
       "stream_index": 1,
       "coincidence": [2, 3, 5],
       "virtual_channel": 21,
       "rate": 28.5,
-      "data": 28.5
+      "data": [31.0, 27.0, 28.5]
     }
   ],
-  "data": [1542.0, 28.5],
+  "data": [[1530.0, 1538.0, 1542.0], [31.0, 27.0, 28.5]],
   "timestamp": "2026-10-29T12:00:00.123456"
 }
 ```
@@ -268,7 +268,7 @@ When multiple coincidence groups are provided, individual streams are also publi
   "coincidence": [1, 2],
   "virtual_channel": 20,
   "rate": 1542.0,
-  "data": 1542.0,
+  "data": [1530.0, 1538.0, 1542.0],
   "timestamp": "2026-10-29T12:00:00.123456"
 }
 ```
