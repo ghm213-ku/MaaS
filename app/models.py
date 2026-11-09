@@ -67,7 +67,7 @@ class CorrelationMetadata(BaseModel):
     user_name: str = Field(description="The user who booked the channels. Required.")
     binwidth: int = Field(
         default=int(1e3),
-        description="Bin width in picoseconds for histogram. Default: 1e3 (1 millisecond)",
+        description="Bin width in picoseconds for histogram. Default: 1e3 (1 ns)",
     )
     n_values: int = Field(
         default=1000,
@@ -99,7 +99,7 @@ class TimeHistogramLiveMetadata(BaseModel):
     user_name: str = Field(description="The user who booked the channels. Required.")
     binwidth: int = Field(
         default=int(1e3),
-        description="Bin width in picoseconds for histogram. Default: 1e3 (1 millisecond)",
+        description="Bin width in picoseconds for histogram. Default: 1e3 (1 ns)",
     )
     n_bins: int = Field(
         default=1000,

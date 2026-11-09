@@ -12,6 +12,51 @@ from Swabian import TimeTagger
 logger = configure_logging(__name__)
 
 
+def _resolve_timestamp(timestamp_str: str):
+    """Map the API timestamp name ('Last', 'First', ...) to the TimeTagger enum."""
+    if hasattr(TimeTagger, "CoincidenceTimestamp"):
+        timestamp_map = {
+            "last": TimeTagger.CoincidenceTimestamp.Last,
+            "first": TimeTagger.CoincidenceTimestamp.First,
+            "listedfirst": TimeTagger.CoincidenceTimestamp.ListedFirst,
+            "average": TimeTagger.CoincidenceTimestamp.Average,
+        }
+    else:
+        timestamp_map = {
+            "last": getattr(TimeTagger, "CoincidenceTimestamp_Last", 0),
+            "first": getattr(TimeTagger, "CoincidenceTimestamp_First", 1),
+            "listedfirst": getattr(TimeTagger, "CoincidenceTimestamp_ListedFirst", 2),
+            "average": getattr(TimeTagger, "CoincidenceTimestamp_Average", 3),
+        }
+    return timestamp_map.get(str(timestamp_str).lower(), timestamp_map["last"])
+
+
+def create_coincidence_counter(tagger, metadata: CoincidencesMetadata):
+    """Build the Coincidences virtual channels and a Counter over them.
+
+    Shared by the one-shot and live coincidence handlers so both measure the
+    same way: TimeTagger.Coincidences(groups, coincidence_window, timestamp)
+    feeding TimeTagger.Counter(binwidth, n_values).
+
+    Returns:
+        (coincidence, counter, virtual_channels)
+    """
+    coincidence = TimeTagger.Coincidences(
+        tagger,
+        metadata.coincidences or [],
+        metadata.coincidence_window,
+        _resolve_timestamp(metadata.timestamp),
+    )
+    virtual_channels = [int(ch) for ch in coincidence.getChannels()]
+    counter = TimeTagger.Counter(
+        tagger=tagger,
+        channels=virtual_channels,
+        binwidth=metadata.binwidth,
+        n_values=metadata.n_values,
+    )
+    return coincidence, counter, virtual_channels
+
+
 class CoincidencesMeasurementHandler(MeasurementHandler):
     """Handler for coincidences measurements."""
 
@@ -49,48 +94,12 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
         self._stopped = False
         self._count = 0
 
-        coincidences = metadata.coincidences or []
-        coincidence_window = getattr(metadata, "coincidence_window", 1000)
-        timestamp_str = getattr(metadata, "timestamp", "Last")
-        binwidth = getattr(metadata, "binwidth", int(1e9))
-        n_values = getattr(metadata, "n_values", 1)
-
         self._measurement_task = asyncio.current_task()
 
-        if self.tagger is not None:
-            try:
-                timestamp_map = {
-                    "last": getattr(TimeTagger, "CoincidenceTimestamp_Last", 0),
-                    "first": getattr(TimeTagger, "CoincidenceTimestamp_First", 1),
-                    "listedfirst": getattr(TimeTagger, "CoincidenceTimestamp_ListedFirst", 2),
-                    "average": getattr(TimeTagger, "CoincidenceTimestamp_Average", 3),
-                }
-                if hasattr(TimeTagger, "CoincidenceTimestamp"):
-                    timestamp_map = {
-                        "last": TimeTagger.CoincidenceTimestamp.Last,
-                        "first": TimeTagger.CoincidenceTimestamp.First,
-                        "listedfirst": TimeTagger.CoincidenceTimestamp.ListedFirst,
-                        "average": TimeTagger.CoincidenceTimestamp.Average,
-                    }
-                tt_timestamp = timestamp_map.get(str(timestamp_str).lower(), timestamp_map.get("last", 0))
-
-                self._coincidence = TimeTagger.Coincidences(
-                    self.tagger,
-                    coincidences,
-                    coincidence_window,
-                    tt_timestamp,
-                )
-                v_channels = list(self._coincidence.getChannels())
-
-                self._counter = TimeTagger.Counter(
-                    tagger=self.tagger,
-                    channels=v_channels,
-                    binwidth=binwidth,
-                    n_values=n_values,
-                )
-                self._counter.startFor(int(duration_seconds * 1e12))
-            except Exception as e:
-                logger.warning(f"Coincidences hardware initialization skipped or failed: {e}")
+        # Hardware setup errors propagate so the job is marked failed instead
+        # of "completing" with no data.
+        self._coincidence, self._counter, _ = create_coincidence_counter(self.tagger, metadata)
+        self._counter.startFor(int(duration_seconds * 1e12))
 
         try:
             import os
@@ -116,20 +125,16 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
                     ),
                 }
 
-            if self._counter is not None and hasattr(self._counter, "getData"):
-                try:
-                    counter_data = self._counter.getData()
-                    self._count = int(np.sum(counter_data))
-                    data = np.array(counter_data)
-                    logger.info(
-                        f"Coincidences measurement finished for duration: {duration_seconds} seconds"
-                    )
-                    if self._target_location:
-                        os.makedirs(os.path.dirname(os.path.abspath(self._target_location)), exist_ok=True)
-                        np.savetxt(self._target_location, data, delimiter=",")
-                        logger.info(f"Coincidences data saved to {self._target_location}")
-                except Exception as e:
-                    logger.warning(f"Failed to fetch or save coincidences counter data: {e}")
+            counter_data = self._counter.getData()
+            self._count = int(np.sum(counter_data))
+            data = np.array(counter_data)
+            logger.info(
+                f"Coincidences measurement finished for duration: {duration_seconds} seconds"
+            )
+            if self._target_location:
+                os.makedirs(os.path.dirname(os.path.abspath(self._target_location)), exist_ok=True)
+                np.savetxt(self._target_location, data, delimiter=",")
+                logger.info(f"Coincidences data saved to {self._target_location}")
 
         except asyncio.CancelledError:
             logger.info("Coincidences measurement cancelled")

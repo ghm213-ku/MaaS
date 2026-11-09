@@ -461,17 +461,22 @@ class TestSaveRawTagsMeasurementHandlerStop:
                 mock_logger_error.assert_called_with("Failed to stop file writer: Writer error")
 
     @pytest.mark.asyncio
-    async def test_stop_frees_tagger(self, mock_tagger):
+    async def test_stop_does_not_free_shared_tagger(self, mock_tagger):
+        """The worker's tagger is shared by all jobs; freeing it breaks every later job."""
         handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
         handler._target_file_path = "test.dat"
-        
+
         with patch('app.services.save_raw_tags.TimeTagger.freeTimeTagger') as mock_free:
-            # First test successful free
             with patch.object(handler, '_delete_output_file'):
                 await handler.stop()
-                mock_free.assert_called_with(mock_tagger)
-                
-            # Now test type error handling
-            mock_free.side_effect = TypeError("Mock tagger")
-            with patch.object(handler, '_delete_output_file'):
-                await handler.stop()  # Should not raise exception
+            mock_free.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_completed_run_does_not_free_shared_tagger(self, mock_tagger):
+        handler = SaveRawTagsMeasurementHandler(tagger=mock_tagger)
+        metadata = SaveRawTagsMetadata(user_name="test_user", channel_list=[1, 2], target_file_path="test.ttbin")
+
+        with patch('app.services.save_raw_tags.TimeTagger') as mock_tt:
+            await handler.start(0.01, metadata)
+            mock_tt.freeTimeTagger.assert_not_called()
+            mock_tt.FileWriter.return_value.stop.assert_called_once()

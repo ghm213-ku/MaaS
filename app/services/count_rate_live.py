@@ -156,11 +156,11 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
             "duration_seconds": duration,
             "count_rate_cps": count_rate,
             "stopped_at": datetime.utcnow().isoformat(),
-            "message": "Count-rate measurement stopped and data file deleted",
+            "message": "Live count-rate measurement stopped",
         }
 
         logger.info(
-            f"Count-rate measurement stopped after {duration:.2f}s; data file deleted"
+            f"Live count-rate measurement stopped after {duration:.2f}s"
         )
 
         return results
