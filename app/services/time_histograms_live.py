@@ -123,9 +123,8 @@ class StartStopLiveMeasurementHandler(BaseTimeHistogramLiveHandler):
         click_channel = metadata.click_channel
         start_channel = metadata.start_channel
         binwidth = metadata.binwidth
-        n_bins = metadata.n_bins
         refresh_rate = metadata.refresh_rate
-        
+
         self._measurement_task = asyncio.current_task()
         self._counter = TimeTagger.StartStop(
             tagger=self.tagger, 

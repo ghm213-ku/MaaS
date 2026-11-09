@@ -1,7 +1,10 @@
 """Save-raw-tags measurement handler implementation."""
 
 import asyncio
-from typing import Optional, Dict, Any
+import glob
+import os
+import re
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from app.models import SaveRawTagsMetadata
 from app.services.measurement import MeasurementHandler
@@ -9,6 +12,21 @@ from app.utils.logger import configure_logging
 from Swabian import TimeTagger
 
 logger = configure_logging(__name__)
+
+
+def ttbin_files(filename: Optional[str]) -> List[str]:
+    """Return the files a TimeTagger FileWriter wrote for ``filename``.
+
+    FileWriter appends ".ttbin" unless the name already ends with it, and
+    splits the stream into numbered parts, so "run" produces "run.ttbin",
+    "run.1.ttbin", "run.2.ttbin", ...
+    """
+    if not filename:
+        return []
+    base = filename[: -len(".ttbin")] if filename.endswith(".ttbin") else filename
+    pattern = re.compile(re.escape(os.path.basename(base)) + r"(\.\d+)?\.ttbin$")
+    candidates = glob.glob(glob.escape(base) + "*.ttbin")
+    return sorted(f for f in candidates if pattern.fullmatch(os.path.basename(f)))
 
 
 class SaveRawTagsMeasurementHandler(MeasurementHandler):
@@ -93,8 +111,10 @@ class SaveRawTagsMeasurementHandler(MeasurementHandler):
             except Exception as e:
                 logger.error(f"Failed to stop file writer: {e}")
 
-        # Delete any raw tags file that was already written for this measurement
-        self._delete_output_file(self._target_file_path)
+        # Delete every raw tags file FileWriter already wrote for this
+        # measurement (the .ttbin file and its numbered parts)
+        for path in ttbin_files(self._target_file_path):
+            self._delete_output_file(path)
 
         logger.info("Save raw tags stopped and data file deleted")
 

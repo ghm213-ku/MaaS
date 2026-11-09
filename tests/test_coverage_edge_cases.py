@@ -67,7 +67,7 @@ async def test_routes_channel_booking_fails():
             status_manager=mock_status_manager,
             file_logger=MagicMock()
         )
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 400
 
 @pytest.mark.asyncio
 async def test_routes_general_exception():
@@ -403,7 +403,7 @@ def test_job_processor_format_target_location_directory():
         assert "count_rate" in res
         
         res_raw = processor._format_target_location(temp_dir, "save_raw_tags")
-        assert res_raw.endswith(".tags")
+        assert res_raw.endswith(".ttbin")
         assert "save_raw_tags" in res_raw
 
 def test_job_processor_is_job_active():
@@ -505,7 +505,7 @@ def test_job_processor_format_target_location_directory():
         assert "count_rate" in res
         
         res_raw = format_target_location(temp_dir, "save_raw_tags")
-        assert res_raw.endswith(".tags")
+        assert res_raw.endswith(".ttbin")
         assert "save_raw_tags" in res_raw
 
 def test_job_processor_is_job_active():

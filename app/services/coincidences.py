@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from app.models import CoincidencesMetadata
 from app.services.measurement import MeasurementHandler
+from app.services.counter_utils import counter_summary
 from app.utils.logger import configure_logging
 from Swabian import TimeTagger
 
@@ -28,7 +29,11 @@ def _resolve_timestamp(timestamp_str: str):
             "listedfirst": getattr(TimeTagger, "CoincidenceTimestamp_ListedFirst", 2),
             "average": getattr(TimeTagger, "CoincidenceTimestamp_Average", 3),
         }
-    return timestamp_map.get(str(timestamp_str).lower(), timestamp_map["last"])
+    key = str(timestamp_str).lower()
+    if key not in timestamp_map:
+        # TimeTagger rejects unknown timestamp types; don't substitute 'Last'
+        raise ValueError(f"Invalid coincidence timestamp: {timestamp_str!r}")
+    return timestamp_map[key]
 
 
 def create_coincidence_counter(tagger, metadata: CoincidencesMetadata):
@@ -125,9 +130,11 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
                     ),
                 }
 
-            counter_data = self._counter.getData()
-            self._count = int(np.sum(counter_data))
-            data = np.array(counter_data)
+            # The file holds the Counter's last n_values bins per group;
+            # totals cover the whole measurement (getDataTotalCounts).
+            data = np.array(self._counter.getData())
+            summary = counter_summary(self._counter, metadata.binwidth)
+            self._count = summary["count"]
             logger.info(
                 f"Coincidences measurement finished for duration: {duration_seconds} seconds"
             )
@@ -154,6 +161,11 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
                 else duration_seconds
             ),
             "count": self._count,
+            "coincidences": metadata.coincidences or [],
+            "counts_per_group": summary["counts_per_channel"],
+            "integration_time_seconds": summary["integration_time_seconds"],
+            "count_rate_cps_per_group": summary["count_rate_cps_per_channel"],
+            "count_rate_cps": summary["count_rate_cps"],
         }
 
     async def stop(self) -> Dict[str, Any]:

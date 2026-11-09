@@ -191,7 +191,7 @@ class TestStartMeasurementEndpoint:
                 "user_name": "test_user", "channels": [1, 2, 3],
                 "binwidth": 1000000000,
                 "n_values": 1,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
             },
         }
 
@@ -443,7 +443,7 @@ class TestGetStatusEndpoint:
                 "user_name": "test_user", "channels": [1, 2],
                 "binwidth": 1000000000,
                 "n_values": 1,
-                "target_location": "desktop/MaasData/{datetime}/{measurement-type}",
+                "target_location": "~/Desktop/MaasData/{datetime}/{measurement-type}",
             },
         )
         meas_id = start_response.json()["measurement_id"]

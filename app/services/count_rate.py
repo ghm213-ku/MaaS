@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from app.models import CountRateMetadata
 from app.services.measurement import MeasurementHandler
+from app.services.counter_utils import counter_summary
 from app.utils.logger import configure_logging
 from Swabian import TimeTagger
 
@@ -22,6 +23,8 @@ class CountRateMeasurementHandler(MeasurementHandler):
         self._start_time: Optional[datetime] = None
         self._counter: Optional[Any] = None
         self._target_location: Optional[str] = None
+        self._binwidth: int = 0
+        self._summary: Dict[str, Any] = {}
         logger.debug("CountRateMeasurementHandler initialized")
 
     async def start(
@@ -36,7 +39,7 @@ class CountRateMeasurementHandler(MeasurementHandler):
                 - channels: List of channel numbers to measure (required)
                 - binwidth: Bin width in picoseconds (default: 1e9)
                 - n_values: Number of bins (default: 1)
-                - target_location: Target file path (default: desktop/MaasData/{datetime}/{measurement-type})
+                - target_location: Target file path (default: ~/Desktop/MaasData/{datetime}/{measurement-type})
         """
         logger.info("Starting count-rate measurement")
         self._start_time = datetime.utcnow()
@@ -49,6 +52,7 @@ class CountRateMeasurementHandler(MeasurementHandler):
         n_values = metadata.n_values
         target_location = metadata.target_location
         self._target_location = target_location
+        self._binwidth = binwidth
         logger.debug(
             f"Count-rate params - channels: {channels}, binwidth: {binwidth}, n_values: {n_values}, target: {target_location}"
         )
@@ -81,9 +85,13 @@ class CountRateMeasurementHandler(MeasurementHandler):
                 return
 
             if self._counter:
-                counter_data = self._counter.getData()
-                self._count = int(np.sum(counter_data))
-                data = np.array(counter_data)
+                # The saved file holds the Counter's last n_values bins
+                # (channels x n_values), as Counter.getData() returns them.
+                # Totals come from getDataTotalCounts(), which covers the
+                # whole measurement rather than only the buffered bins.
+                data = np.array(self._counter.getData())
+                self._summary = counter_summary(self._counter, self._binwidth)
+                self._count = self._summary["count"]
                 logger.info(
                     f"Count-rate measurement finished for duration: {duration_seconds} seconds"
                 )
@@ -102,7 +110,7 @@ class CountRateMeasurementHandler(MeasurementHandler):
                 if self._start_time
                 else duration_seconds
             ),
-            "count": self._count,
+            **self._summary,
         }
 
     async def stop(self) -> Dict[str, Any]:
@@ -115,13 +123,13 @@ class CountRateMeasurementHandler(MeasurementHandler):
         logger.info("Stopping count-rate measurement")
         self._stopped = True
 
-        # Fetch partial data before aborting
+        # Read the totals before stopping
         if self._counter is not None:
             try:
-                data = self._counter.getData()
-                self._count = int(np.sum(data))
-            except Exception:
-                pass
+                self._summary = counter_summary(self._counter, self._binwidth)
+                self._count = self._summary["count"]
+            except Exception as e:
+                logger.warning(f"Failed to read count-rate totals: {e}")
 
         # Stop the underlying hardware counter so the running measurement ends
         if self._counter is not None:
@@ -141,13 +149,15 @@ class CountRateMeasurementHandler(MeasurementHandler):
             return {"error": "Measurement was never started"}
 
         duration = (datetime.utcnow() - self._start_time).total_seconds()
-        count_rate = self._count / duration if duration > 0 else 0
 
         results = {
             "status": "stopped",
             "total_count": self._count,
             "duration_seconds": duration,
-            "count_rate_cps": count_rate,
+            "counts_per_channel": self._summary.get("counts_per_channel", []),
+            "integration_time_seconds": self._summary.get("integration_time_seconds", 0.0),
+            "count_rate_cps_per_channel": self._summary.get("count_rate_cps_per_channel", []),
+            "count_rate_cps": float(self._summary.get("count_rate_cps", 0.0)),
             "stopped_at": datetime.utcnow().isoformat(),
             "message": "Count-rate measurement stopped and data file deleted",
         }

@@ -114,7 +114,7 @@ class TestCoincidencesMetadata:
         )
         assert metadata.binwidth == int(1e9)
         assert metadata.n_values == 1
-        assert metadata.target_location == "desktop/MaasData/{datetime}/{measurement-type}"
+        assert metadata.target_location == "~/Desktop/MaasData/{datetime}/{measurement-type}"
 
     def test_simple_channel_list_deprecated_and_rejected(self):
         """Should reject simple 1D channel lists since they are deprecated."""
