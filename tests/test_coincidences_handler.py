@@ -24,6 +24,9 @@ def mock_tt():
     tt = MagicMock()
     tt.Coincidences.return_value.getChannels.return_value = [20, 21]
     tt.Counter.return_value.getData.return_value = [[1, 2, 3], [4, 5, 6]]
+    # Totals over the whole measurement differ from the sum of the buffered bins
+    tt.Counter.return_value.getDataTotalCounts.return_value = [60, 150]
+    tt.Counter.return_value.getCaptureDuration.return_value = 15000
     with patch("app.services.coincidences.TimeTagger", tt):
         yield tt
 
@@ -95,7 +98,12 @@ class TestCoincidencesMeasurementHandler:
         )
         mock_tt.Counter.return_value.startFor.assert_called_once_with(int(0.01 * 1e12))
         assert result["status"] == "completed"
-        assert result["count"] == 21
+        # count comes from getDataTotalCounts, not from summing getData's bins
+        assert result["count"] == 210
+        assert result["counts_per_group"] == [60, 150]
+        # 15000 ps captured / 5000 ps bins = 3 completed bins = 15 ns
+        assert result["integration_time_seconds"] == pytest.approx(15000e-12)
+        assert result["count_rate_cps_per_group"] == pytest.approx([60 / 15e-9, 150 / 15e-9])
         np.testing.assert_array_equal(
             np.loadtxt(tmp_path / "out.csv", delimiter=","), [[1, 2, 3], [4, 5, 6]]
         )

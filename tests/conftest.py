@@ -246,11 +246,15 @@ def mock_timetagger_classes():
 
     mock_counter = MagicMock()
     mock_counter.getData.return_value = [[100, 200]]
+    # Totals since the last clear, and 1 s of capture (in ps)
+    mock_counter.getDataTotalCounts.return_value = [100, 200]
+    mock_counter.getCaptureDuration.return_value = int(1e12)
     mock_counter.isFinished.return_value = False
     mock_counter.isRunning.return_value = True
 
     mock_correlation = MagicMock()
-    mock_correlation.getData.return_value = [[0.1, 0.2]]
+    mock_correlation.getData.return_value = [1, 2]
+    mock_correlation.getIndex.return_value = [-1000, 0]
     mock_correlation.isFinished.return_value = False
     mock_correlation.isRunning.return_value = True
 

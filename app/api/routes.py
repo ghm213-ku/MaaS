@@ -150,7 +150,10 @@ def _handle_measurement_request(
         logger.info(f"[{status_id}] Received {request_name} measurement request: {metadata_dump}")
 
         # Validate that channels are already booked by the user
-        status_manager.validate_channels(channels)
+        try:
+            status_manager.validate_channels(channels)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         booked_channels_map = status_manager.get_booked_channels()
         for channel in channels:
             if booked_channels_map.get(channel) != user_name:

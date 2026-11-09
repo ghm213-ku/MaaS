@@ -264,7 +264,7 @@ class TestCorrelationMetadataModel:
         metadata = CorrelationMetadata(user_name="test_user", channel1=1, channel2=2)
 
         assert (
-            metadata.target_location == "desktop/MaasData/{datetime}/{measurement-type}"
+            metadata.target_location == "~/Desktop/MaasData/{datetime}/{measurement-type}"
         )
 
     def test_metadata_channel1_required(self):
