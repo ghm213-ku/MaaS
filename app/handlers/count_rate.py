@@ -44,7 +44,6 @@ class CountRateMeasurementHandler(MeasurementHandler):
         logger.info("Starting count-rate measurement")
         self._start_time = datetime.utcnow()
         self._count = 0
-        self._stopped = False
 
         # Extract parameters from metadata
         channels = metadata.channels
@@ -69,6 +68,8 @@ class CountRateMeasurementHandler(MeasurementHandler):
         try:
             import os
             self._stop_event = asyncio.Event()
+            if self._stopped:  # stop() was called before the wait began
+                self._stop_event.set()
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=duration_seconds+1)
             except asyncio.TimeoutError:

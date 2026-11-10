@@ -404,10 +404,11 @@ def test_job_processor_format_target_location_directory():
         assert res_raw.endswith(".ttbin")
         assert "save_raw_tags" in res_raw
 
-def test_job_processor_listen_for_stops_new_loop():
+def test_job_processor_listen_for_stops_without_running_loop():
+    """A stop event for a job that is still starting up is left to its stop-flag watcher."""
     processor = JobProcessor(status_manager=MagicMock(), tagger=MagicMock())
     processor.redis_client = MagicMock()
-    
+
     mock_handler = MagicMock()
     mock_handler.stop = AsyncMock()
     processor.active_handlers["id123"] = mock_handler # no loop provided
@@ -422,7 +423,7 @@ def test_job_processor_listen_for_stops_new_loop():
     mock_pubsub.listen = mock_listen
     
     processor._listen_for_stops()
-    mock_handler.stop.assert_called()
+    mock_handler.stop.assert_not_called()
 
 def test_status_manager_update_status_file_logger_exception():
     redis_mock = MagicMock()

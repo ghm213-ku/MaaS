@@ -139,7 +139,12 @@ class BackendWorker:
 
             logger.debug("Redis connection verified")
 
-            if not self.no_hardware:
+            old_processor = getattr(self, "job_processor", None)
+            if old_processor is not None and old_processor.tagger is not None:
+                # Reconnect: keep using the TimeTagger the running jobs use
+                # (opening the device a second time would fail).
+                tagger = old_processor.tagger
+            elif not self.no_hardware:
                 logger.debug("Initializing TimeTagger...")
                 tagger = TimeTagger.createTimeTagger()
                 configure_test_signals(tagger, self.testing)
@@ -157,6 +162,12 @@ class BackendWorker:
 
             logger.debug("Creating JobProcessor...")
             self.job_processor = JobProcessor(self.status_manager, tagger=tagger)
+            if old_processor is None:
+                # First start: jobs listed by a previous worker process are gone
+                self.job_processor.clear_running_jobs()
+            else:
+                # Reconnect: keep jobs started before it stoppable
+                self.job_processor.adopt_jobs_from(old_processor)
 
             for measurement_type, handler_class in HANDLERS.items():
                 self.job_processor.register_handler(measurement_type, handler_class)

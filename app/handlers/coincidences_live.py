@@ -112,7 +112,6 @@ class CoincidencesLiveMeasurementHandler(MeasurementHandler):
         """
         logger.info("Starting live coincidences measurement")
         self._start_time = datetime.utcnow()
-        self._stopped = False
         self._measurement_task = asyncio.current_task()
 
         coincidences = metadata.coincidences or []

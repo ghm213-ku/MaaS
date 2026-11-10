@@ -70,10 +70,13 @@ Handlers are registered only in `worker.py`. The web API just pushes job descrip
 | Key | Type | Content | Expiry |
 |-----|------|---------|--------|
 | `measurement:job_queue` | list | Pending jobs (JSON) | none |
-| `measurement:status:{id}` | string | Status JSON | 1 h after last update |
-| `measurement:metadata:{id}` | string | Request metadata | 1 h after creation |
+| `measurement:status:{id}` | string | Status JSON | 1 h after last update (refreshed while running) |
+| `measurement:metadata:{id}` | string | Request metadata | 1 h after creation (refreshed while running) |
 | `measurement:results:{id}` | string | Result summary | 1 h after completion |
-| `measurement:stop_channel` | pub/sub | IDs of measurements to stop | – |
+| `measurement:stop_channel` | pub/sub | IDs of measurements to stop (fast path) | – |
+| `measurement:stop_requested:{id}` | string | Durable stop request, polled by the running job | 24 h, deleted once acknowledged |
+| `measurement:stop_ack:{id}` | string | Worker's confirmation that a stopped job has ended | 1 h |
+| `measurement:running` | hash | Jobs running on the worker: id → type, start time, pid | cleared at worker start |
 | `measurement:data:{id}` | pub/sub | Live data updates | – |
 | `channels:available`, `channels:booked`, `channels:booking_time` | set / hash / hash | Channel bookings | none |
 
@@ -134,18 +137,34 @@ expire it returns 404.
 
 ```
 DELETE /measurements/{id}
-  Web API: status queued/active? → set status = stopped
+  Web API: status queued/active? → SET measurement:stop_requested:<id>
+                                 → set status = stopped
                                  → PUBLISH measurement:stop_channel <id>
-  Worker:  stop listener receives <id> → handler.stop()
+                                 → wait up to STOP_ACK_TIMEOUT_SECONDS (3 s)
+                                   for measurement:stop_ack:<id>
+  Worker:  stop listener receives <id>          ─┐ whichever comes first
+           job's watcher sees the stop flag     ─┘ (polled every 0.5 s)
+           → handler.stop()
            → stops the Time Tagger measurement
            → deletes the output file written so far (count-rate, correlation,
              coincidences, save-raw-tags)
+           → job thread ends → SET measurement:stop_ack:<id>
 ```
 
-- A job stopped while still `queued` is skipped when the worker picks it up.
+- Pub/sub is fire-and-forget, so the stop flag is what guarantees the stop: a
+  message sent while the job is starting up, or while the worker is
+  reconnecting to Redis, used to be lost and the job ran to its full duration.
+- The response's `stop_acknowledged` is `true` once the worker confirmed the
+  job ended, `false` if it didn't within the timeout (worker down or busy; the
+  job still stops when a worker sees the flag). It is `null` when there was
+  nothing to stop.
+- A job stopped while still `queued` is skipped when the worker picks it up
+  (and acknowledged then).
 - If the measurement already finished, the call just returns its current status.
 - The worker never overwrites `stopped` with `completed`.
 - Channels stay booked.
+- `python scripts/find_running_measurements.py` lists measurements that are
+  still streaming data, with their status, to track down one that didn't stop.
 
 ---
 

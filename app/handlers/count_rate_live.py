@@ -67,7 +67,6 @@ class CountRateLiveMeasurementHandler(MeasurementHandler):
         logger.info("Starting count-rate measurement")
         self._start_time = datetime.utcnow()
         self._count = 0
-        self._stopped = False
 
         # Extract parameters from metadata
         channels = metadata.channels

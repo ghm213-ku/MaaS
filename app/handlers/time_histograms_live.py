@@ -39,7 +39,6 @@ class BaseTimeHistogramLiveHandler(MeasurementHandler):
     async def start(self, duration_seconds: Optional[float], metadata) -> None:
         logger.info(f"Starting {self.measurement_name} measurement")
         self._start_time = datetime.utcnow()
-        self._stopped = False
         self._measurement_task = asyncio.current_task()
 
         self._counter = self._create_measurement(metadata)

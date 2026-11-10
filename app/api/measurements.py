@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 
 from app.api.audit_route import AuditRoute
 from app.api.dependencies import get_file_logger, get_job_processor, get_status_manager
-from app.config import REDIS_DB, REDIS_HOST, REDIS_PORT
+from app.config import REDIS_DB, REDIS_HOST, REDIS_PORT, STOP_ACK_TIMEOUT_SECONDS
 from app.models import (
     CoincidencesLiveMeasurementRequest,
     CoincidencesMeasurementRequest,
@@ -333,18 +333,38 @@ def stop_measurement(
             raise HTTPException(status_code=404, detail=f"Measurement '{measurement_id}' not found")
 
         current_status = status_obj["status"]
+        acknowledged = None
         if current_status in (MeasurementStatus.QUEUED.value, MeasurementStatus.ACTIVE.value):
             processor.stop_job(measurement_id)
+            acknowledged = bool(
+                processor.wait_for_stop_ack(measurement_id, STOP_ACK_TIMEOUT_SECONDS)
+            )
+            if acknowledged:
+                logger.info(f"[{measurement_id}] Worker confirmed the measurement has ended")
+            else:
+                logger.warning(
+                    f"[{measurement_id}] Worker did not confirm the stop within "
+                    f"{STOP_ACK_TIMEOUT_SECONDS}s; it will still stop when the worker "
+                    "next checks its stop flag"
+                )
         else:
             logger.info(f"[{measurement_id}] Job already {current_status}, nothing to stop")
 
         updated = status_manager.get_status(measurement_id)
+        message = f"Measurement {updated['status']}. {updated['message']}"
+        if acknowledged is True:
+            message += " Worker confirmed the measurement has ended."
+        elif acknowledged is False:
+            message += (
+                f" Worker has not confirmed the stop yet (waited {STOP_ACK_TIMEOUT_SECONDS:g}s)."
+            )
         return MeasurementResponse(
             measurement_id=measurement_id,
             measurement_type=updated["measurement_type"],
             status=updated["status"],
             started_at=datetime.fromisoformat(updated["started_at"]),
-            message=f"Measurement {updated['status']}. {updated['message']}",
+            message=message,
+            stop_acknowledged=acknowledged,
         )
     except HTTPException:
         raise
