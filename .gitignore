@@ -32,3 +32,10 @@ request_logs/
 
 # Measurement output written with a relative target path
 desktop/
+
+# Saved test-run output
+test_output.*
+test_results*.txt
+
+# Personal editor/assistant config (may contain API keys)
+.continue/

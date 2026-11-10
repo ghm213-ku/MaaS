@@ -1,18 +1,17 @@
 """Job processor for backend worker service."""
 
+import logging
 import asyncio
-import os
-import threading
 import json
-from typing import Optional, Dict, Any, Callable
-from datetime import datetime
+import threading
+from typing import Any, Dict, Optional
+
 import redis
 from app.services.status_manager import StatusManager, MeasurementStatus
-from app.payloads import MeasurementPayloadMapper
+from app.models import DEFAULT_TARGET_LOCATION, get_metadata_model
 from app.utils.path_utils import format_target_location
-from app.utils.logger import configure_logging
 
-logger = configure_logging(__name__)
+logger = logging.getLogger(__name__)
 
 
 class JobProcessor:
@@ -44,9 +43,6 @@ class JobProcessor:
         if self.tagger is not None:
             self._start_stop_listener()
 
-        # Expose handlers for backward compatibility
-        self.handlers = self.job_handlers
-
     def _start_stop_listener(self):
         """Start a background thread to listen for stop events via Redis Pub/Sub."""
         self._pubsub = self.redis_client.pubsub()
@@ -72,7 +68,7 @@ class JobProcessor:
                             handler, loop = handler_info
                         else:
                             handler, loop = handler_info, None
-                        
+
                         try:
                             if loop is not None and loop.is_running():
                                 future = asyncio.run_coroutine_threadsafe(handler.stop(), loop)
@@ -88,7 +84,7 @@ class JobProcessor:
                                 new_loop.close()
                         except Exception as e:
                             logger.error(f"[{status_id}] Error stopping handler from Pub/Sub listener: {e}", exc_info=True)
-        except (ValueError, ConnectionError, Exception) as e:
+        except Exception as e:
             logger.debug(f"Pub/Sub listener stopped: {e}")
 
     def register_handler(self, measurement_type: str, handler_class: type) -> None:
@@ -110,12 +106,7 @@ class JobProcessor:
         duration_seconds: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Enqueue a job to Redis for the worker to process.
-
-
-        This is called by the web layer to queue jobs.
-        The worker will pick them up from the queue.
-
+        """Push a job onto the Redis queue; called by the web API, consumed by the worker.
 
         Args:
             status_id: Unique measurement ID
@@ -244,26 +235,19 @@ class JobProcessor:
             if metadata is None:
                 metadata = self.status_manager.get_metadata(status_id) or {}
 
-            # Generic execution pipeline replacing redundant _handle_* methods
             if duration_seconds is None and not measurement_type.endswith("_live"):
                 raise ValueError(f"duration_seconds is required for {measurement_type}")
 
-            try:
-                metadata_model_class = MeasurementPayloadMapper.get_metadata_model_for_type(measurement_type)
-            except ValueError:
-                raise ValueError(f"Unknown measurement type: {measurement_type}")
+            metadata_model_class = get_metadata_model(measurement_type)
 
-            # Apply format to target_location/target_file_path
-            path_key = "target_file_path" if measurement_type == "save_raw_tags" else "target_location"
-            
-            # For types other than save_raw_tags, provide a default if missing
-            if path_key == "target_location" and path_key not in metadata:
-                metadata[path_key] = os.path.expanduser("~/Desktop/MaasData/{datetime}/{measurement-type}")
-                
-            if path_key in metadata:
-                metadata[path_key] = format_target_location(metadata[path_key], measurement_type)
+            # Expand {datetime}, {measurement-type} and ~ in the output path
+            fields = metadata_model_class.model_fields
+            if "target_location" in fields:
+                metadata.setdefault("target_location", DEFAULT_TARGET_LOCATION)
+            for path_key in ("target_location", "target_file_path"):
+                if path_key in fields and metadata.get(path_key):
+                    metadata[path_key] = format_target_location(metadata[path_key], measurement_type)
 
-            # Instantiate the proper Pydantic model. Validation happens automatically here.
             parsed_metadata = metadata_model_class(**metadata)
 
             # Run the async handler
@@ -311,10 +295,6 @@ class JobProcessor:
             if status_id in self.active_handlers:
                 del self.active_handlers[status_id]
 
-
-
-
-
     def stop_job(self, status_id: str) -> bool:
         """Stop a running job, stopping the measurement and deleting its data file.
 
@@ -329,25 +309,17 @@ class JobProcessor:
 
         logger.info(f"[{status_id}] Publishing stop event via Redis Pub/Sub")
         self.redis_client.publish(self.stop_channel_key, status_id)
-        
+
         return True
-
-    def get_job_status(self, status_id: str) -> Optional[Dict[str, Any]]:
-        """Get the status of a job."""
-        return self.status_manager.get_status(status_id)
-
-    def is_job_active(self, status_id: str) -> bool:
-        """Check if a job is currently running."""
-        return status_id in self.active_jobs and self.active_jobs[status_id].is_alive()
 
     def shutdown_all_jobs(self):
         """Shutdown all active jobs and wait for them to finish."""
         logger.info(f"Shutting down {len(self.active_jobs)} active jobs...")
-        
+
         # Send stop signal to all running jobs
         for status_id in list(self.active_jobs.keys()):
             self.stop_job(status_id)
-            
+
         # Wait for threads to complete
         for status_id, thread in list(self.active_jobs.items()):
             if thread.is_alive():

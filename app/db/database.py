@@ -1,6 +1,7 @@
-import sqlite3
+"""SQLite store of users and roles (created and seeded with admin/admin on import)."""
+
 import os
-import threading
+import sqlite3
 
 # Use a specific path for the db (overridable via MAAS_DB_PATH, e.g. for tests)
 DB_PATH = os.environ.get("MAAS_DB_PATH") or os.path.join(

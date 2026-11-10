@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Request, Depends, status
-from pydantic import BaseModel
-import time
+"""Login and user-management endpoints: /auth."""
 
-from app.db.database import get_user_by_username, get_role_by_name, create_user, delete_user, update_user_password, get_user_by_id
+from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel
+
+from app.db.database import get_user_by_username, create_user, delete_user, update_user_password, get_user_by_id
 from app.services.auth_service import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_SECONDS
 
 auth_router = APIRouter(prefix="/auth", tags=["Auth"])

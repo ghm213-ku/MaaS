@@ -1,10 +1,13 @@
-"""Service for logging channel bookings and measurements to text files."""
+"""Plain-text and JSONL logs of channel bookings, measurement requests and status changes."""
 
-import os
 import json
+import logging
+import os
 from datetime import datetime
-from typing import Optional, List, Union
 from pathlib import Path
+from typing import List, Optional, Union
+
+logger = logging.getLogger(__name__)
 
 
 class FileLogger:
@@ -122,42 +125,7 @@ class FileLogger:
             with open(self.channel_log_file, "a") as f:
                 f.write(log_entry)
         except IOError as e:
-            print(f"Error writing to channel log file: {e}")
-
-    def log_channel_booking_for_measurement(
-        self,
-        measurement_type: str,
-        measurement_id: str,
-        channel_numbers: List[int],
-        timestamp: Optional[Union[datetime, str]] = None,
-    ) -> None:
-        """
-        Log a channel booking for a measurement with measurement details.
-
-        Args:
-            measurement_type: Type of measurement (e.g., 'count_rate', 'save_raw_tags')
-            measurement_id: Unique identifier for the measurement
-            channel_numbers: List of channel numbers booked
-            timestamp: Request timestamp (uses current time if None)
-        """
-        if timestamp is None:
-            timestamp = datetime.utcnow()
-
-        user_name = f"measurement-{measurement_type}"
-        channels_str = ", ".join(map(str, channel_numbers))
-        timestamp_str = self._format_timestamp(timestamp)
-        details = f"Measurement ID: {measurement_id}"
-
-        log_entry = (
-            f"{user_name:<30} | {channels_str:<30} | "
-            f"{'BOOK':<15} | {timestamp_str:<25} | {details}\n"
-        )
-
-        try:
-            with open(self.channel_log_file, "a") as f:
-                f.write(log_entry)
-        except IOError as e:
-            print(f"Error writing to channel log file: {e}")
+            logger.error(f"Error writing to channel log file: {e}")
 
     def log_channel_release_request(
         self,
@@ -189,7 +157,7 @@ class FileLogger:
             with open(self.channel_log_file, "a") as f:
                 f.write(log_entry)
         except IOError as e:
-            print(f"Error writing to channel log file: {e}")
+            logger.error(f"Error writing to channel log file: {e}")
 
     def log_measurement_request(
         self,
@@ -227,7 +195,7 @@ class FileLogger:
             with open(self.measurement_log_file, "a") as f:
                 f.write(log_entry)
         except IOError as e:
-            print(f"Error writing to measurement log file: {e}")
+            logger.error(f"Error writing to measurement log file: {e}")
 
     def log_measurement_status_update(
         self,
@@ -263,64 +231,4 @@ class FileLogger:
             with open(self.measurement_status_log_file, "a") as f:
                 f.write(json.dumps(log_entry) + "\n")
         except IOError as e:
-            print(f"Error writing to measurement status log file: {e}")
-
-    def log_measurement_status_removal(
-        self,
-        status_id: str,
-        status_data: dict,
-        timestamp: Optional[Union[datetime, str]] = None,
-    ) -> None:
-        """
-        Log measurement status removal (when status is deleted from Redis).
-        Deprecated: Use log_measurement_status_update() instead.
-        Uses JSONL format for structured logging.
-
-        Args:
-            status_id: Unique identifier for the measurement
-            status_data: Complete status object being removed
-            timestamp: Removal timestamp (uses current time if None)
-        """
-        # Delegate to the new method
-        self.log_measurement_status_update(status_id, status_data, timestamp)
-
-
-# Global instance of FileLogger
-_file_logger: Optional[FileLogger] = None
-
-
-def initialize_file_logger(
-    log_dir: str = "request_logs", measurements_log_dir: str = "logs/measurements"
-) -> FileLogger:
-    """
-    Initialize the global file logger instance.
-
-    Args:
-        log_dir: Directory to store request log files (default: 'request_logs')
-        measurements_log_dir: Directory to store measurement status logs (default: 'logs/measurements')
-
-    Returns:
-        FileLogger instance
-    """
-    global _file_logger
-    if _file_logger is None:
-        _file_logger = FileLogger(log_dir, measurements_log_dir)
-    return _file_logger
-
-
-def get_file_logger() -> FileLogger:
-    """
-    Get the global file logger instance.
-
-    Raises:
-        RuntimeError: If file logger has not been initialized
-
-    Returns:
-        FileLogger instance
-    """
-    global _file_logger
-    if _file_logger is None:
-        raise RuntimeError(
-            "FileLogger not initialized. Call initialize_file_logger first."
-        )
-    return _file_logger
+            logger.error(f"Error writing to measurement status log file: {e}")

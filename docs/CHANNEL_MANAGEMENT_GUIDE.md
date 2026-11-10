@@ -167,4 +167,4 @@ Bookings live in Redis (no expiry):
 
 The channel list is defined in `StatusManager.ALL_CHANNELS` in
 `app/services/status_manager.py`. Booking and release logic is in the same class; the HTTP
-endpoints and permission checks are in `app/api/routes.py`.
+endpoints and permission checks are in `app/api/channels.py`.

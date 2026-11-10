@@ -6,12 +6,12 @@ changes them (at startup and after every set-parameters job), and the API
 serves that hash from GET /api/v1/channels/parameters.
 """
 
+import logging
 import json
 from typing import Any, Dict, Iterable, List
 
-from app.utils.logger import configure_logging
 
-logger = configure_logging(__name__)
+logger = logging.getLogger(__name__)
 
 CHANNEL_PARAMETERS_KEY = "channels:parameters"
 
