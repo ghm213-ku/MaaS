@@ -18,4 +18,17 @@ env/
 *~
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+
+# Local secrets and user database (created on first run)
+.jwt_secret
+maas_auth.db
+
+# Runtime logs (created automatically on start)
+logs/
+request_logs/
+
+# Measurement output written with a relative target path
+desktop/

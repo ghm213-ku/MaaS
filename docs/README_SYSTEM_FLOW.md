@@ -1,701 +1,207 @@
-"""
-# System Architecture & HTTP Request Flow
+# System Architecture & Request Flow
 
-## Overview
-
-This document describes the MaaS distributed architecture and how HTTP requests flow through 
-the system from initial reception to completion and status update.
+How MaaS is put together and what happens to a request from the moment it arrives until the
+measurement finishes. For running the service see [GETTING_STARTED.md](GETTING_STARTED.md); for
+the API itself see [README_USER_GUIDE.md](README_USER_GUIDE.md).
 
 ---
 
-## Part 1: Distributed Architecture Overview
-
-### Architecture Components
-
-The application uses a distributed architecture with clear separation of concerns:
-
-1. **Web Layer (FastAPI)** - Receives requests and returns immediately with status IDs
-2. **Redis Message Broker** - Stores status and job queue
-3. **Backend Worker** - Processes jobs in separate threads using registered handlers
-4. **Measurement Handlers** - Execute actual measurement logic (count-rate, save-raw-tags, etc.)
-
-### Architecture Diagram
+## 1. Components
 
 ```
-┌─────────────────────────────────────┐
-│  Web Layer (FastAPI)                │
-│  - Receive measurement requests     │
-│  - Enqueue jobs to Redis            │
-│  - Return status IDs                │
-│  - Query and stop measurements      │
-└──────────────┬──────────────────────┘
-               │ (enqueue via process_job)
-               ▼
-┌─────────────────────────────────────┐
-│  Redis (Message Broker)             │
-│  - Store status objects             │
-│  - Persist metadata                 │
-│  - Store results                    │
-│  - Track active jobs                │
-└──────────────┬──────────────────────┘
-               │ (dequeue job)
-               ▼
-┌─────────────────────────────────────┐
-│  Backend Worker Process             │
-│  - Process jobs in separate threads │
-│  - Update status in Redis           │
-│  - Handle errors gracefully         │
-│  - Store results when complete      │
-└─────────────────────────────────────┘
-```
-
-### Key Components
-
-**StatusManager** (`app/services/status_manager.py`)
-- Manages measurement status in Redis
-- Creates, updates, and retrieves measurement status
-- Stores metadata and results
-- Status states: QUEUED → ACTIVE → COMPLETED/STOPPED/FAILED
-
-**JobProcessor** (`app/services/job_processor.py`)
-- Spawns a new thread for each measurement job
-- Registers handlers for different measurement types
-- Updates status as jobs progress
-- Handles errors and cleanup
-
-**Web Layer** (`app/api/routes.py`)
-- FastAPI routes for starting measurements
-- Returns unique status IDs (UUIDs)
-- Enqueues jobs to Redis (does NOT register or execute handlers)
-- Status queries return information from Redis
-- Lightweight and scalable independently
-
-**Backend Worker** (`worker.py`)
-- Standalone process that processes measurement jobs
-- Registers measurement handlers (only location where handlers are registered)
-- Monitors Redis connection health
-- Polls job queue and spawns threads for measurements
-- Can be scaled to multiple instances for parallel processing
-- Configures the TimeTagger test signal at startup: off on all channels by default, or on for channels 1-5 with `--testing`
-
----
-
-## Setup & Installation
-
-### Prerequisites
-- Python 3.10+
-- Redis Server (local or remote)
-
-### Installation
-
-1. **Install dependencies:**
-```bash
-pip install -r requirements.txt
-```
-
-2. **Start Redis Server** (if not already running):
-```bash
-redis-server
-# or on Windows:
-wsl redis-server
-```
-
-3. **Verify Redis is running:**
-```bash
-redis-cli ping
-# Should return: PONG
-```
-
----
-
-## Running the Application
-
-### Option A: Development Mode (Single Process)
-
-For testing and development, you can run everything in one process:
-
-```bash
-# Run the main application with FastAPI
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-This starts the web layer, and jobs are processed in background threads as they arrive.
-
-### Option B: Production Mode (Separate Processes)
-
-For better isolation and scalability:
-
-```bash
-# Terminal 1: Start the web layer
-python main.py
-
-# Terminal 2: Start the backend worker (processes jobs)
-python worker.py
-```
-
-You can run multiple worker instances for parallel processing.
-
-**Worker flags:**
-- `python worker.py`: normal run. The TimeTagger test signal is **off** on all channels.
-- `python worker.py --testing`: the test signal is **on** for channels 1-5, so you can measure without detectors.
-- `python worker.py --no-hardware`: doesn't connect to a TimeTagger. Jobs that need hardware will fail.
-
----
-
-## Part 2: HTTP Request Routing & System Flow
-
----
-
-## System Architecture (Request Flow)
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        CLIENT                                    │
-│              (Browser / CLI / External Service)                  │
-└────────────────────────────────┬─────────────────────────────────┘
-                                 │ HTTP Request
-                                 ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                    FASTAPI WEB LAYER                             │
-│                  (main.py)                           │
-│  • Receives HTTP request                                         │
-│  • Validates with Pydantic models                               │
-│  • Returns immediately with status ID                           │
-└───────────────┬──────────────────────────────────┬───────────────┘
-                │                                  │
-                │ Enqueue Job                      │ Health Check
-                │                                  │
-                ▼                                  ▼
-    ┌───────────────────────┐        ┌─────────────────────┐
-    │   REDIS BROKER        │        │   Redis Status      │
-    │  (In-Memory Storage)  │        │    (Health Check)   │
-    │                       │        │                     │
-    │ • Status objects      │        │ PONG response       │
-    │ • Metadata            │        └─────────────────────┘
-    │ • Job results         │
-    │ • TTL: 1 hour         │
-    └───────────┬───────────┘
-                │ Dequeue Job
-                ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                   BACKEND WORKER                                 │
-│                (worker.py)                               │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │          JOB PROCESSOR (Thread Pool)                       │ │
-│  │          (app/services/job_processor.py)                  │ │
-│  │                                                            │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │ │
-│  │  │   Thread 1   │  │   Thread 2   │  │   Thread N   │   │ │
-│  │  │              │  │              │  │              │   │ │
-│  │  │  Job A       │  │  Job B       │  │  Job ...     │   │ │
-│  │  │  Measurement │  │  Measurement │  │  Measurement │   │ │
-│  │  │  Handler     │  │  Handler     │  │  Handler     │   │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘   │ │
-│  │                                                            │ │
-│  │  Handlers:                                                 │ │
-│  │  • CountRateMeasurementHandler                            │ │
-│  │  • SaveRawTagsMeasurementHandler                          │ │
-│  └────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Detailed Request Flow
-
-### Phase 1: HTTP Request Reception (< 5ms)
-
-```
-1. CLIENT sends HTTP request
-   POST /api/v1/measurements/count-rate
-   {
-     "measurement_type": "count_rate",
-     "duration_seconds": 30,
-     "metadata": {
-       "channels": [1, 2, 3],
-       "binwidth": 1000000000,
-       "n_values": 1,
-       "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
-     }
-   }
-
-2. FASTAPI Router (routes.py)
-   ├─ Route handler receives request
-   └─ Dependency injection provides: status_manager, job_processor
-
-3. PYDANTIC VALIDATION
-   ├─ Validate request model (CountRateMeasurementRequest)
-   ├─ Check required fields (measurement_type, duration_seconds, metadata)
-   ├─ Validate metadata structure (CountRateMetadata)
-   ├─ Check field types
-   └─ If invalid → Return HTTP 422 (Unprocessable Entity)
-
-4. GENERATE STATUS ID
-   ├─ Create UUID: status_id = uuid.uuid4()
-   └─ Example: "550e8400-e29b-41d4-a716-446655440000"
-```
-
-**Code Location**: `app/api/routes.py` lines 30-60 (start_count_rate_measurement)
-
----
-
-### Phase 2: Status Creation in Redis (< 10ms)
-
-```
-5. CREATE INITIAL STATUS IN REDIS
-   ├─ Status Manager creates record
-   ├─ Redis key: measurement:status:{status_id}
-   ├─ Initial state: QUEUED
-   ├─ Store metadata separately
-   │  └─ Redis key: measurement:metadata:{status_id}
-   └─ Set TTL: 3600 seconds (1 hour)
-
-   Redis stored object:
-   {
-     "status_id": "550e8400-e29b-41d4-a716-446655440000",
-     "measurement_type": "count_rate",
-     "status": "QUEUED",
-     "duration_seconds": 30,
-     "started_at": "2026-04-30T10:00:00Z",
-     "updated_at": "2026-04-30T10:00:00Z",
-     "message": "Job queued, waiting to be processed"
-   }
-```
-
-**Code Location**: `app/services/status_manager.py` - `create_status()` method
-
----
-
-### Phase 3: Immediate Response to Client (< 10ms total)
-
-```
-6. RETURN HTTP RESPONSE
-   ├─ HTTP 201 Created
-   └─ Response body:
-      {
-        "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
-        "measurement_type": "count_rate",
-        "status": "queued",
-        "started_at": "2026-04-30T10:00:00Z",
-        "message": "Count-rate measurement queued. Use ID '...' to query status"
-      }
-
-7. REQUEST HANDLING COMPLETE
-   ├─ Web layer is now FREE for next request
-   └─ Total time: < 10ms
-```
-
-**Code Location**: `app/api/routes.py` lines 50-60
-
----
-
-### Phase 4: Job Enqueue to Processor (< 1ms)
-
-```
-8. ENQUEUE JOB TO PROCESSOR
-   ├─ Call: job_processor.process_job(status_id, "count_rate", 30)
-   └─ This returns immediately
-
-9. JOB PROCESSOR RECEIVES JOB
-   ├─ Check if handler registered for "count_rate"
-   ├─ Get handler class: CountRateMeasurementHandler
-   ├─ Create handler instance
-   └─ Spawn new thread for job execution
-```
-
-**Code Location**: `app/services/job_processor.py` - `process_job()` method
-
----
-
-### Phase 5: Measurement Execution in Thread (background)
-
-```
-10. NEW THREAD STARTS (_run_job_in_thread)
-    ├─ Thread spawned with job details
-    └─ Main thread returns immediately
-
-11. THREAD EXECUTION - Update Status to ACTIVE
-    ├─ Status Manager updates Redis
-    ├─ Redis key: measurement:status:{status_id}
-    ├─ New state: ACTIVE
-    └─ Message: "Measurement started"
-
-    Redis update:
-    {
-      "status": "ACTIVE",
-      "updated_at": "2026-04-30T10:00:00.100Z",
-      "message": "Measurement is running"
-    }
-
-12. THREAD EXECUTION - Run Handler
-    ├─ Call handler.start() to execute measurement
-    ├─ Handler runs measurement logic
-    │  ├─ For count_rate: Count detector events for 30 seconds
-    │  └─ For save_raw_tags: Save raw tag events to file
-    ├─ Collect results
-    └─ Handle any errors
-```
-
-**Code Location**: `app/services/job_processor.py` - `_run_job_in_thread()` method
-
----
-
-### Phase 6: Measurement Completion & Result Storage
-
-```
-13. HANDLER COMPLETES SUCCESSFULLY
-    ├─ Results collected:
-    │  └─ Example: {"total_count": 12345, "duration": 30.0}
-    └─ Handler returns to thread
-
-14. UPDATE STATUS TO COMPLETED
-    ├─ Status Manager updates Redis
-    ├─ Status: COMPLETED
-    ├─ Store results
-    │  └─ Redis key: measurement:results:{status_id}
-    └─ Message: "Measurement completed successfully"
-
-    Redis final state:
-    {
-      "status": "COMPLETED",
-      "updated_at": "2026-04-30T10:00:30.500Z",
-      "message": "Measurement completed successfully",
-      "results": {
-        "total_count": 12345,
-        "duration": 30.0,
-        "live_time": 29.99,
-        "real_time": 30.00
-      }
-    }
-
-15. THREAD CLEANUP
-    ├─ Remove from active_jobs dictionary
-    ├─ Thread exits
-    └─ Resources released
-```
-
-**Code Location**: `app/services/job_processor.py` - `_run_job_in_thread()` method (lines handling COMPLETED state)
-
----
-
-### Phase 7: Error Handling (if something fails)
-
-```
-16. IF HANDLER ENCOUNTERS ERROR
-    ├─ Exception caught in thread
-    ├─ Status Manager updates Redis
-    ├─ Status: FAILED
-    ├─ Store error message
-    │  └─ Redis key: measurement:status:{status_id}
-    └─ Message: "Error: Connection timeout to detector"
-
-    Redis error state:
-    {
-      "status": "FAILED",
-      "error": "Connection timeout",
-      "updated_at": "2026-04-30T10:00:15.000Z",
-      "message": "Error: Connection timeout to detector"
-    }
-
-17. SERVICE CONTINUES
-    ├─ Other jobs in other threads unaffected
-    ├─ Web layer still accepting requests
-    └─ Error isolated to this specific job
-```
-
-**Code Location**: `app/services/job_processor.py` - Exception handling in `_run_job_in_thread()`
-
----
-
-## Status Query Flow
-
-### When Client Queries Status
-
-```
-CLIENT:
-  GET /api/v1/measurements/550e8400-e29b-41d4-a716-446655440000/status
-
-FASTAPI Router (routes.py):
-  ├─ Extract status_id from URL
-  └─ Call: status_manager.get_status(status_id)
-
-STATUS MANAGER:
-  ├─ Query Redis key: measurement:status:{status_id}
-  ├─ Retrieve current state from Redis
-  └─ Return status object
-
-RESPONSE:
-  {
-    "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
-    "measurement_type": "count_rate",
-    "status": "active",
-    "duration_so_far": 15.5,
-    "metadata": {"detector": "det_001"},
-    "results": null        ← Only populated when COMPLETED
-  }
-
-Note: Can be queried anytime, even while measurement is running
-```
-
-**Code Location**: `app/api/routes.py` - `get_measurement_status()` method
-
----
-
-## Stop Measurement Flow
-
-```
-CLIENT:
-  DELETE /api/v1/measurements/550e8400-e29b-41d4-a716-446655440000
-
-FASTAPI Router:
-  ├─ Extract status_id from URL
-  └─ Call: job_processor.stop_job(status_id)
-
-JOB PROCESSOR:
-  ├─ Look up job in active_jobs
-  ├─ Set stop flag or send interrupt signal
-  └─ Update status in Redis: STOPPED
-
-MEASUREMENT HANDLER:
-  ├─ Check stop signal/flag
-  ├─ Gracefully shutdown
-  └─ Return partial results if available
-
-STATUS MANAGER:
-  ├─ Update Redis: status = STOPPED
-  └─ Keep any partial results collected so far
-
-RESPONSE:
-  {
-    "status": "stopped",
-    "message": "Measurement stopped by user",
-    "results": {...partial results if any...}
-  }
-```
-
-**Code Location**: `app/api/routes.py` - `stop_measurement()` method
-
----
-
-## Component Interactions
-
-### FastAPI Router ↔ Status Manager
-
-```
-Routes (routes.py)
-   │
-   ├─→ create_status(status_id, type, duration, metadata)
-   ├─→ get_status(status_id)
-   ├─→ get_metadata(status_id)
-   ├─→ get_results(status_id)
-   ├─→ update_status(status_id, state, message, results)
-   └─→ delete_status(status_id)
-        │
-        └─→ Redis Operations
-            ├─ GET measurement:status:{id}
-            ├─ SET measurement:status:{id} [JSON]
-            ├─ GET measurement:metadata:{id}
-            ├─ SET measurement:results:{id} [JSON]
-            └─ DEL measurement:*:{id}
-```
-
-### FastAPI Router ↔ Job Processor
-
-```
-Routes (routes.py - Web Layer)
-   │
-   ├─→ enqueue_job(status_id, measurement_type, duration)  ← ONLY enqueueing
-   └─→ stop_job(status_id)  ← Mark job for stopping
-        │
-        └─→ Redis Job Queue (Message Broker)
-            ├─ Push job to measurement_job_queue
-            └─ Job awaits backend worker processing
-
-Worker (worker.py - Backend)
-   │
-   ├─→ get_next_job()  ← Pull from queue
-   ├─→ process_job()   ← Execute with registered handlers
-   └─→ Thread Operations
-       ├─ threading.Thread(target=_run_job_in_thread)
-       ├─ Store in active_jobs[status_id]
-       ├─ Set stop flag when stop requested
-       └─ Remove from active_jobs when done
-```
-
-### Job Processor ↔ Measurement Handlers (Backend Worker Only)
-
-```
-Worker (worker.py) - Initialization Phase
-   │
-   ├─→ createTimeTagger()  (skipped with --no-hardware)
-   ├─→ configure_test_signals()
-   │     ├─ default:   setTestSignal(all channels, False)
-   │     └─ --testing: setTestSignal(all channels, False), then setTestSignal([1..5], True)
-   ├─→ register_handler("count_rate", CountRateMeasurementHandler)
-   ├─→ register_handler("save_raw_tags", SaveRawTagsMeasurementHandler)
-   │
-   └─→ When Job Runs:
-        ├─→ Get handler class from registry
-        ├─→ Instantiate: handler = HandlerClass()
-        └─→ Call: handler.start()
-             │
-             └─→ Handler executes measurement
-                 ├─ CountRateMeasurementHandler.start() → counts events
-                 └─ SaveRawTagsMeasurementHandler.start() → saves tags
-
-Note: Handlers are ONLY registered in worker.py, not in main.py
-      This keeps the web layer stateless and scalable
-```
-
----
-
-## Data Flow Diagram
-
-```
-HTTP Request
-    │
-    ▼
-┌─────────────────────────────────────┐
-│   Pydantic Validation               │
-│   (Model validation layer)          │
-└─────────────────────────────────────┘
-    │
-    ├─ INVALID → HTTP 422 Response
-    │
-    └─ VALID ▼
-┌─────────────────────────────────────┐
-│   Generate Status ID (UUID)         │
-└─────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────┐
-│   Create Status in Redis            │
-│   (StatusManager.create_status)     │
-└─────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────┐
-│   Enqueue Job                       │
-│   (JobProcessor.process_job)        │
-└─────────────────────────────────────┘
-    │
-    ├─ Return HTTP 201 Response ────→ CLIENT
-    │
-    └─ Spawn Thread ▼
-┌─────────────────────────────────────┐
-│   Update Status: QUEUED → ACTIVE    │
-└─────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────┐
-│   Execute Measurement Handler       │
-│   (CountRate or SaveRawTags)        │
-└─────────────────────────────────────┘
-    │
-    ├─ SUCCESS ▼                 ├─ ERROR ▼
-    │                            │
-    ▼                            ▼
-┌──────────────────┐  ┌─────────────────────┐
-│ Collect Results  │  │ Capture Error Info  │
-└──────────────────┘  └─────────────────────┘
-    │                            │
-    ▼                            ▼
-┌──────────────────────────────────────────┐
-│ Update Status → COMPLETED or FAILED      │
-│ Store Results in Redis                   │
-└──────────────────────────────────────────┘
-    │
-    └─ CLIENT Queries Status via GET /status
+ MaaS GUI / scripts
+        │  HTTP + WebSocket (port 8000)
         ▼
-    ┌──────────────────────────────┐
-    │ StatusManager.get_status()   │
-    │ Returns current state + data │
-    └──────────────────────────────┘
-        │
-        └─→ HTTP 200 Response
+┌───────────────────────────────┐
+│ Web API  (main.py, FastAPI)   │  auth, validation, channel checks,
+│                               │  enqueue jobs, status, live stream
+└──────────────┬────────────────┘
+               │  Redis 127.0.0.1:6379, DB 0
+               ▼
+┌───────────────────────────────┐
+│ Redis                         │  job queue, status/metadata/results,
+│                               │  channel bookings, stop + live-data pub/sub
+└──────────────┬────────────────┘
+               │
+               ▼
+┌───────────────────────────────┐
+│ Worker  (worker.py)           │  owns the Time Tagger connection,
+│                               │  runs each job in its own thread
+└──────────────┬────────────────┘
+               │  USB
+               ▼
+         Swabian Time Tagger
 ```
 
+| Component | Code | Role |
+|-----------|------|------|
+| Web API | `main.py`, `app/api/routes.py`, `app/api/auth.py` | HTTP endpoints. Never talks to the Time Tagger |
+| Auth middleware | `app/middleware/auth_middleware.py` | Checks the JWT on `/api/v1/*` and user-management routes |
+| Audit route | `AuditRoute` in `app/api/routes.py` | Writes one line to `logs/audit.log` for every POST/PUT/DELETE |
+| User store | `app/db/database.py` → `maas_auth.db` (SQLite) | Users and roles |
+| StatusManager | `app/services/status_manager.py` | Measurement status and channel bookings in Redis |
+| JobProcessor | `app/services/job_processor.py` | Queue push/pop, one thread per job, stop handling |
+| Handlers | `app/services/*.py` | One class per measurement type, wrapping a Time Tagger measurement |
+| FileLogger | `app/services/file_logger.py` | `request_logs/*.txt` and `logs/measurements/*.jsonl` |
+| Worker | `worker.py` | Connects to the Time Tagger, registers handlers, pulls jobs |
+
+**There must be exactly one worker.** The Time Tagger accepts a single software connection, so
+a second worker (or Time Tagger Lab, or another script) cannot open the device. Measurements run
+in parallel as threads inside that one worker.
+
+### Measurement handlers
+
+| Type (queue name) | Handler | Time Tagger class |
+|-------------------|---------|-------------------|
+| `count_rate`, `count_rate_live` | `CountRateMeasurementHandler`, `CountRateLiveMeasurementHandler` | `Counter` |
+| `correlation` | `CorrelationMeasurementHandler` | `Correlation` |
+| `coincidences` / `coincidence` | `CoincidencesMeasurementHandler` | `Coincidences` → `Counter` |
+| `coincidences_live` / `coincidence_live` | `CoincidencesLiveMeasurementHandler` | `Coincidences` → `Counter` |
+| `save_raw_tags` | `SaveRawTagsMeasurementHandler` | `FileWriter` |
+| `startstop_live` | `StartStopLiveMeasurementHandler` | `StartStop` |
+| `histogram_live` | `HistogramLiveMeasurementHandler` | `Histogram` |
+| `correlation_live` | `CorrelationLiveMeasurementHandler` | `Correlation` |
+| `set_parameters` | `SetParametersHandler` | `setTriggerLevel`, `setInputDelay` |
+
+Handlers are registered only in `worker.py`. The web API just pushes job descriptions.
+
+### Redis keys
+
+| Key | Type | Content | Expiry |
+|-----|------|---------|--------|
+| `measurement:job_queue` | list | Pending jobs (JSON) | none |
+| `measurement:status:{id}` | string | Status JSON | 1 h after last update |
+| `measurement:metadata:{id}` | string | Request metadata | 1 h after creation |
+| `measurement:results:{id}` | string | Result summary | 1 h after completion |
+| `measurement:stop_channel` | pub/sub | IDs of measurements to stop | – |
+| `measurement:data:{id}` | pub/sub | Live data updates | – |
+| `channels:available`, `channels:booked`, `channels:booking_time` | set / hash / hash | Channel bookings | none |
+
 ---
 
-## Timing Analysis
+## 2. Starting a measurement
 
-| Phase | Component | Time | Notes |
-|-------|-----------|------|-------|
-| 1 | Pydantic Validation | < 1ms | Model type checking |
-| 2 | UUID Generation | < 0.1ms | Quick UUID creation |
-| 3 | Redis Status Create | < 5ms | Network + disk write |
-| 4 | HTTP Response | < 10ms | **Total to response** |
-| 5 | Thread Spawn | < 1ms | After response sent |
-| 6 | Handler Execution | 10-60s | Measurement duration |
-| 7 | Redis Update | < 5ms | Status + results update |
-| 8 | Status Query | < 10ms | Redis GET operation |
+```
+GUI                Web API                         Redis                    Worker
+ │ POST /count-rate   │                                │                        │
+ │──────────────────▶ │ 1 check JWT                    │                        │
+ │                    │ 2 validate body (422 if bad)   │                        │
+ │                    │ 3 channels valid? (400)        │                        │
+ │                    │   booked by user_name? (403)   │                        │
+ │                    │ 4 create status = queued ────▶ │                        │
+ │                    │ 5 RPUSH job_queue ───────────▶ │                        │
+ │                    │ 6 log request to file          │                        │
+ │ ◀── 201 {id} ──────│                                │                        │
+ │                    │                                │ ◀── BLPOP (1 s) ───────│ 7
+ │                    │                                │                        │ 8 new thread
+ │                    │                                │ ◀── status = active ───│ 9
+ │                    │                                │                        │ 10 run handler
+ │                    │                                │ ◀── completed+results ─│ 11
+```
+
+1. **Auth** – the middleware rejects missing/invalid/expired tokens with 401.
+2. **Validation** – the Pydantic model for the type (`app/models.py`) checks the body. Flat bodies
+   without a `metadata` object are accepted and wrapped automatically.
+3. **Channel check** – every channel must exist and be booked under `metadata.user_name`.
+4. **Status** – a UUID is generated and stored as `queued`.
+5. **Enqueue** – the job JSON goes onto `measurement:job_queue`.
+6. **Request log** – one line in `request_logs/measurement_requests.txt`.
+7. **Dequeue** – the worker polls the queue every second.
+8. **Thread** – `JobProcessor.process_job` starts a thread named `job-<id>`.
+9. **Active** – status becomes `active`; `started_at` is reset to this moment.
+10. **Run** – placeholders in `target_location` are filled in, the metadata is validated again,
+    and the handler runs the Time Tagger measurement for `duration_seconds` (or until stopped for
+    live types). File-based types write their output file at the end.
+11. **Finish** – status becomes `completed` with a result summary, or `failed` with the error in
+    `message`.
+
+Every status change is also appended to `logs/measurements/measurement_status_log.jsonl`.
+
+Channels are **not** released at the end; see
+[CHANNEL_MANAGEMENT_GUIDE.md](CHANNEL_MANAGEMENT_GUIDE.md).
 
 ---
 
-## Key Points
+## 3. Status query
 
-### Request-Response Separation
-- ✅ Response sent BEFORE job starts (< 10ms)
-- ✅ Job runs asynchronously in background thread
-- ✅ Client not blocked waiting for measurement
-
-### Status Persistence
-- ✅ All status stored in Redis
-- ✅ Survives web layer restarts
-- ✅ Queryable at any time
-- ✅ TTL auto-cleanup after 1 hour
-
-### Concurrent Execution
-- ✅ Multiple jobs run in separate threads
-- ✅ No blocking between jobs
-- ✅ Each job independent
-- ✅ Error in one doesn't affect others
-
-### Error Handling
-- ✅ Validation errors return immediately (HTTP 422)
-- ✅ Runtime errors caught and stored
-- ✅ Web layer continues functioning
-- ✅ Results still available for partial jobs
+`GET /api/v1/measurements/{id}/status` reads the status, metadata and results keys from Redis and
+adds `duration_so_far` (seconds since `started_at`). It never touches the worker. After the keys
+expire it returns 404.
 
 ---
 
-## Debugging: Tracing a Request
+## 4. Stopping
 
-### To trace a specific measurement through the system:
+```
+DELETE /measurements/{id}
+  Web API: status queued/active? → set status = stopped
+                                 → PUBLISH measurement:stop_channel <id>
+  Worker:  stop listener receives <id> → handler.stop()
+           → stops the Time Tagger measurement
+           → deletes the output file written so far (count-rate, correlation,
+             coincidences, save-raw-tags)
+```
 
-1. **Get the status_id** from the HTTP response
+- A job stopped while still `queued` is skipped when the worker picks it up.
+- If the measurement already finished, the call just returns its current status.
+- The worker never overwrites `stopped` with `completed`.
+- Channels stay booked.
+
+---
+
+## 5. Live data
+
+Live handlers publish a JSON update to `measurement:data:{id}` at `refresh_rate` Hz. The web API's
+WebSocket endpoint `/api/v1/measurements/stream/{id}` subscribes to that channel and forwards every
+message to the client. The WebSocket checks the same JWT (header or `?token=`) and closes with
+code 1008 if it is missing or invalid.
+
+The live data is not stored; a client that connects late only sees updates from that point on.
+
+---
+
+## 6. Releasing channels
+
+`POST /api/v1/channels/release/{user}` frees the channels in Redis and then enqueues a
+`set_parameters` job that sets them back to 0.5 V trigger and 0 ps delay. The ID of that job is
+returned as `parameter_reset_id`.
+
+---
+
+## 7. Worker startup and Redis loss
+
+On startup the worker:
+
+1. Connects to Redis and checks it with `PING`.
+2. Opens the Time Tagger (`createTimeTagger()`), switches its built-in test signal off, sets the
+   trigger level of channels 12 and 16 to 0 V, and publishes every channel's trigger level and
+   delay for `GET /api/v1/channels/parameters`.
+3. Registers the handlers and starts polling the queue.
+
+If Redis becomes unreachable, the worker retries with exponential backoff (up to 5 times) and exits
+if it still can't connect.
+
+On `Ctrl+C` the worker stops all running jobs and closes Redis; the web API closes its Redis
+connection and stops within 5 seconds even if WebSocket clients are still connected.
+
+---
+
+## 8. Tracing one request
+
+1. Take the `measurement_id` from the response or from `request_logs/measurement_requests.txt`.
+2. Search the logs for it:
    ```bash
-   # Example: "550e8400-e29b-41d4-a716-446655440000"
+   grep -r "<measurement_id>" logs request_logs
    ```
-
-2. **Query Redis directly**
+   - `logs/services/main.log` – received, validated, enqueued
+   - `logs/services/worker.log` – picked up, started, finished or failed (with stack trace)
+   - `logs/measurements/measurement_status_log.jsonl` – each status change with timestamp
+3. Look at Redis directly (while the keys still exist):
    ```bash
-   redis-cli GET "measurement:status:550e8400-e29b-41d4-a716-446655440000"
+   redis-cli GET measurement:status:<measurement_id>
+   redis-cli LLEN measurement:job_queue
    ```
+   A growing `LLEN` means the worker isn't picking jobs up.
 
-3. **Check logs**
-   - Look for status_id in logs from routes.py
-   - Look for status_id in logs from job_processor.py
-   - Look for handler execution logs
-
-4. **Query status endpoint**
-   ```bash
-   curl http://localhost:8000/api/v1/measurements/550e8400-e29b-41d4-a716-446655440000/status
-   ```
-
-5. **Monitor active jobs**
-   - In job_processor.py: check `active_jobs` dictionary
-   - Thread should appear while running
-   - Should disappear when done
-
----
-
-## References
-
-- **Pydantic Models**: `app/models.py`
-- **Routes**: `app/api/routes.py`
-- **Status Manager**: `app/services/status_manager.py`
-- **Job Processor**: `app/services/job_processor.py`
-- **Main App (Web Layer)**: `main.py`
-- **Worker (Backend)**: `worker.py`
+`logs/audit.log` records each POST/PUT/DELETE with user ID, role, path, the HTTP status the client
+received, and the error message. For a stop request, `target_hardware_id` is the measurement ID.

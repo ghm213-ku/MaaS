@@ -51,7 +51,7 @@ def test_login_success():
     response = client.post("/auth/login", json={"username": username, "password": password})
     assert response.status_code == 200
     assert "token" in response.json()
-    assert response.json()["expires_in"] == 43200
+    assert response.json()["expires_in"] == 604800  # 1 week
 
 def test_login_invalid_password():
     username = f"user_{uuid.uuid4()}"

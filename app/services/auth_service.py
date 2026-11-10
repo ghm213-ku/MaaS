@@ -17,7 +17,7 @@ if not JWT_SECRET:
             f.write(JWT_SECRET)
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_SECONDS = 43200  # 12 hours
+ACCESS_TOKEN_EXPIRE_SECONDS = 7 * 24 * 60 * 60  # 1 week (604800 s)
 
 # Password hashing context using bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

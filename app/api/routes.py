@@ -12,6 +12,7 @@ from typing import Annotated, Optional, Callable
 from datetime import datetime
 import uuid
 from fastapi.routing import APIRoute
+from fastapi.exceptions import RequestValidationError
 
 from app.models import (
     CountRateMeasurementRequest,
@@ -44,10 +45,11 @@ from app.services.job_processor import JobProcessor
 from app.services.status_manager import StatusManager, MeasurementStatus
 from app.services.file_logger import FileLogger
 from app.utils.logger import configure_logging
-from app.services.audit_logger import log_audit_event
+from app.services.audit_logger import log_audit_event, audit_target
 from app.db.database import get_user_by_id
 
 logger = configure_logging(__name__)
+
 
 class AuditRoute(APIRoute):
     def get_route_handler(self) -> Callable:
@@ -66,6 +68,11 @@ class AuditRoute(APIRoute):
                 status_code = exc.status_code
                 message = exc.detail
                 raise exc
+            except RequestValidationError as exc:
+                # FastAPI turns this into a 422 response; record the same status
+                status_code = 422
+                message = str(exc.errors())
+                raise exc
             except Exception as exc:
                 message = str(exc)
                 raise exc
@@ -74,12 +81,8 @@ class AuditRoute(APIRoute):
                     user_id = getattr(request.state, "user_id", None)
                     role = getattr(request.state, "role", None)
                     action = request.url.path.strip("/").split("/")[-1]
-                    target_hardware_id = "system"
-                    if "measurements/" in request.url.path:
-                        parts = request.url.path.split("/")
-                        if parts[-1] not in ["count-rate", "correlation", "coincidences", "coincidence", "coincidences-live", "coincidence-live", "save-raw-tags"]:
-                            target_hardware_id = parts[-1]
-                    
+                    target_hardware_id = audit_target(request.method, request.url.path)
+
                     log_audit_event(
                         user_id=user_id,
                         role=role,
@@ -243,7 +246,7 @@ def start_count_rate_measurement(
     Returns a unique measurement ID (status ID) to be used for status queries and stopping.
     The job is enqueued for processing by the backend worker.
 
-    Automatically books the specified channels.
+    The channels must already be booked under metadata.user_name.
     """
     return _handle_measurement_request(
         request_name="count-rate",
@@ -273,7 +276,7 @@ def start_count_rate_live_measurement(
     Returns a unique measurement ID (status ID) to be used for status queries and stopping.
     The job is enqueued for processing by the backend worker.
 
-    Automatically books the specified channels. Data will be streamed via Redis pub/sub on
+    The channels must already be booked under metadata.user_name. Data is streamed via Redis pub/sub on
     channel `measurement:data:<status_id>`.
     """
     return _handle_measurement_request(
@@ -304,7 +307,7 @@ def start_save_raw_tags_measurement(
     Returns a unique measurement ID (status ID) to be used for status queries and stopping.
     The job is enqueued for processing by the backend worker.
 
-    Automatically books the channels specified in the channel_list.
+    The channels in channel_list must already be booked under metadata.user_name.
     """
     return _handle_measurement_request(
         request_name="save-raw-tags",
@@ -334,7 +337,7 @@ def start_correlation_measurement(
     Returns a unique measurement ID (status ID) to be used for status queries and stopping.
     The job is enqueued for processing by the backend worker.
 
-    Automatically books the specified channels (channel1 and channel2).
+    channel1 and channel2 must already be booked under metadata.user_name.
     """
     return _handle_measurement_request(
         request_name="correlation",
@@ -939,10 +942,10 @@ def stop_measurement(
     status_manager: StatusManager = Depends(get_status_manager),
 ) -> MeasurementResponse:
     """
-    Stop an active measurement request, delete its data file, and release channels.
+    Stop a queued or active measurement and delete its data file.
 
-    Stops the running measurement, deletes any data file that has already been
-    written for it, and releases its booked channels.
+    Stops the running measurement and deletes any data file it has already
+    written. Its channels stay booked.
 
     Args:
         measurement_id: The unique status ID returned when starting the measurement
@@ -952,7 +955,7 @@ def stop_measurement(
 
     Raises:
         404: If measurement not found
-        409: If measurement is not active/queued
+        (A measurement that has already finished is returned unchanged.)
     """
     logger.info(f"[{measurement_id}] Received stop request")
 
@@ -989,7 +992,7 @@ def stop_measurement(
                 f"[{measurement_id}] Cannot stop job in {current_status} state"
             )
 
-        # Release channels was removed because channels are manually booked by user
+        # Channels stay booked; users release them via POST /channels/release
 
         # Get updated status
         updated_status = status_manager.get_status(measurement_id)

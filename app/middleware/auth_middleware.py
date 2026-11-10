@@ -3,7 +3,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from app.services.auth_service import decode_access_token
-from app.services.audit_logger import log_audit_event
+from app.services.audit_logger import log_audit_event, audit_target
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -16,11 +16,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 is_audit_method = request.method in ["POST", "PUT", "DELETE"]
                 if is_audit_method:
                     action = path.strip("/").split("/")[-1]
-                    target_hardware_id = "system"
-                    if "measurements/" in path:
-                        parts = path.split("/")
-                        if parts[-1] not in ["count-rate", "correlation", "coincidences", "save-raw-tags"]:
-                            target_hardware_id = parts[-1]
+                    target_hardware_id = audit_target(request.method, path)
                     log_audit_event(None, None, action, target_hardware_id, request.method, path, 401, msg)
 
             auth_header = request.headers.get("Authorization")

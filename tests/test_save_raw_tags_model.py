@@ -216,8 +216,9 @@ class TestSaveRawTagsMeasurementHandlerWithMockedTagger:
         
         channels = [1, 2, 3]
         file_path = "C:\\test\\output.dat"
-        duration = 60
-        
+        # start() waits duration + 1 s for the (mocked) FileWriter; keep it short
+        duration = 0.1
+
         with patch("Swabian.TimeTagger.FileWriter", return_value=mock_file_writer):
             # Extract from metadata like the API would
             metadata = SaveRawTagsMetadata(user_name="test_user", channel_list=channels, target_file_path=file_path)
