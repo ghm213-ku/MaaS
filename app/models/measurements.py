@@ -557,6 +557,13 @@ class MeasurementResponse(BaseModel):
     status: str = Field(description="Current status: 'queued', 'active', 'completed', 'stopped', 'failed'")
     started_at: datetime = Field(description="When the measurement started")
     message: str = Field(description="Status message")
+    stop_acknowledged: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Only set by DELETE: true once the worker confirmed the measurement has "
+            "ended, false if it did not confirm within STOP_ACK_TIMEOUT_SECONDS"
+        ),
+    )
 
 
 class MeasurementStatusResponse(BaseModel):

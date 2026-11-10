@@ -15,6 +15,13 @@ REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
 
+# Stopping measurements. A stop request is stored in Redis; each running job
+# checks for it every STOP_POLL_INTERVAL_SECONDS, so a stop can't be lost even
+# if the pub/sub notification is missed. DELETE /measurements/{id} waits up to
+# STOP_ACK_TIMEOUT_SECONDS for the worker to confirm that the job has ended.
+STOP_POLL_INTERVAL_SECONDS = float(os.getenv("STOP_POLL_INTERVAL_SECONDS", "0.5"))
+STOP_ACK_TIMEOUT_SECONDS = float(os.getenv("STOP_ACK_TIMEOUT_SECONDS", "3"))
+
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

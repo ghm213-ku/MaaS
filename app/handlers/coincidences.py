@@ -96,7 +96,6 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
         logger.info("Starting coincidences measurement")
         self._start_time = datetime.utcnow()
         self._target_location = metadata.target_location
-        self._stopped = False
         self._count = 0
 
         self._measurement_task = asyncio.current_task()
@@ -109,6 +108,8 @@ class CoincidencesMeasurementHandler(MeasurementHandler):
         try:
             import os
             self._stop_event = asyncio.Event()
+            if self._stopped:  # stop() was called before the wait began
+                self._stop_event.set()
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=duration_seconds + 1)
             except asyncio.TimeoutError:

@@ -172,6 +172,15 @@ class StatusManager:
 
         return status_obj
 
+    def refresh_ttl(self, status_id: str, seconds: int = 3600) -> None:
+        """Keep a running measurement's status, metadata and results from expiring.
+
+        Without this a measurement running longer than an hour loses its status
+        key, and DELETE /measurements/{id} can no longer find it to stop it.
+        """
+        for prefix in (self.status_prefix, self.metadata_prefix, self.results_prefix):
+            self.redis_client.expire(f"{prefix}{status_id}", seconds)
+
     def get_metadata(self, status_id: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a measurement."""
         metadata_key = f"{self.metadata_prefix}{status_id}"

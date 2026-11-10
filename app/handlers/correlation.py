@@ -40,7 +40,6 @@ class CorrelationMeasurementHandler(MeasurementHandler):
         """
         logger.info("Starting correlation measurement")
         self._start_time = datetime.utcnow()
-        self._stopped = False
 
         # Extract parameters from metadata
         channel1 = metadata.channel1
@@ -70,6 +69,8 @@ class CorrelationMeasurementHandler(MeasurementHandler):
         try:
             import os
             self._stop_event = asyncio.Event()
+            if self._stopped:  # stop() was called before the wait began
+                self._stop_event.set()
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=duration_seconds+1)
             except asyncio.TimeoutError:

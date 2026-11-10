@@ -32,7 +32,6 @@ class SetParametersHandler(MeasurementHandler):
         """
         logger.info("Starting set-parameters")
         self._start_time = datetime.utcnow()
-        self._stopped = False
 
         # Extract parameters from metadata
         channels = metadata.channels
