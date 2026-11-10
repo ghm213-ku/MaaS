@@ -1,412 +1,96 @@
-"""
-# Distributed System - Deployment Checklist
+# Deployment Checklist
 
-## Pre-Deployment Verification
+Use this list when setting MaaS up on the measurement PC, or after updating it. MaaS runs on
+**one PC**, the one the Time Tagger is plugged into: one Redis, one web API, one worker.
 
-### Environment Setup
-- [ ] Python 3.10+ installed
-- [ ] Redis server available (Start-Service memurai)
-- [ ] All dependencies installed: `pip install -r requirements.txt`
-
-### Code Verification
-- [ ] All new files syntax checked
-- [ ] Integration tests pass: `pytest tests/test_distributed_integration.py -v`
-- [ ] Existing tests still pass: `pytest tests/ -v`
-- [ ] No import errors in main.py
-
-### Configuration Review
-- [ ] Redis host/port configured correctly in main.py
-- [ ] Redis DB number set (default: 0 for prod, 15 for tests)
-- [ ] TTL settings appropriate for use case
-- [ ] Port 8000 (web layer) is available
+For day-to-day starting and troubleshooting see [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ---
 
-## Development Deployment (Quick Test)
+## 1. Install
 
-### Step 1: Verify Redis
+- [ ] Python 3.10+ on `PATH` (`python --version`)
+- [ ] Swabian Time Tagger software installed for that same Python:
+      `python -c "from Swabian import TimeTagger; print('OK')"`
+- [ ] Redis running on `127.0.0.1:6379`. On Windows this is Memurai:
+      `Get-Service memurai` shows `Running`, and the service start type is **Automatic**
+- [ ] Dependencies installed from the MaaS folder: `pip install -r requirements.txt`
+- [ ] Time Tagger connected by USB and **not** open in Time Tagger Lab or another program
+
+## 2. Before first use
+
+- [ ] Run the test suite (needs neither Redis nor the Time Tagger): `pytest`
+- [ ] Set a JWT secret: either set the `JWT_SECRET` environment variable, or delete `.jwt_secret`
+      so a new random one is created on first start. Do not reuse the secret from the repository
+- [ ] Start the service once (section 3), log in as `admin` / `admin` and **change the password**
+      (GUI, or `PUT /auth/password`)
+- [ ] Create a user account for each person (`POST /auth/users`, admin only). New accounts start
+      with password = username; each user changes it on first login
+- [ ] Decide who can reach port 8000. The API listens on all network interfaces over plain HTTP
+      (no TLS). If the GUI runs on the same PC, block port 8000 for other machines in Windows
+      Firewall; otherwise allow only the GUI machines
+- [ ] Turn on Redis persistence (snapshotting) if channel bookings should survive a reboot.
+      Measurement status is short-lived anyway (1 hour)
+
+## 3. Start
+
+In the MaaS folder, in this order:
+
 ```bash
-Get-Service memurai
-```
-
-### Step 2: Start Web Layer
-```bash
-python -m uvicorn main:app --reload --port 8000
-```
-
-### Step 3: In Another Terminal, Start Worker
-```bash
-python worker.py
-
-# Without detectors attached: enable the TimeTagger test signal on channels 1-5
-python worker.py --testing
-```
-
-### Step 4: Test API
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Create measurement
-Invoke-RestMethod -Uri "http://localhost:8000/api/v1/measurements/count-rate" -Method Post -ContentType "application/json" -Body '{"duration_seconds": 5, "metadata": {"channels": [1, 2, 3], "binwidth": 1000000000, "n_values": 1, "target_location": "desktop/MaasData/{datetime}/{measurement-type}"}}'
-
-# Save the measurement_id from response, then:
-curl http://localhost:8000/api/v1/measurements/{measurement_id}/status
-```
-
----
-
-## Production Deployment
-
-### Prerequisites
-- [ ] Redis configured for persistence (dump.rdb)
-- [ ] Redis memory limits set appropriately
-- [ ] Redis password protected (if exposed)
-- [ ] Monitoring/alerting configured
-
-### Deployment Steps
-
-#### 1. Prepare Environment
-```bash
-# Create Python virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Verify installation
-python -c "import redis; import fastapi; print('OK')"
-```
-
-#### 2. Start Redis
-```bash
-# Using systemd (Linux)
-sudo systemctl start redis-server
-
-# Or direct
-redis-server /etc/redis/redis.conf
-
-# Verify
-redis-cli PING
-```
-
-#### 3. Start Web Layer
-```bash
-# Option A: Direct (development)
 python main.py
-
-# Option B: With Gunicorn (production)
-gunicorn main:app \
-  --workers 4 \
-  --worker-class uvicorn.workers.UvicornWorker \
-  --bind 0.0.0.0:8000
-
-# Option C: With systemd
-sudo systemctl start maas-web
 ```
 
-#### 4. Start Backend Worker(s)
-
-- [ ] Start production workers **without** `--testing`. A normal run switches the TimeTagger test signal off on all channels, and `--testing` would inject the test signal into channels 1-5.
-
 ```bash
-# Single worker
 python worker.py
-
-# Multiple workers (in separate processes/servers)
-python worker.py &
-python worker.py &
-python worker.py &
 ```
 
-#### 5. Configure Reverse Proxy (Nginx)
-```nginx
-upstream maas_web {
-    server localhost:8000;
-}
-
-server {
-    listen 80;
-    server_name maas.example.com;
-    
-    location / {
-        proxy_pass http://maas_web;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_connect_timeout 10s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-}
-```
-
-#### 6. Setup Monitoring
-```bash
-# Option A: Simple health checks
-curl http://localhost:8000/health
-
-# Option B: Prometheus metrics
-# Add prometheus client to requirements.txt
-pip install prometheus-client
-
-# Option C: Redis monitoring
-redis-cli INFO
-redis-cli SLOWLOG GET 10
-```
-
----
-
-## Health Checks
-
-### Pre-Deployment
-```bash
-# 1. Redis health
-redis-cli ping
-
-# 2. Python imports
-python -c "from app.services.status_manager import StatusManager; print('OK')"
-python -c "from app.services.job_processor import JobProcessor; print('OK')"
-
-# 3. Network connectivity
-curl -v http://localhost:8000/health
-```
-
-### Post-Deployment
-```bash
-# 1. Service startup
-curl http://localhost:8000/health
-
-# 2. Create test measurement
-curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
-  -H "Content-Type: application/json" \
-  -d '{"channels": [1], "binwidth": 1000000000, "n_values": 1, "target_location": "desktop/MaasData/{datetime}/{measurement-type}", "duration_seconds": 2}'
-
-# 3. Query status (should show COMPLETED after 2 seconds)
-curl http://localhost:8000/api/v1/measurements/{measurement_id}/status
-```
-
-### Production Monitoring
-```bash
-# Monitor processes
-ps aux | grep python
-ps aux | grep redis
-
-# Monitor ports
-netstat -tuln | grep -E "(6379|8000)"
-
-# Monitor Redis memory
-redis-cli INFO memory
-
-# Check for stuck jobs
-redis-cli KEYS "measurement:status:*" | wc -l
-```
-
----
-
-## Rollback Plan
-
-### If Issues Occur
-
-1. **Web Layer Crash**
-   ```bash
-   # Status preserved in Redis
-   # Simply restart web layer
-   pkill -f main
-   python main.py
-   ```
-
-2. **Worker Crash**
-   ```bash
-   # Jobs in progress stored in Redis
-   # Restart worker
-   pkill -f worker
-   python worker.py
-   ```
-
-3. **Redis Crash**
-   ```bash
-   # Graceful degradation if Redis unavailable
-   # Queue new requests while Redis recovers
-   # Health check will report unhealthy
-   # Restart Redis
-   redis-server
-   ```
-
----
-
-## Performance Optimization
-
-### Web Layer
-```bash
-# Increase workers for more concurrency
-gunicorn main:app \
-  --workers 8 \
-  --worker-class uvicorn.workers.UvicornWorker
-```
-
-### Backend Workers
-```bash
-# Multiple workers for job parallelism
-for i in {1..4}; do
-  python worker.py &
-done
-```
-
-### Redis
-```bash
-# Edit redis.conf
-maxmemory 2gb
-maxmemory-policy allkeys-lru
-```
-
----
-
-## Scaling Strategy
-
-### Phase 1: Single Server
-- 1 Redis instance
-- 1 Web layer
-- 1 Backend worker
-
-### Phase 2: Separate Web & Worker
-- 1 Redis instance (separate box)
-- N Web layer instances (load balanced)
-- M Backend workers (separate box)
-
-### Phase 3: Distributed
-- Redis Cluster (multiple nodes)
-- Web layer (auto-scaled)
-- Backend workers (auto-scaled)
-
----
-
-## Disaster Recovery
-
-### Data Backup
-```bash
-# Redis persistence
-redis-cli BGSAVE  # Background save
-
-# Scheduled backup
-0 2 * * * redis-cli BGSAVE
-
-# Monitor dump.rdb
-ls -lh /var/lib/redis/dump.rdb
-```
-
-### Status Recovery
-```bash
-# If Redis data corrupted
-redis-cli FLUSHDB  # Clear corrupted data
-# Jobs will need to be restarted
-
-# If Redis completely lost
-# Status data lost (by design, TTL=1 hour)
-# Jobs restart from queue
-```
-
----
-
-## Post-Deployment Verification
-
-### Day 1
-- [ ] All health checks passing
-- [ ] Sample measurements complete successfully
-- [ ] Status queries working correctly
-- [ ] Logs are clean (no errors)
-
-### Week 1
-- [ ] Multiple concurrent measurements working
-- [ ] Memory usage stable
-- [ ] No Redis connection issues
-- [ ] Worker processes alive
-
-### Month 1
-- [ ] Performance metrics collected
-- [ ] Any issues identified and fixed
-- [ ] Monitoring/alerting working
-- [ ] Scaling needs identified
-
----
-
-## Maintenance Schedule
-
-### Daily
-- [ ] Monitor processes running
-- [ ] Check for error logs
-- [ ] Verify Redis connectivity
-
-### Weekly
-- [ ] Review performance metrics
-- [ ] Check Redis memory usage
-- [ ] Verify backup completion
-
-### Monthly
-- [ ] Update dependencies
-- [ ] Review logs for patterns
-- [ ] Optimize configuration if needed
-
-### Quarterly
-- [ ] Security updates
-- [ ] Performance tuning
-- [ ] Capacity planning
-
----
-
-## Contact & Support
-
-### If Issues Occur
-1. Check health endpoint: `curl http://localhost:8000/health`
-2. Review logs: Look in worker.py output
-3. Check Redis: `redis-cli PING`
-4. Refer to troubleshooting in `DISTRIBUTED_ARCHITECTURE.md`
-
-### Documentation
-- **Quick Start**: See [README.md](../README.md) or [README_DEVELOPER_GUIDE.md](README_DEVELOPER_GUIDE.md)
-- **Full Docs**: [DISTRIBUTED_ARCHITECTURE.md](DISTRIBUTED_ARCHITECTURE.md)
-- **API Docs**: `http://localhost:8000/docs`
-- **Tests**: `pytest tests/test_distributed_integration.py -v`
-
----
-
-## Deployment Confirmation Template
-
-```
-Deployment Date: _______________
-Deployed by: ___________________
-Environment: [ ] Dev [ ] Staging [ ] Production
-
-Pre-Deployment Checks:
-- [ ] Redis running and healthy
-- [ ] All dependencies installed
-- [ ] Tests passing (✅ / ❌)
-- [ ] Configuration reviewed
-
-Deployment Actions:
-- [ ] Web layer started (time: ___)
-- [ ] Backend worker started (time: ___)
-- [ ] Health check passing (✅ / ❌)
-- [ ] Sample measurement tested (✅ / ❌)
-
-Post-Deployment:
-- [ ] All endpoints responding
-- [ ] No error logs
-- [ ] Monitoring active
-- [ ] Team notified
-
-Notes:
-_________________________________
-_________________________________
-_________________________________
-
-Sign-off: _____________________
-```
-
----
-
-**Status**: ✅ Ready for Deployment
-
-The distributed system is fully implemented, tested, and documented.
-Proceed with deployment following the steps above.
-"""
+- [ ] `main.py` logs `Web API layer initialized successfully`
+- [ ] `worker.py` logs `Backend worker started`
+- [ ] Start the worker **without** `--testing` or `--no-hardware` (those are for development only)
+- [ ] Start **only one worker**. The Time Tagger allows one connection, and measurements already
+      run in parallel inside the worker
+- [ ] Start **only one web API process** (no `--workers N`, no gunicorn with several workers): the
+      app keeps its state in one process
+
+## 4. Verify
+
+- [ ] `http://localhost:8000/health` shows `"status": "healthy"` and `"redis": "healthy"`
+- [ ] Log in from the GUI
+- [ ] Book a channel, run a short count-rate measurement, see it reach `completed`, and find the
+      CSV under `~/Desktop/MaasData/<YYYYMMDD_HHMMSS>/`
+- [ ] Release the channel; `GET /api/v1/channels/available` shows it free again
+- [ ] `logs/services/main.log`, `logs/services/worker.log` and `logs/audit.log` are being written
+
+## 5. After updating the code
+
+- [ ] Stop the worker and the API (`Ctrl+C`). **Any running measurement is stopped and its partial
+      data file deleted**, so wait until nobody is measuring
+- [ ] `git pull`, then `pip install -r requirements.txt`
+- [ ] `pytest`
+- [ ] Start again (section 3) and verify (section 4)
+
+Restarting does not affect users, channel bookings or the queue: these live in `maas_auth.db` and
+Redis.
+
+## 6. Housekeeping
+
+| What | Where | Notes |
+|------|-------|-------|
+| Measurement data | `~/Desktop/MaasData/` (default) | Never deleted by MaaS; archive or clean up yourself |
+| Service logs | `logs/services/*.log` | Grow without limit; rotate or truncate periodically |
+| Status history | `logs/measurements/measurement_status_log.jsonl` | Grows without limit |
+| Request logs | `request_logs/*.txt` | Grow without limit |
+| Audit log | `logs/audit.log` | Rotates automatically (10 × 50 MB) |
+| Users | `maas_auth.db` | Back this file up; deleting it resets to just `admin` / `admin` |
+| Stale channel bookings | `GET /api/v1/channels/available` | An admin can release any user's channels |
+
+## 7. If something breaks
+
+| Problem | Action |
+|---------|--------|
+| API down | Restart `python main.py`. Status, bookings and queued jobs are in Redis and are kept |
+| Worker down | Restart `python worker.py`. Queued jobs are picked up; jobs that were running are lost and stay `active` until their status expires (1 hour) |
+| Redis down | Start Memurai (`Start-Service memurai`), then restart the worker (it gives up after 5 reconnect attempts) |
+| Time Tagger not found | Check USB, close other Time Tagger software, restart the worker |
+
+More symptoms and fixes: [GETTING_STARTED.md](GETTING_STARTED.md#6-troubleshooting).

@@ -3,7 +3,7 @@ REM Quick startup script for MaaS on Windows
 
 echo.
 echo ==================== MaaS Startup ====================
-echo Measurement as a Service (HTTPS)
+echo Measurement as a Service
 echo ====================================================
 echo.
 
@@ -37,9 +37,11 @@ echo.
 echo Starting MaaS service...
 echo.
 echo Service will be available at:
-echo   - HTTPS API: https://localhost:8443
-echo   - Documentation: https://localhost:8443/docs
-echo   - Health Check: https://localhost:8443/health
+echo   - API: http://localhost:8000
+echo   - Documentation: http://localhost:8000/docs
+echo   - Health Check: http://localhost:8000/health
+echo.
+echo Make sure Redis is running and start the worker separately: python worker.py
 echo.
 echo Press Ctrl+C to stop the service
 echo.

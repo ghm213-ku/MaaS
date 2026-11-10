@@ -1,482 +1,170 @@
-# Channel Management System Documentation
+# Channel Management Guide
 
-## Overview
-
-A complete **channel booking and availability tracking system** has been implemented for the MaaS (Measurements as a Service) distributed architecture. This system enables exclusive access to 48 total channels across three ranges (1-16, 101-116, 201-216) with real-time persistence using Redis.
-
----
-
-## Architecture
-
-### Core Components
-
-#### 1. **StatusManager Service** (`app/services/status_manager.py`)
-Redis-backed service for managing both measurement status and channel availability.
-
-**Key Features:**
-- Manage measurement status and results
-- Initialize all 48 channels as available on startup
-- Book channels exclusively (only one measurement per channel)
-- Release channels after measurement completion
-- Track booking timestamps and measurement ownership
-- Provide channel statistics and health checks
-
-**Data Structures in Redis:**
-```
-measurement:status:{id}      - Status of measurements
-measurement:metadata:{id}    - Measurement metadata
-measurement:results:{id}     - Measurement results
-channels:available           - Set of available channel numbers
-channels:booked              - Hash mapping channel → measurement_id
-channels:booking_time        - Hash mapping channel → booking_timestamp
-```
-
-#### 2. **Integration Points**
-
-**Measurement Start (routes.py):**
-- When starting a measurement, channels are booked automatically
-- For `save_raw_tags`: channels from `channel_list` are booked
-- For `count_rate`: channels from metadata `channel_list` (optional) are booked
-- Returns HTTP 409 if any channel is already booked
-
-**Measurement Completion (job_processor.py):**
-- Channels are automatically released in the job thread's finally block
-- Ensures channels are freed even if the job fails
-- Works for normal completion, failures, and manual stops
-
-**Measurement Stop (routes.py):**
-- DELETE endpoint releases channels immediately
-- Prevents orphaned channel bookings
+MaaS shares one Time Tagger between several users. To keep users from measuring on each other's
+inputs, every channel must be **booked** before it can be used in a measurement.
 
 ---
 
-## API Endpoints
+## Channels
 
-### ✨ NEW: Dedicated Channel Routers at `/api/v1/channels/`
+There are **48 channels**: `1–16`, `101–116` and `201–216`.
 
-All channel management is now separated into dedicated routers:
-- **Measurement endpoints**: `/api/v1/measurements/*`
-- **Channel endpoints**: `/api/v1/channels/*`
-
-### Channel Information Endpoints
-
-#### 1. **GET /api/v1/channels/**
-List all channels with their current status.
-
-**Endpoint**: `GET /api/v1/channels/`
-
-**Response (200):**
-```json
-{
-  "channels": [
-    {
-      "channel": 1,
-      "status": "available",
-      "booked_by": null
-    },
-    {
-      "channel": 2,
-      "status": "booked",
-      "booked_by": "measurement-abc-123"
-    }
-  ],
-  "total_channels": 48,
-  "available_channels": 46,
-  "booked_channels": 2
-}
-```
-
-#### 2. **GET /api/v1/channels/available**
-Get available channels and channel statistics.
-
-**Endpoint**: `GET /api/v1/channels/available`
-
-**Response (200):**
-```json
-{
-  "total_channels": 48,
-  "available_channels": 46,
-  "booked_channels": 2,
-  "utilization_percent": 4.17,
-  "available_channel_numbers": [1, 3, 5, 6, 7, ...],
-  "booked_by_identifier": {
-    "measurement-id-1": [2, 101, 102],
-    "measurement-id-2": [4]
-  }
-}
-```
+- A channel is either `available` or `booked` by exactly one user.
+- A measurement is accepted only if **every** channel it uses is booked under the `user_name` it
+  sends (otherwise **403**).
+- Booking and releasing are always **manual**. Channels stay booked after a measurement completes,
+  stops or fails, and also across service restarts, until someone releases them.
+- Releasing a channel resets its trigger level to **0.5 V** and its input delay to **0 ps**.
 
 ---
 
-### Channel Booking/Release Endpoints
+## Who may do what
 
-#### Who may book and release channels
-
-Both endpoints require a valid `Authorization: Bearer <token>`. The caller's username is
-looked up from the user id in the token.
+All channel endpoints need a valid `Authorization: Bearer <token>`. The caller's username comes
+from the token.
 
 | Action | Normal user (operator / viewer) | Admin |
 |--------|---------------------------------|-------|
-| Book channels | Only under **their own username** (`user_name` must equal the caller's username) | Same rule: only under **their own username**. Admins have no bypass. |
-| Release channels | Only channels booked under **their own username** (`{user_name}` in the path must equal the caller's username) | Channels booked by **any user**: put the owner's username in the path |
+| See channels | Yes | Yes |
+| Book | Only under **their own** username | Only under **their own** username (no bypass) |
+| Release | Only **their own** channels | Channels of **any** user (put the owner's username in the path) |
 
-A request that breaks these rules is rejected with **403** and changes nothing.
+A request that breaks these rules gets **403** and changes nothing.
 
-#### 3. **POST /api/v1/channels/book**
-Book (reserve) channels under the caller's own username.
+---
 
-**Endpoint**: `POST /api/v1/channels/book`
+## Endpoints
 
-`user_name` must be the authenticated caller's username. This applies to admins as well; nobody can book channels on behalf of another user.
+### `GET /api/v1/channels/`
 
-**Request:**
+Every channel with its status. Booked channels also show `user_name` and `booking_time` (UTC).
+
+```json
+{
+  "channels": [
+    { "channel_number": 1, "status": "available" },
+    { "channel_number": 2, "status": "booked", "user_name": "alice", "booking_time": "2026-11-10T10:30:45.123456" }
+  ],
+  "total_channels": 48,
+  "available_channels": 47,
+  "booked_channels": 1
+}
+```
+
+### `GET /api/v1/channels/available`
+
+Summary: free channel numbers and who holds which channels.
+
+```json
+{
+  "total_channels": 48,
+  "available_channels": 45,
+  "booked_channels": 3,
+  "utilization_percent": 6.25,
+  "available_channel_numbers": [3, 4, 5, "..."],
+  "user_names": { "alice": [1, 2], "bob": [101] }
+}
+```
+
+### `GET /api/v1/channels/parameters`
+
+Current trigger voltage (V) and input delay (ps) of every channel, as last reported by the worker.
+
+### `POST /api/v1/channels/book`
+
+```json
+{ "user_name": "alice", "channel_numbers": [1, 2] }
+```
+
+`channels` is accepted instead of `channel_numbers`. Response **201**:
+
+```json
+{ "user_name": "alice", "booked_channels": [1, 2], "booking_time": "2026-11-10T10:30:45.123456", "total_booked": 2 }
+```
+
+Booking is all-or-nothing: if any listed channel is already booked (by anyone, including you),
+nothing is booked.
+
+### `POST /api/v1/channels/release/{user_name}`
+
+```json
+{ "channel_numbers": [1, 2] }
+```
+
+Every listed channel must be booked by `{user_name}`, otherwise nothing is released. Response:
+
 ```json
 {
   "user_name": "alice",
-  "channel_numbers": [1, 2, 3]
-}
-```
-
-**Response (201):**
-```json
-{
-  "user_name": "alice",
-  "booked_channels": [1, 2, 3],
-  "booking_time": "2026-05-14T10:30:45.123456",
-  "total_booked": 3
-}
-```
-
-**Error (400) - Invalid Channel:**
-```json
-{
-  "detail": "Invalid channel number: 999"
-}
-```
-
-**Error (403) - Booking Under Another Username:**
-```json
-{
-  "detail": "You can only book channels under your own username"
-}
-```
-
-**Error (409) - Channels Already Booked:**
-```json
-{
-  "detail": "Channels already booked: [2, 3]"
-}
-```
-
-#### 4. **POST /api/v1/channels/release/{booked_by}**
-Release the listed channels booked by a user.
-
-**Endpoint**: `POST /api/v1/channels/release/{booked_by}`
-
-A normal user may only release their own channels, so `{booked_by}` must be their own username. An admin may release channels booked by any user by putting that user's username in the path.
-
-**Request body (required):**
-```json
-{
-  "channel_numbers": [1, 2]
-}
-```
-Only the listed channels are released (`channels` is accepted as an alias for `channel_numbers`). Every listed channel must be booked by the identifier, otherwise the request fails with **409** and nothing is released. A missing body or an empty list is rejected with **422**.
-
-**Response (200):**
-```json
-{
-  "user_name": "measurement-abc-123",
   "released_channels": [1, 2],
-  "total_released": 2
+  "total_released": 2,
+  "parameter_reset_id": "7d0c..."
 }
 ```
 
-**Response (403)** — a non-admin caller named another user in the path (nothing is released):
-```json
-{
-  "detail": "You can only release your own channels"
-}
-```
-
-**Response (409)** — a listed channel is not booked by the identifier (nothing is released):
-```json
-{
-  "detail": "Cannot release channels [3] - not booked by measurement-abc-123"
-}
-```
+`parameter_reset_id` is the ID of the job that resets the released channels to 0.5 V / 0 ps.
+Poll `GET /api/v1/measurements/{parameter_reset_id}/status` to see when it has run (it needs the
+worker to be running).
 
 ---
 
-## Measurement Lifecycle with Channels
+## Errors
 
-### Scenario 1: Save-Raw-Tags Measurement (Automatic Booking)
-
-```
-1. Client sends POST /api/v1/measurements/save-raw-tags
-   {
-     "measurement_type": "save_raw_tags",
-     "duration_seconds": 60,
-     "metadata": {
-       "channel_list": [1, 2, 3],
-       "target_file_path": "..."
-     }
-   }
-
-2. System validates channels [1, 2, 3]
-   - Must exist (1-16, 101-116, 201-216)
-   - Must be available
-
-3. System books channels for this measurement_id
-   - channels:available: remove 1, 2, 3
-   - channels:booked: 1→measurement_id, 2→measurement_id, 3→measurement_id
-   - channels:booking_time: set timestamps
-
-4. Response includes "Booked channels: [1, 2, 3]"
-   ```json
-   {
-     "measurement_id": "abc-123",
-     "status": "queued",
-     "message": "Save-raw-tags measurement queued with channels [1, 2, 3]..."
-   }
-   ```
-
-5. Job processes...
-
-6. On completion/failure/stop:
-   - Finally block automatically releases channels
-   - Channels returned to available pool
-   - Status updated to completed/failed/stopped
-   - Any client can now book those channels
-```
-
-### Scenario 2: Count-Rate with Optional Channels
-
-```
-1. Client sends POST /api/v1/measurements/count-rate
-   {
-     "measurement_type": "count_rate",
-     "duration_seconds": 60,
-     "metadata": {
-       "detector_id": "det_001",
-       "channel_list": [101, 102]
-     }
-   }
-
-2. Same flow as save-raw-tags (channels are optional here)
-
-OR without channels:
-   {
-     "measurement_type": "count_rate",
-     "duration_seconds": 60,
-     "metadata": {
-       "detector_id": "det_001"
-     }
-   }
-
-   (No channel booking occurs)
-```
-
-### Scenario 3: Manual Stop
-
-```
-1. Client sends DELETE /api/v1/measurements/{measurement_id}
-
-2. Measurement is marked as STOPPED
-
-3. Channels are immediately released
-
-4. Response confirms channels freed
-```
+| HTTP | `detail` | What to do |
+|------|----------|------------|
+| 400 | `Invalid channel numbers: [999]. Valid channels: [...]` | Use channels 1–16, 101–116, 201–216 |
+| 403 | `You can only book channels under your own username` | Set `user_name` to your own username |
+| 403 | `You can only release your own channels` | Ask the owner or an admin to release it |
+| 403 | `Channel 3 is not booked by user 'alice'` (when starting a measurement) | Book the channel first |
+| 409 | `Cannot book channels [2] - already booked` | See who holds it with `GET /api/v1/channels/available`; pick another channel or ask them to release it |
+| 409 | `Cannot release channels [5] - not booked by alice` | Check the channel list; only release channels the user actually holds |
+| 422 | `Field required` | Release body missing or `channel_numbers` empty |
 
 ---
 
-## Data Persistence
-
-### Redis Storage
-All channel state is stored in Redis with the following characteristics:
-
-- **No TTL on channel booking data** - Channels remain booked until explicitly released
-- **Atomic operations** - Using Redis pipelines for transactional consistency
-- **Persistence** - Redis persists data to disk (if configured)
-
-### Data Recovery
-Since channels are released immediately after job completion, there's minimal risk of orphaned bookings. However, if the application crashes during measurement:
-
-1. Channels remain booked under the measurement_id
-2. Channels can be manually released via: `POST /api/v1/channels/release/{user_name}` with body `{"channel_numbers": [...]}` (by the booking user, or by an admin for any user)
-3. Consider implementing a cleanup job for stale bookings (measurements in FAILED/STOPPED state for >1 hour)
-
----
-
-## Exclusive Access Guarantee
-
-**Why Channels are Exclusive:**
-1. **Atomic Booking** - Redis ensures only one measurement can book a channel
-2. **Validation Before Booking** - Check availability before attempting to book
-3. **Error on Conflict** - HTTP 409 returned if any channel unavailable
-
-**Concurrency Safety:**
-- Redis pipelines ensure atomic multi-command operations
-- No race conditions between check and book
-- Multiple concurrent measurements can safely book different channels
-
----
-
-## Error Handling
-
-### Common HTTP Status Codes
-
-| Status | Scenario | Handling |
-|--------|----------|----------|
-| 201 | Channels booked successfully | Measurement proceeds |
-| 400 | Invalid channel numbers | User provides invalid channel range |
-| 403 | Booking under another username, or a non-admin releasing another user's channels | Book under your own username; ask an admin to release other users' channels |
-| 409 | Channel already booked | Retry with different channels or wait for release |
-| 500 | Redis unavailable | System down, check Redis connectivity |
-
-### Recovery Strategies
-
-**If Channels Can't Be Booked:**
-1. Check which channels are available: `GET /api/v1/channels/available`
-2. Choose from `available_channel_numbers`
-3. Retry with available channels
-
-**If Channels Won't Release:**
-1. Verify measurement is completed: `GET /api/v1/measurements/{measurement_id}/status`
-2. Manually release if stuck: `POST /api/v1/channels/release/{user_name}` with body `{"channel_numbers": [...]}`. Normal users can release only their own channels; an admin can release another user's stuck channels.
-3. Check Redis connectivity: `GET /api/v1/channels/available` (returns health status)
-
----
-
-## Usage Examples
-
-### Frontend Example: Get Available Channels
-
-```javascript
-// Show user available channels
-const response = await fetch('/api/v1/channels/available');
-const data = await response.json();
-
-console.log(`Available channels: ${data.available_channel_numbers}`);
-console.log(`Utilization: ${data.utilization_percent}%`);
-
-// Display in dropdown
-const selector = document.getElementById('channel-selector');
-data.available_channel_numbers.forEach(ch => {
-  const option = document.createElement('option');
-  option.value = ch;
-  option.text = `Channel ${ch}`;
-  selector.add(option);
-});
-```
-
-### Backend Example: Start Measurement with Channels
-
-```python
-# Python client
-import httpx
-
-async def start_measurement():
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "http://localhost:8000/api/v1/measurements/save-raw-tags",
-            json={
-                "measurement_type": "save_raw_tags",
-                "duration_seconds": 60,
-                "metadata": {
-                    "channel_list": [1, 2, 3],
-                    "target_file_path": "/data/output"
-                }
-            }
-        )
-        
-        if response.status_code == 201:
-            data = response.json()
-            print(f"Measurement started: {data['measurement_id']}")
-            print(f"Booked channels: {data.get('booked_channels', [])}")
-        elif response.status_code == 409:
-            print(f"Error: {response.json()['detail']}")
-```
-
----
-
-## Configuration
-
-### Channel Ranges
-Located in `ChannelManager.ALL_CHANNELS`:
-```python
-ALL_CHANNELS = list(range(1, 17)) + list(range(101, 117)) + list(range(201, 217))
-# Total: 48 channels
-```
-
-To modify ranges, edit `app/services/channel_manager.py` line 18.
-
-### Redis Connection
-Default configuration in `main.py`:
-```python
-channel_manager = ChannelManager(
-    redis_host="localhost",
-    redis_port=6379,
-    redis_db=0,
-)
-```
-
-Configure for production (environment variables, cluster, etc.)
-
----
-
-## Testing
-
-### Test Workflow
+## Typical session
 
 ```bash
-# 1. Check available channels
-curl http://localhost:8000/api/v1/channels/available
+# 1. See what's free
+curl http://localhost:8000/api/v1/channels/available -H "Authorization: Bearer $TOKEN"
 
-# 2. Start measurement with channels (auto-books)
-curl -X POST http://localhost:8000/api/v1/measurements/save-raw-tags \
-  -H "Content-Type: application/json" \
-  -d '{
-    "measurement_type": "save_raw_tags",
-    "duration_seconds": 60,
-    "metadata": {
-      "channel_list": [1, 2, 3],
-      "target_file_path": "/tmp/data"
-    }
-  }'
+# 2. Book
+curl -X POST http://localhost:8000/api/v1/channels/book \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"user_name": "alice", "channel_numbers": [1, 2]}'
 
-# 3. Verify channels are booked
-curl http://localhost:8000/api/v1/channels/available
+# 3. Run measurements on channels 1 and 2 (any number, one after another or in parallel)
 
-# 4. Stop measurement (releases channels)
-curl -X DELETE http://localhost:8000/api/v1/measurements/{measurement_id}
-
-# 5. Verify channels are released
-curl http://localhost:8000/api/v1/channels/available
+# 4. Release
+curl -X POST http://localhost:8000/api/v1/channels/release/alice \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"channel_numbers": [1, 2]}'
 ```
 
 ---
 
-## Files Modified
+## Stale bookings
 
-| File | Changes |
-|------|---------|
-| `app/services/status_manager.py` | Added channel management methods and Redis keys |
-| `app/models.py` | Added channel-related Pydantic models |
-| `app/api/routes.py` | Added 5 channel endpoints, integrated channels into measurement endpoints |
-| `app/services/job_processor.py` | Use StatusManager methods for channel release on completion |
-| `main.py` | Initialize StatusManager (no separate ChannelManager needed) |
+If someone forgets to release channels (or a client crashes), the channels stay booked. To free
+them:
+
+1. Find the owner in `GET /api/v1/channels/available` (`user_names`) or in
+   `request_logs/channel_requests.txt`, which records every book and release.
+2. The owner releases them, or an admin calls `POST /api/v1/channels/release/<owner>` with the
+   channel numbers.
 
 ---
 
-## Future Enhancements
+## How it is stored
 
-1. **Stale Booking Cleanup** - Auto-release channels from failed measurements after timeout
-2. **Channel Reservations** - Advance booking of channels for future measurements
-3. **Channel Groups** - Book related channels as bundles
-4. **Audit Trail** - Track all booking/release history
-5. **Channel Priorities** - Allow some measurements higher priority for channel access
-6. **Graceful Degradation** - Retry with fewer channels if some unavailable
-7. **Webhooks** - Notify when channels become available
+Bookings live in Redis (no expiry):
 
+| Key | Type | Content |
+|-----|------|---------|
+| `channels:available` | set | Free channel numbers |
+| `channels:booked` | hash | channel → username |
+| `channels:booking_time` | hash | channel → booking time (UTC, ISO) |
+
+The channel list is defined in `StatusManager.ALL_CHANNELS` in
+`app/services/status_manager.py`. Booking and release logic is in the same class; the HTTP
+endpoints and permission checks are in `app/api/routes.py`.

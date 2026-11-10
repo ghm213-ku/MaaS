@@ -96,3 +96,31 @@ def test_audit_logger_called_on_state_change():
         assert kwargs["role"] == "operator"
         assert kwargs["action"] == "book"
         assert kwargs["http_method"] == "POST"
+
+
+def test_audit_logs_422_for_validation_errors():
+    """The audit log records the 422 the client receives, not 500."""
+    from unittest.mock import patch
+    token = create_access_token(user_id=1, role="operator")
+
+    with patch("app.api.routes.log_audit_event") as mock_log:
+        response = client.post(
+            "/api/v1/measurements/save-raw-tags",
+            json={"duration_seconds": "bad", "metadata": {}},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 422
+        mock_log.assert_called_once()
+        kwargs = mock_log.call_args.kwargs
+        assert kwargs["status"] == 422
+        assert "Field required" in kwargs["message"]
+        assert kwargs["target_hardware_id"] == "system"
+
+
+def test_audit_target():
+    from app.services.audit_logger import audit_target
+
+    assert audit_target("DELETE", "/api/v1/measurements/abc-123") == "abc-123"
+    assert audit_target("POST", "/api/v1/measurements/count-rate-live") == "system"
+    assert audit_target("POST", "/api/v1/measurements/histogram-live") == "system"
+    assert audit_target("POST", "/api/v1/channels/book") == "system"
