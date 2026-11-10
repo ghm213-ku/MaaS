@@ -1,42 +1,53 @@
-"""Backend worker service for processing measurement jobs.
+"""Worker entry point: runs measurement jobs on the Time Tagger.
 
-This service runs as a separate process and continuously processes jobs from the queue.
-Each job spawns a new thread to handle the measurement.
-
-Features:
-- Continuous job polling from Redis
-- Automatic retry with exponential backoff for Redis failures
-- Health checking and reconnection
-- Detailed logging of all operations
+Polls the Redis job queue filled by the web API (main.py) and runs each job in
+its own thread with the handler registered for its measurement type. Reconnects
+to Redis with exponential backoff if the connection drops.
 """
 
+import argparse
+import logging
 import sys
-from pathlib import Path
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from app.services.job_processor import JobProcessor
-from app.services.status_manager import StatusManager
-from app.services.count_rate import CountRateMeasurementHandler
-from app.services.count_rate_live import CountRateLiveMeasurementHandler
-from app.services.correlation import CorrelationMeasurementHandler
-from app.services.coincidences import CoincidencesMeasurementHandler
-from app.services.coincidences_live import CoincidencesLiveMeasurementHandler
-from app.services.save_raw_tags import SaveRawTagsMeasurementHandler
-from app.services.set_parameters import SetParametersHandler
-from app.services.time_histograms_live import (
-    StartStopLiveMeasurementHandler,
-    HistogramLiveMeasurementHandler,
-    CorrelationLiveMeasurementHandler,
-)
-from app.services.file_logger import FileLogger
-from app.services.channel_parameters import record_channel_parameters
-from app.utils.logger import configure_logging
 import time
+
 from Swabian import TimeTagger
 
-logger = configure_logging(__name__, log_file="logs/services/worker.log")
+from app.config import REDIS_DB, REDIS_HOST, REDIS_PORT
+from app.handlers.coincidences import CoincidencesMeasurementHandler
+from app.handlers.coincidences_live import CoincidencesLiveMeasurementHandler
+from app.handlers.correlation import CorrelationMeasurementHandler
+from app.handlers.count_rate import CountRateMeasurementHandler
+from app.handlers.count_rate_live import CountRateLiveMeasurementHandler
+from app.handlers.save_raw_tags import SaveRawTagsMeasurementHandler
+from app.handlers.set_parameters import SetParametersHandler
+from app.handlers.time_histograms_live import (
+    CorrelationLiveMeasurementHandler,
+    HistogramLiveMeasurementHandler,
+    StartStopLiveMeasurementHandler,
+)
+from app.services.channel_parameters import record_channel_parameters
+from app.services.file_logger import FileLogger
+from app.services.job_processor import JobProcessor
+from app.services.status_manager import StatusManager
+from app.utils.logger import configure_root_logging
+
+logger = logging.getLogger(__name__)
+
+# Handler class for each measurement type (MeasurementType values)
+HANDLERS = {
+    "count_rate": CountRateMeasurementHandler,
+    "count_rate_live": CountRateLiveMeasurementHandler,
+    "correlation": CorrelationMeasurementHandler,
+    "correlation_live": CorrelationLiveMeasurementHandler,
+    "coincidences": CoincidencesMeasurementHandler,
+    "coincidence": CoincidencesMeasurementHandler,
+    "coincidences_live": CoincidencesLiveMeasurementHandler,
+    "coincidence_live": CoincidencesLiveMeasurementHandler,
+    "startstop_live": StartStopLiveMeasurementHandler,
+    "histogram_live": HistogramLiveMeasurementHandler,
+    "save_raw_tags": SaveRawTagsMeasurementHandler,
+    "set_parameters": SetParametersHandler,
+}
 
 # Channels that get the built-in test signal when the worker runs with --testing
 TEST_SIGNAL_CHANNELS = [1, 2, 3, 4, 5]
@@ -64,9 +75,9 @@ class BackendWorker:
 
     def __init__(
         self,
-        redis_host: str = "127.0.0.1",
-        redis_port: int = 6379,
-        redis_db: int = 0,
+        redis_host: str = REDIS_HOST,
+        redis_port: int = REDIS_PORT,
+        redis_db: int = REDIS_DB,
         max_retries: int = 5,
         retry_backoff: float = 2.0,
         testing: bool = False,
@@ -100,7 +111,7 @@ class BackendWorker:
         self.jobs_failed = 0
         self.is_running = False
 
-        logger.info(f"Backend worker initializing...")
+        logger.info("Backend worker initializing...")
         logger.info(f"  Redis: {redis_host}:{redis_port} (DB {redis_db})")
         logger.info(
             f"  Retry config: max_retries={max_retries}, backoff={retry_backoff}"
@@ -147,48 +158,10 @@ class BackendWorker:
             logger.debug("Creating JobProcessor...")
             self.job_processor = JobProcessor(self.status_manager, tagger=tagger)
 
-            logger.debug("Registering measurement handlers...")
-            self.job_processor.register_handler(
-                "count_rate", CountRateMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "count_rate_live", CountRateLiveMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "correlation", CorrelationMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "coincidences", CoincidencesMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "coincidence", CoincidencesMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "save_raw_tags", SaveRawTagsMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "set_parameters", SetParametersHandler
-            )
-            self.job_processor.register_handler(
-                "startstop_live", StartStopLiveMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "histogram_live", HistogramLiveMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "correlation_live", CorrelationLiveMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "coincidences_live", CoincidencesLiveMeasurementHandler
-            )
-            self.job_processor.register_handler(
-                "coincidence_live", CoincidencesLiveMeasurementHandler
-            )
+            for measurement_type, handler_class in HANDLERS.items():
+                self.job_processor.register_handler(measurement_type, handler_class)
 
-            logger.info("Backend worker initialized successfully")
-            logger.info(
-                "  Handlers registered: count_rate, count_rate_live, correlation, coincidences, coincidence, coincidences_live, coincidence_live, save_raw_tags, set_parameters, startstop_live, histogram_live, correlation_live"
-            )
+            logger.info(f"Backend worker initialized; handlers: {', '.join(HANDLERS)}")
             self.retry_count = 0
             self.current_retry_delay = 1.0
 
@@ -240,10 +213,8 @@ class BackendWorker:
         logger.info("=" * 70)
         logger.info("Backend worker started")
         logger.info("=" * 70)
-        logger.info(f"Configuration:")
         logger.info(f"  Poll timeout: {poll_timeout}s")
         logger.info(f"  Redis: {self.redis_host}:{self.redis_port}")
-        logger.info(f"  Registered handlers: count_rate, count_rate_live, save_raw_tags, set_parameters")
         logger.info("=" * 70)
 
         try:
@@ -316,7 +287,7 @@ class BackendWorker:
         logger.info("=" * 70)
         logger.info("Backend worker shutting down...")
         logger.info("=" * 70)
-        logger.info(f"Statistics:")
+        logger.info("Statistics:")
         logger.info(f"  Jobs processed: {self.jobs_processed}")
         logger.info(f"  Jobs failed: {self.jobs_failed}")
         logger.info(f"  Success rate: {self._calculate_success_rate():.1f}%")
@@ -353,8 +324,6 @@ class BackendWorker:
 
 def parse_args(argv=None):
     """Parse worker command-line flags."""
-    import argparse
-
     parser = argparse.ArgumentParser(description="MaaS backend worker")
     parser.add_argument(
         "--testing",
@@ -373,16 +342,9 @@ def parse_args(argv=None):
 def main():
     """Entry point for the backend worker."""
     args = parse_args()
+    configure_root_logging("logs/services/worker.log")
     try:
-        worker = BackendWorker(
-            redis_host="127.0.0.1",
-            redis_port=6379,
-            redis_db=0,
-            max_retries=5,
-            retry_backoff=2.0,
-            testing=args.testing,
-            no_hardware=args.no_hardware,
-        )
+        worker = BackendWorker(testing=args.testing, no_hardware=args.no_hardware)
         worker.run(poll_timeout=1)
     except Exception as e:
         logger.critical(f"Failed to start backend worker: {e}", exc_info=True)

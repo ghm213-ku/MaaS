@@ -35,9 +35,9 @@ the API itself see [README_USER_GUIDE.md](README_USER_GUIDE.md).
 
 | Component | Code | Role |
 |-----------|------|------|
-| Web API | `main.py`, `app/api/routes.py`, `app/api/auth.py` | HTTP endpoints. Never talks to the Time Tagger |
+| Web API | `main.py`, `app/api/*.py` | HTTP endpoints. Never talks to the Time Tagger |
 | Auth middleware | `app/middleware/auth_middleware.py` | Checks the JWT on `/api/v1/*` and user-management routes |
-| Audit route | `AuditRoute` in `app/api/routes.py` | Writes one line to `logs/audit.log` for every POST/PUT/DELETE |
+| Audit route | `AuditRoute` in `app/api/audit_route.py` | Writes one line to `logs/audit.log` for every POST/PUT/DELETE |
 | User store | `app/db/database.py` → `maas_auth.db` (SQLite) | Users and roles |
 | StatusManager | `app/services/status_manager.py` | Measurement status and channel bookings in Redis |
 | JobProcessor | `app/services/job_processor.py` | Queue push/pop, one thread per job, stop handling |
@@ -100,7 +100,7 @@ GUI                Web API                         Redis                    Work
 ```
 
 1. **Auth** – the middleware rejects missing/invalid/expired tokens with 401.
-2. **Validation** – the Pydantic model for the type (`app/models.py`) checks the body. Flat bodies
+2. **Validation** – the Pydantic model for the type (`app/models/measurements.py`) checks the body. Flat bodies
    without a `metadata` object are accepted and wrapped automatically.
 3. **Channel check** – every channel must exist and be booked under `metadata.user_name`.
 4. **Status** – a UUID is generated and stored as `queued`.

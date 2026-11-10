@@ -1,7 +1,10 @@
+"""Password hashing and JWT access tokens."""
+
 import os
 import secrets
+from datetime import datetime, timezone
+
 import jwt
-from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 
 # Configuration

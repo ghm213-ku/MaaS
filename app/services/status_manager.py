@@ -1,13 +1,13 @@
 """Status management service for distributed measurement system."""
 
+import logging
 import json
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
 import redis
-from app.utils.logger import configure_logging
 
-logger = configure_logging(__name__)
+logger = logging.getLogger(__name__)
 
 
 class MeasurementStatus(str, Enum):
@@ -39,7 +39,7 @@ class StatusManager:
             redis_host: Redis server host
             redis_port: Redis server port
             redis_db: Redis database number
-            file_logger: Optional FileLogger instance for logging measurement status removal
+            file_logger: Optional FileLogger that records every status change
         """
         self.redis_client = redis.Redis(
             host=redis_host, port=redis_port, db=redis_db, decode_responses=True
@@ -170,8 +170,6 @@ class StatusManager:
             except Exception as e:
                 logger.error(f"[{status_id}] Failed to log status update: {e}")
 
-
-
         return status_obj
 
     def get_metadata(self, status_id: str) -> Optional[Dict[str, Any]]:
@@ -210,39 +208,6 @@ class StatusManager:
                 f"[{status_id}] Could not parse results JSON, returning None"
             )
             return None
-
-    def delete_status(self, status_id: str) -> bool:
-        """Delete status and associated data from Redis.
-
-        Logs the status to file before deletion if file_logger is available.
-        """
-        # Get the status data before deleting (for logging)
-        status_key = f"{self.status_prefix}{status_id}"
-        status_data = self.redis_client.get(status_key)
-
-        # Log the status removal if file_logger is available
-        if status_data and self.file_logger:
-            try:
-                status_obj = json.loads(status_data)
-                self.file_logger.log_measurement_status_removal(
-                    status_id=status_id,
-                    status_data=status_obj,
-                    timestamp=datetime.utcnow(),
-                )
-            except Exception as e:
-                logger.error(f"[{status_id}] Failed to log status removal: {e}")
-
-        # Now delete from Redis
-        metadata_key = f"{self.metadata_prefix}{status_id}"
-        results_key = f"{self.results_prefix}{status_id}"
-
-        deleted = 0
-        deleted += self.redis_client.delete(status_key)
-        deleted += self.redis_client.delete(metadata_key)
-        deleted += self.redis_client.delete(results_key)
-
-        logger.info(f"[{status_id}] Status deleted ({deleted} keys)")
-        return deleted > 0
 
     def health_check(self) -> bool:
         """Check Redis connection health."""

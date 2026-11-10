@@ -95,9 +95,11 @@ examples are in the [user guide](docs/README_USER_GUIDE.md).
 main.py            web API entry point
 worker.py          worker entry point (Time Tagger)
 app/api/           HTTP endpoints and login
-app/services/      measurement handlers, job queue, status and channel storage, logging
-app/models.py      request and response models
+app/services/      job queue, status and channel storage, logging
+app/models/        request and response models
+app/handlers/      one measurement handler per type (run by the worker)
 tests/             pytest suite (runs without Redis or a Time Tagger)
+scripts/           manual hardware smoke checks (need a real Time Tagger)
 docs/              documentation
 logs/, request_logs/   created at runtime
 ```
