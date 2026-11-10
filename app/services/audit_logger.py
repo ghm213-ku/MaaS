@@ -40,6 +40,17 @@ if not audit_logger.handlers:
     handler.setFormatter(JSONFormatter())
     audit_logger.addHandler(handler)
 
+def audit_target(http_method: str, http_path: str) -> str:
+    """Return the audit target id for a request.
+
+    A stop (DELETE /api/v1/measurements/{id}) targets that measurement id;
+    every other request targets "system".
+    """
+    if http_method == "DELETE" and "/measurements/" in http_path:
+        return http_path.rstrip("/").split("/")[-1]
+    return "system"
+
+
 def log_audit_event(
     user_id: Optional[int], 
     role: Optional[str], 

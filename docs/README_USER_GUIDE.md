@@ -1,929 +1,346 @@
-"""
-# User Guide - How to Use MaaS
+# MaaS API User Guide
 
-## Overview
+This guide describes the MaaS HTTP API: how to log in, book channels, start and stop
+measurements, and read their status. Most users drive MaaS through the **MaaS GUI**, which makes
+these calls for you; read this guide if you script against the API directly or want to understand
+what the GUI is doing.
 
-MaaS (Measurements as a Service) is a distributed system for running long-running measurements 
-(count-rate, spectrum analysis, tag recording, etc.) without blocking your application.
+To start the service and fix common problems, see [GETTING_STARTED.md](GETTING_STARTED.md).
 
-**Key Benefit**: Start a measurement and get an instant response with a status ID. Query the 
-status anytime, stop when needed.
+- Base URL: `http://localhost:8000`
+- Interactive API docs (every endpoint and schema): `http://localhost:8000/docs`
 
 ---
 
-## Quick Start (3 minutes)
+## 1. Workflow at a glance
 
-### 1. Access the API
+1. **Log in** → get a token.
+2. **Book** the channels you need under your username.
+3. **Start** a measurement → get a `measurement_id`.
+4. **Poll** its status (or stream live data over WebSocket).
+5. **Stop** it early if needed.
+6. **Release** your channels when you are done.
 
-The MaaS API is available at: `http://localhost:8000` (or your server)
+Channels are **never** booked or released automatically. They stay booked after a measurement
+completes, stops or fails, until you release them.
 
-**API Documentation**: Visit `http://localhost:8000/docs` for interactive documentation
+---
 
-### 2. Check System Health
-
-```bash
-curl http://localhost:8000/health
-```
-
-Response shows system status:
-```json
-{
-  "status": "healthy",
-  "service": "MaaS",
-  "version": "2.0",
-  "components": {
-    "web_layer": "healthy",
-    "redis": "healthy",
-    "job_processor": "ready"
-  }
-}
-```
-
-### 3. Start Your First Measurement
+## 2. Log in
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
+curl -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "measurement_type": "count_rate",
-    "duration_seconds": 10,
-    "metadata": {
-      "channels": [1, 2, 3],
-      "binwidth": 1000000000,
-      "n_values": 1,
-      "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
-    }
-  }'
+  -d '{"username": "alice", "password": "secret"}'
 ```
 
-**Response** (instant, < 10ms):
 ```json
-{
-  "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
-  "measurement_type": "count_rate",
-  "status": "queued",
-  "started_at": "2026-04-30T10:00:00Z",
-  "message": "Count-rate measurement queued with channels [1, 2, 3]. Use ID '550e8400-e29b-41d4-a716-446655440000' to query status or stop."
-}
+{ "token": "eyJhbGciOi...", "expires_in": 604800 }
 ```
 
-### 4. Query the Status
+Send the token on every `/api/v1/...` call:
 
-Save the `measurement_id` from the response above, then:
+```
+Authorization: Bearer <token>
+```
+
+The token is valid for 1 week (`expires_in` is in seconds). `/health`, `/docs` and
+`/auth/login` do not need a token.
+
+The examples below assume `TOKEN` holds your token:
 
 ```bash
-curl http://localhost:8000/api/v1/measurements/550e8400-e29b-41d4-a716-446655440000/status
+TOKEN=eyJhbGciOi...
 ```
 
-**Response while running**:
-```json
-{
-  "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
-  "measurement_type": "count_rate",
-  "status": "active",
-  "started_at": "2026-04-30T10:00:00Z",
-  "duration_so_far": 3.5,
-  "metadata": {
-    "detector": "Main Detector",
-    "source": "Lab A"
-  },
-  "results": null
-}
-```
+### Account endpoints
 
-**Response after completion**:
-```json
-{
-  "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
-  "measurement_type": "count_rate",
-  "status": "completed",
-  "started_at": "2026-04-30T10:00:00Z",
-  "duration_so_far": 10.0,
-  "metadata": {
-    "detector": "Main Detector",
-    "source": "Lab A"
-  },
-  "results": {
-    "total_count": 12345,
-    "live_time": 9.99,
-    "real_time": 10.00
-  }
-}
-```
+| Endpoint | Who | Purpose |
+|----------|-----|---------|
+| `POST /auth/login` | anyone | Get a token |
+| `PUT /auth/password` | any logged-in user | Change your own password (`old_password`, `new_password`) |
+| `POST /auth/users` | admin | Create a user (`username`, `role_id`). Initial password = username |
+| `DELETE /auth/users/{username}` | admin | Delete a user |
+| `PUT /auth/users/{username}/password` | admin | Reset a user's password (`new_password`) |
+
+Roles: `admin`, `operator`, `viewer`. At the moment all roles can use every `/api/v1` endpoint;
+only the user-management endpoints are limited to admins.
 
 ---
 
-## Available Measurement Types
+## 3. Channels
 
-### 1. Count-Rate Measurement
-
-Counts detector events over a period of time using specified channels.
-
-**Endpoint**: `POST /api/v1/measurements/count-rate`
-
-**Request**:
-```bash
-curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "duration_seconds": 60,
-    "metadata": {
-      "channels": [1, 2, 3],
-      "binwidth": 1000000000,
-      "n_values": 1,
-      "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
-    }
-  }'
-```
-
-**Request Fields**:
-- `channels` (required): List of channel numbers to measure (e.g., `[1, 2, 3]`)
-- `binwidth` (optional): Bin width in picoseconds. Default: `1000000000` (1 second)
-- `n_values` (optional): Number of bins in histogram. Default: `1`
-- `target_location` (optional): Target file path for results. Supports `{datetime}` and `{measurement-type}` placeholders. Default: `"desktop/MaasData/{datetime}/{measurement-type}"`
-- `duration_seconds` (optional): Auto-stop after N seconds. If omitted, runs until manually stopped.
-
-**Results**: 
-- `total_count`: Total number of events detected
-- `count_rate_cps`: Count rate in counts per second
-- `duration_seconds`: Measurement duration
-- `stopped_at`: ISO timestamp of when measurement stopped
-
----
-
-### 2. Save Raw Tags Measurement
-
-Records all detector events (tags) to a file for offline analysis.
-
-**Endpoint**: `POST /api/v1/measurements/save-raw-tags`
-
-**Request**:
-```bash
-curl -X POST http://localhost:8000/api/v1/measurements/save-raw-tags \
-  -H "Content-Type: application/json" \
-  -d '{
-    "duration_seconds": 30,
-    "metadata": {
-      "channel_list": [1, 2, 3, 4],
-      "target_file_path": "C:\\data\\measurement_001.dat"
-    }
-  }'
-```
-
-**Required Metadata Fields**:
-- `channel_list`: List of channel numbers to record (e.g., `[1,2,3]`)
-- `target_file_path`: Where to save the data file (must be absolute path)
-
-**Results**:
-- `file_path`: Actual path where file was saved
-- `total_events`: Number of events recorded
-- `file_size`: Size of saved file in bytes
-
----
-
-### 3. Coincidences Measurement
-
-Measures coincidence events across multiple channel groups within a specified coincidence window using Swabian Instruments TimeTagger virtual coincidence channels.
-
-The coincidence API model supports taking **multiple coincidences as a list of lists of channel numbers** (e.g., `[[1, 2], [2, 3, 5]]`). Under the hood, this integrates directly with Swabian's `Coincidences` virtual channel class to generate dedicated virtual channels for each coincidence group with maximum performance.
-
-**Endpoints**:
-- Standard: `POST /api/v1/measurements/coincidences` (alias: `POST /api/v1/measurements/coincidence`)
-- Live Streaming: `POST /api/v1/measurements/coincidences-live` (alias: `POST /api/v1/measurements/coincidence-live`)
-
-**Request**:
-```bash
-curl -X POST http://localhost:8000/api/v1/measurements/coincidences \
-  -H "Content-Type: application/json" \
-  -d '{
-    "duration_seconds": 60,
-    "metadata": {
-      "user_name": "user-123",
-      "coincidences": [[1, 2], [2, 3, 5]],
-      "coincidence_window": 1000,
-      "timestamp": "Last",
-      "binwidth": 1000000000,
-      "n_values": 1,
-      "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
-    }
-  }'
-```
-
-**Metadata Fields**:
-- `coincidences` (required if `channels` not provided): List of lists of channel numbers representing each coincidence group. E.g., `[[1, 2]]` for a single coincidence or `[[1, 2], [2, 3, 5]]` for multiple coincidences. Simple 1D lists are deprecated and rejected.
-- `channels` (optional): List of lists of channel numbers (e.g. `[[1, 2]]` or `[[1, 2], [2, 3]]`). *Note: The old method of simple 1D channel lists (e.g. `[1, 2]`) is deprecated and no longer supported.*
-- `coincidence_groups` (optional): Alias for `coincidences` matching Swabian parameter naming (`list[list[int]]`).
-- `user_name` (required): The user ID who booked all required channels.
-- `coincidence_window` / `coincidenceWindow` (optional): Maximum time window between events for a coincidence in picoseconds. Default: `1000` (1 ns).
-- `timestamp` (optional): Timestamp mode for coincidence virtual channel (`"Last"`, `"First"`, `"ListedFirst"`, `"Average"`). Default: `"Last"`.
-- `binwidth` (optional): Histogram bin width in picoseconds. Default: `1000000000` (1 second).
-- `n_values` (optional): Number of histogram bins. Default: `1`.
-- `target_location` (optional): Target file path. Supports `{datetime}` and `{measurement-type}` placeholders. Not used by `coincidences-live`, which only streams.
-- `refresh_rate` (optional): Streaming update frequency in Hz for live coincidence measurements. Default: `25`.
-
-**Results**:
-- `status`: `"completed"` or `"stopped"`
-- `duration`: Measurement duration in seconds
-- `count`: Total coincidence counts detected across channels
-
-#### Live Streaming Output Streams (`coincidences-live`)
-
-In Swabian TimeTagger, each coincidence group in `coincidences` (e.g. `[[1, 2], [2, 3, 5]]`) instantiates an independent virtual channel (queried via `coinc.getChannels()`). The live handler uses the same setup as the one-shot measurement (`Coincidences` feeding a `Counter` with `binwidth` and `n_values`) and publishes the counter's current bins at `refresh_rate`. Each stream's `data` holds the counts in its last `n_values` bins (oldest first), and `rate` is the most recent bin in counts per second:
-
-1. **Multiplexed Channel** (`measurement:data:{measurement_id}`):
-```json
-{
-  "type": "coincidences_live",
-  "status_id": "8a32b694-8149-4702-86ee-7cfa5b66d628",
-  "coincidences": [[1, 2], [2, 3, 5]],
-  "virtual_channels": [20, 21],
-  "streams": [
-    {
-      "stream_index": 0,
-      "coincidence": [1, 2],
-      "virtual_channel": 20,
-      "rate": 1542.0,
-      "data": [1530.0, 1538.0, 1542.0]
-    },
-    {
-      "stream_index": 1,
-      "coincidence": [2, 3, 5],
-      "virtual_channel": 21,
-      "rate": 28.5,
-      "data": [31.0, 27.0, 28.5]
-    }
-  ],
-  "data": [[1530.0, 1538.0, 1542.0], [31.0, 27.0, 28.5]],
-  "timestamp": "2026-10-29T12:00:00.123456"
-}
-```
-
-2. **Per-Stream Sub-Channels** (`measurement:data:{measurement_id}:stream_{index}`):
-When multiple coincidence groups are provided, individual streams are also published to dedicated sub-channels for clients that wish to subscribe to a specific coincidence group directly:
-```json
-{
-  "type": "coincidences_live_stream",
-  "status_id": "8a32b694-8149-4702-86ee-7cfa5b66d628",
-  "stream_index": 0,
-  "coincidence": [1, 2],
-  "virtual_channel": 20,
-  "rate": 1542.0,
-  "data": [1530.0, 1538.0, 1542.0],
-  "timestamp": "2026-10-29T12:00:00.123456"
-}
-```
-
----
-
-### 4. Live Time Histograms
-
-Streams StartStop, Histogram, or Correlation measurements in real-time to a Redis channel `measurement:data:{measurement_id}`.
-
-**Endpoints**:
-- `POST /api/v1/measurements/startstop-live`
-- `POST /api/v1/measurements/histogram-live`
-- `POST /api/v1/measurements/correlation-live`
-
-**Request** (Example for Histogram-Live):
-```bash
-curl -X POST http://localhost:8000/api/v1/measurements/histogram-live \
-  -H "Content-Type: application/json" \
-  -d '{
-    "duration_seconds": 60,
-    "metadata": {
-      "click_channel": 1,
-      "start_channel": 2,
-      "user_name": "user-123",
-      "binwidth": 1000,
-      "n_bins": 1000,
-      "refresh_rate": 25
-    }
-  }'
-```
-*(Note: Use `channel1` and `channel2` for `correlation-live` instead of `click_channel` and `start_channel`)*
-
-**Live Streaming**: Connect to a local WebSocket (if applicable) or subscribe directly to Redis pub/sub to receive updates at the specified `refresh_rate` (default 25 Hz).
-Each payload contains `{"data": [...], "index": [...]}`.
-
----
-
-## Advanced Usage
-
-### Polling for Completion (Python Example)
-
-```python
-import requests
-import time
-
-# Start measurement
-response = requests.post(
-    "http://localhost:8000/api/v1/measurements/count-rate",
-    json={
-        "duration_seconds": 60,
-        "metadata": {
-            "channels": [1, 2, 3],
-            "binwidth": 1000000000,
-            "n_values": 1,
-            "target_location": "desktop/MaasData/{datetime}/{measurement-type}"
-        }
-    }
-)
-measurement_id = response.json()["measurement_id"]
-
-# Poll for completion
-base_url = "http://localhost:8000/api/v1/measurements"
-while True:
-    status_resp = requests.get(f"{base_url}/{measurement_id}/status")
-    status_data = status_resp.json()
-    
-    if status_data["status"] == "completed":
-        print(f"Results: {status_data['results']}")
-        break
-    elif status_data["status"] == "failed":
-        print(f"Error: {status_data}")
-        break
-    
-    print(f"Still running... {status_data['duration_so_far']:.1f}s elapsed")
-    time.sleep(2)
-```
-
-### Stop a Measurement Early
-
-```bash
-curl -X DELETE http://localhost:8000/api/v1/measurements/550e8400-e29b-41d4-a716-446655440000
-```
-
-Response:
-```json
-{
-  "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
-  "measurement_type": "count_rate",
-  "status": "stopped",
-  "message": "Measurement stopped by user",
-  "results": {
-    "total_count": 6789,
-    "duration": 5.12
-  }
-}
-```
-
-### Batch Measurements (JavaScript Example)
-
-```javascript
-async function startMultipleMeasurements() {
-  const baseUrl = "http://localhost:8000/api/v1/measurements";
-  
-  // Start 3 measurements
-  const measurements = [];
-  
-  for (let i = 0; i < 3; i++) {
-    const response = await fetch(`${baseUrl}/count-rate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        duration_seconds: 30,
-        metadata: {
-          channels: [1 + i, 2 + i, 3 + i],
-          binwidth: 1000000000,
-          n_values: 1,
-          target_location: "desktop/MaasData/{datetime}/{measurement-type}"
-        }
-      })
-    });
-    
-    const data = await response.json();
-    measurements.push(data.measurement_id);
-    console.log(`Started measurement ${i+1}: ${data.measurement_id}`);
-  }
-  
-  // Poll all measurements
-  let completed = 0;
-  while (completed < measurements.length) {
-    completed = 0;
-    
-    for (const id of measurements) {
-      const response = await fetch(`${baseUrl}/${id}/status`);
-      const data = await response.json();
-      
-      if (data.status === "completed") {
-        console.log(`✓ Measurement ${id.slice(0,8)}... completed`);
-        completed++;
-      }
-    }
-    
-    if (completed < measurements.length) {
-      await new Promise(r => setTimeout(r, 1000));  // Wait 1 second
-    }
-  }
-}
-
-startMultipleMeasurements();
-```
-
----
-
-## Understanding Status Values
-
-| Status | Meaning | Next Action |
-|--------|---------|------------|
-| `queued` | Waiting to start | Poll for `active` or `completed` |
-| `active` | Currently running | Keep polling or stop if needed |
-| `completed` | Finished successfully | Results are available |
-| `stopped` | Stopped by user (DELETE) | Partial results may be available |
-| `failed` | Error occurred | Check error message in response |
-
----
-
-## Understanding Responses
-
-### Successful Measurement Response
-
-```json
-{
-  "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
-  "measurement_type": "count_rate",
-  "status": "completed",
-  "started_at": "2026-04-30T10:00:00.000Z",
-  "duration_so_far": 60.123,
-  "metadata": {
-    "detector": "main",
-    "source": "lab_a"
-  },
-  "results": {
-    "total_count": 123456,
-    "live_time": 59.99,
-    "real_time": 60.00
-  }
-}
-```
-
-**Fields**:
-- `measurement_id`: UUID for this measurement (use to query status)
-- `measurement_type`: Type of measurement performed
-- `status`: Current state (queued, active, completed, stopped, failed)
-- `started_at`: ISO timestamp when measurement started
-- `duration_so_far`: How long the measurement has been running
-- `metadata`: The metadata you provided
-- `results`: Results (only populated when completed)
-
-### Error Response (HTTP 422 - Validation Error)
-
-```json
-{
-  "detail": [
-    {
-      "type": "missing",
-      "loc": ["body", "metadata", "channel_list"],
-      "msg": "Field required",
-      "input": {
-        "duration_seconds": 30,
-        "metadata": {
-          "target_file_path": "C:\\data.dat"
-        }
-      }
-    }
-  ]
-}
-```
-
-**Common Errors**:
-- Missing required fields → HTTP 422
-- Invalid field types → HTTP 422
-- Measurement not found → HTTP 404
-- Server error → HTTP 500
-
----
-
-## Tips & Best Practices
-
-### ✅ DO
-
-- Use reasonable `duration_seconds` values (1-3600 seconds)
-- Poll status every 1-5 seconds (don't hammer the API)
-- Use unique detector/source identifiers in metadata
-- Handle errors gracefully in your code
-- Stop measurements you no longer need
-
-### ❌ DON'T
-
-- Don't use very large duration values (> 1 hour)
-- Don't poll more frequently than every 100ms
-- Don't assume measurements complete immediately
-- Don't forget to check `results` is not null before accessing
-- Don't hardcode IP addresses; use configuration
-
----
-
-## Integration Examples
-
-### Python Integration
-
-```python
-import requests
-from datetime import datetime
-
-class MaaSClient:
-    def __init__(self, base_url="http://localhost:8000"):
-        self.base_url = base_url
-        self.base_endpoint = f"{base_url}/api/v1/measurements"
-    
-    def start_count_rate(self, duration_seconds, detector_id):
-        """Start a count-rate measurement."""
-        response = requests.post(
-            f"{self.base_endpoint}/count-rate",
-            json={
-                "duration_seconds": duration_seconds,
-                "metadata": {"detector": detector_id}
-            }
-        )
-        return response.json()
-    
-    def get_status(self, measurement_id):
-        """Get measurement status."""
-        response = requests.get(
-            f"{self.base_endpoint}/{measurement_id}/status"
-        )
-        return response.json()
-    
-    def wait_for_completion(self, measurement_id, poll_interval=2):
-        """Wait for measurement to complete."""
-        while True:
-            status = self.get_status(measurement_id)
-            
-            if status["status"] in ["completed", "stopped", "failed"]:
-                return status
-            
-            print(f"Running... {status['duration_so_far']:.1f}s elapsed")
-            time.sleep(poll_interval)
-
-# Usage
-client = MaaSClient()
-resp = client.start_count_rate(60, "detector_1")
-measurement_id = resp["measurement_id"]
-
-result = client.wait_for_completion(measurement_id)
-print(f"Final results: {result['results']}")
-```
-
-### Node.js Integration
-
-```javascript
-class MaaSClient {
-  constructor(baseUrl = "http://localhost:8000") {
-    this.baseUrl = baseUrl;
-    this.endpoint = `${baseUrl}/api/v1/measurements`;
-  }
-  
-  async startCountRate(durationSeconds, detectorId) {
-    const response = await fetch(`${this.endpoint}/count-rate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        duration_seconds: durationSeconds,
-        metadata: { detector: detectorId }
-      })
-    });
-    return response.json();
-  }
-  
-  async getStatus(measurementId) {
-    const response = await fetch(
-      `${this.endpoint}/${measurementId}/status`
-    );
-    return response.json();
-  }
-  
-  async waitForCompletion(measurementId, pollInterval = 2000) {
-    while (true) {
-      const status = await this.getStatus(measurementId);
-      
-      if (["completed", "stopped", "failed"].includes(status.status)) {
-        return status;
-      }
-      
-      console.log(`Running... ${status.duration_so_far.toFixed(1)}s elapsed`);
-      await new Promise(r => setTimeout(r, pollInterval));
-    }
-  }
-}
-
-// Usage
-const client = new MaaSClient();
-const resp = await client.startCountRate(60, "detector_1");
-const result = await client.waitForCompletion(resp.measurement_id);
-console.log("Final results:", result.results);
-```
-
----
-
-## Channel Management
-
-MaaS includes an integrated **channel booking system** for managing exclusive channel resources.
-
-### What are Channels?
-
-- **48 Total Channels**: Numbered 1-16, 101-116, and 201-216
-- **Exclusive Access**: Only one measurement can use a channel at a time
-- **Automatic Management**: Channels are booked/released automatically with measurements
-- **Manual Control**: Optional manual booking for advanced scenarios
-
-### Channel API Endpoints
-
-All channel operations are at `/api/v1/channels/` (separate from measurements):
+There are **48 channels**: `1–16`, `101–116`, `201–216`. Each channel can be booked by one user at
+a time, and a measurement can only use channels booked under the `user_name` it sends.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/v1/channels/` | GET | List all channels with status |
-| `/api/v1/channels/available` | GET | List available channels and statistics |
-| `/api/v1/channels/book` | POST | Manually book channels under your own username |
-| `/api/v1/channels/release/{user_name}` | POST | Release the listed channels (`{"channel_numbers": [...]}`); your own, or any user's if you are an admin |
+| `/api/v1/channels/` | GET | Every channel with its status, owner and booking time |
+| `/api/v1/channels/available` | GET | Counts, free channel numbers, and which user holds which channels |
+| `/api/v1/channels/parameters` | GET | Current trigger voltage and input delay of each channel |
+| `/api/v1/channels/book` | POST | Book channels under your own username |
+| `/api/v1/channels/release/{user_name}` | POST | Release some of a user's channels |
 
-### Automatic Channel Booking (Save-Raw-Tags)
+**Book:**
 
-Channels are **required** for save-raw-tags measurements and are automatically booked:
+```bash
+curl -X POST http://localhost:8000/api/v1/channels/book \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"user_name": "alice", "channel_numbers": [1, 2]}'
+```
+
+**Release** (the listed channels must all be booked by that user, otherwise nothing is released):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/channels/release/alice \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"channel_numbers": [1, 2]}'
+```
+
+Releasing also resets those channels to **trigger 0.5 V / delay 0 ps**. The response contains
+`parameter_reset_id`, the ID of that reset job, which you can poll like a measurement.
+
+| Rule | Normal user | Admin |
+|------|-------------|-------|
+| Book | Only under your own username | Only under your own username |
+| Release | Only your own channels | Any user's channels |
+
+For more detail see [CHANNEL_MANAGEMENT_GUIDE.md](CHANNEL_MANAGEMENT_GUIDE.md).
+
+---
+
+## 4. Measurements
+
+All measurement endpoints are `POST /api/v1/measurements/<type>` and take:
+
+```json
+{
+  "duration_seconds": 10,
+  "metadata": { "user_name": "alice", "...": "type-specific fields" }
+}
+```
+
+`metadata.user_name` is **required** for every type and must own all channels used.
+The response (HTTP 201) is:
+
+```json
+{
+  "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
+  "measurement_type": "count_rate",
+  "status": "queued",
+  "started_at": "2026-11-10T10:00:00",
+  "message": "Count-rate measurement queued with channels [1, 2]. Use ID '...' to query status or stop."
+}
+```
+
+### Measurement types
+
+Times (`binwidth`, `coincidence_window`, `input_delay`) are in **picoseconds**.
+
+| Endpoint | Required metadata | Optional metadata (default) | Saves a file |
+|----------|------------------|-----------------------------|--------------|
+| `count-rate` | `channels` | `binwidth` (1e9 = 1 s), `n_values` (1), `target_location` | yes |
+| `correlation` | `channel1`, `channel2` | `binwidth` (1000), `n_values` or `n_bins` (1000), `target_location` | yes |
+| `coincidences` (alias `coincidence`) | `coincidences` (list of lists, e.g. `[[1, 2], [2, 3, 5]]`) | `coincidence_window` (1000), `timestamp` (`Last`), `binwidth` (1e9), `n_values` (1), `target_location` | yes |
+| `save-raw-tags` | `channel_list`, `target_file_path` | – | yes (`.ttbin`) |
+| `count-rate-live` | `channels` | `binwidth` (1e9), `n_values` (1), `refresh_rate` (25 Hz) | no, streams |
+| `coincidences-live` (alias `coincidence-live`) | `coincidences` | as `coincidences`, plus `refresh_rate` (25 Hz) | no, streams |
+| `histogram-live` | `start_channel`, `click_channel` | `binwidth` (1000), `n_bins` (1000), `refresh_rate` (25 Hz) | no, streams |
+| `startstop-live` | `start_channel`, `click_channel` | `binwidth` (1000), `refresh_rate` (25 Hz) | no, streams |
+| `correlation-live` | `channel1`, `channel2` | `binwidth` (1000), `n_bins` (1000), `refresh_rate` (25 Hz) | no, streams |
+
+Notes:
+
+- **`duration_seconds`** is required for `count-rate`, `correlation`, `coincidences` and
+  `save-raw-tags`. For `count-rate-live` and `coincidences-live` it is optional: omit it to stream
+  until stopped. `histogram-live`, `startstop-live` and `correlation-live` always run until stopped.
+- **Coincidences** must be a list of lists; a flat list like `[1, 2]` is rejected. `channels` and
+  `coincidence_groups` are accepted as other names for `coincidences`, and `coincidenceWindow` for
+  `coincidence_window`. `timestamp` is one of `Last`, `First`, `ListedFirst`, `Average`.
+
+### Example: count rate
+
+```bash
+curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "duration_seconds": 10,
+    "metadata": {
+      "user_name": "alice",
+      "channels": [1, 2],
+      "binwidth": 1000000000,
+      "n_values": 10
+    }
+  }'
+```
+
+### Example: save raw tags
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/measurements/save-raw-tags \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{
-    "duration_seconds": 60,
+    "duration_seconds": 30,
     "metadata": {
-      "channel_list": [1, 2, 3],
-      "target_file_path": "C:\\data\\output.dat"
+      "user_name": "alice",
+      "channel_list": [1, 2],
+      "target_file_path": "C:\\data\\run_001.ttbin"
     }
   }'
 ```
 
-**Response** (channels automatically booked):
-```json
-{
-  "measurement_id": "abc-123",
-  "status": "queued",
-  "message": "Save-raw-tags measurement queued with channels [1, 2, 3]. Booked channels: [1, 2, 3]"
-}
-```
+### Where results are saved
 
-When the measurement **completes, stops, or fails**, channels are **automatically released**.
+`target_location` (and `target_file_path`) is a **file path** on the PC running the worker.
+Placeholders:
 
-### Count-Rate with Custom Target Location
+- `{datetime}` → start time as `YYYYMMDD_HHMMSS`, e.g. `20261110_143045`
+- `{measurement-type}` → e.g. `count_rate`
+- `~` → the home folder of the user running the worker
 
-For count-rate measurements, you can customize where results are saved:
+The default is `~/Desktop/MaasData/{datetime}/{measurement-type}`, which gives a CSV file such as
+`C:\Users\<you>\Desktop\MaasData\20261110_143045\count_rate`. If the path is an existing folder or
+ends with `/` or `\`, a file named `<type>_<datetime>.csv` (`.ttbin` for raw tags) is created
+inside it. Missing folders are created.
 
-```bash
-curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "duration_seconds": 60,
-    "metadata": {
-      "channels": [1, 2, 3],
-      "binwidth": 1000000000,
-      "n_values": 10,
-      "target_location": "C:\\custom\\path\\my_measurement_{datetime}.csv"
-    }
-  }'
-```
+### Changing channel settings
 
-The `target_location` field supports these placeholders:
-- `{datetime}`: Replaced with current timestamp (e.g., `2026-05-22_14-30-45`)
-- `{measurement-type}`: Replaced with measurement type (e.g., `count_rate`)
-
-### Check Available Channels
+`POST /api/v1/set-parameters` sets the trigger voltage and/or input delay of booked channels:
 
 ```bash
-curl http://localhost:8000/api/v1/channels/available
+curl -X POST http://localhost:8000/api/v1/set-parameters \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"metadata": {"user_name": "alice", "channels": [1, 2], "trigger_voltage": 0.5, "input_delay": 1000}}'
 ```
 
-**Response**:
-```json
-{
-  "total_channels": 48,
-  "available_channels": 45,
-  "booked_channels": 3,
-  "utilization_percent": 6.25,
-  "available_channel_numbers": [1, 2, 3, 4, 5, ...],
-  "booked_by_identifier": {
-    "measurement-001": [10, 11, 12]
-  }
-}
-```
-
-### List All Channels with Status
-
-```bash
-curl http://localhost:8000/api/v1/channels/
-```
-
-**Response**:
-```json
-{
-  "channels": [
-    {
-      "channel": 1,
-      "status": "available",
-      "booked_by": null
-    },
-    {
-      "channel": 2,
-      "status": "booked",
-      "booked_by": "measurement-001"
-    },
-    ...
-  ],
-  "total_channels": 48,
-  "available_channels": 46,
-  "booked_channels": 2
-}
-```
-
-### Manual Channel Management
-
-For advanced scenarios, you can manually book/release channels.
-
-**Permissions** (the caller is identified from the bearer token):
-
-| Action | Normal user | Admin |
-|--------|-------------|-------|
-| Book | Only under your own username | Only under your own username (no bypass) |
-| Release | Only your own channels | Any user's channels (name the owner in the path) |
-
-Breaking these rules returns **HTTP 403** and changes nothing.
-
-**Book Channels** (`user_name` must be your own username):
-```bash
-curl -X POST http://localhost:8000/api/v1/channels/book \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_name": "my-username",
-    "channel_numbers": [5, 6, 7]
-  }'
-```
-
-**Release Channels** (your own; admins may put any user's username in the path):
-```bash
-curl -X POST http://localhost:8000/api/v1/channels/release/my-username   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"channel_numbers": [5, 6]}'
-```
-
-### Channel Booking Errors
-
-If channels are unavailable:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/measurements/count-rate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "duration_seconds": 60,
-    "metadata": {
-      "detector_id": "det_001",
-      "channel_list": [1, 2, 999]
-    }
-  }'
-```
-
-**Response** (HTTP 400):
-```json
-{
-  "detail": "Invalid channel number: 999"
-}
-```
-
-If channels are already booked:
-
-**Response** (HTTP 409):
-```json
-{
-  "detail": "Channels already booked: [1, 2]"
-}
-```
-
-If you book under someone else's username, or (as a non-admin) release someone else's channels:
-
-**Response** (HTTP 403):
-```json
-{
-  "detail": "You can only book channels under your own username"
-}
-```
-```json
-{
-  "detail": "You can only release your own channels"
-}
-```
-
-### Channel Management Best Practices
-
-✅ **DO**:
-- Check available channels before booking
-- Book under your own username (bookings under any other name are rejected)
-- Release channels when done with measurements
-- Monitor channel utilization
-
-❌ **DON'T**:
-- Book channels you don't need
-- Forget about manually-booked channels
-- Assume all channels are always available
-- Book invalid channel numbers (must be 1-16, 101-116, or 201-216)
+It runs as a short job with its own `measurement_id`.
 
 ---
 
-## Troubleshooting
+## 5. Status
 
-### "Connection refused" Error
-
-```
-Problem: Can't connect to MaaS
-Solution: 
-  1. Ensure server is running: python -m uvicorn main:app
-  2. Check correct URL: http://localhost:8000
-  3. Check firewall: Port 8000 should be open
+```bash
+curl http://localhost:8000/api/v1/measurements/<measurement_id>/status \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-### "Health check shows Redis unhealthy"
-
-```
-Problem: Redis component showing unhealthy
-Solution:
-  1. Start Redis: redis-server
-  2. Check Redis is running: redis-cli ping (should return PONG)
-  3. Check Redis host/port in code
-```
-
-### "Measurement returns HTTP 422"
-
-```
-Problem: Missing or invalid fields
-Solution:
-  1. Read error message carefully
-  2. Check required fields are present
-  3. Verify field types (list vs string, etc.)
-  4. Check visit http://localhost:8000/docs for examples
+```json
+{
+  "measurement_id": "550e8400-e29b-41d4-a716-446655440000",
+  "measurement_type": "count_rate",
+  "status": "completed",
+  "started_at": "2026-11-10T10:00:00.120000",
+  "duration_so_far": 10.4,
+  "metadata": { "user_name": "alice", "channels": [1, 2], "...": "..." },
+  "results": { "status": "completed", "total_count": 123456, "...": "..." },
+  "message": "count_rate measurement completed successfully"
+}
 ```
 
-### "Measurement times out or doesn't complete"
+| Status | Meaning |
+|--------|---------|
+| `queued` | Accepted, waiting for the worker. Stays here if the worker is not running |
+| `active` | Running on the Time Tagger |
+| `completed` | Finished; `results` holds a summary (counts, duration) and the data is in the saved file |
+| `stopped` | Stopped by a `DELETE` request |
+| `failed` | Something went wrong; `message` says what |
 
-```
-Problem: Measurement seems stuck
-Solution:
-  1. Check system has enough resources
-  2. Try stopping (DELETE) and restarting
-  3. Check backend worker is running
-  4. Check logs for errors
-```
+`results` is a short summary; its fields depend on the measurement type. The full data is in the
+saved file, or in the live stream.
 
-### "Can't find saved file"
-
-```
-Problem: Save-raw-tags didn't save file where expected
-Solution:
-  1. Use absolute path in target_file_path
-  2. Ensure path exists and is writable
-  3. Check file permissions
-  4. Try with simpler path first (e.g., C:\\output.dat)
-```
+Status is kept for **1 hour after its last update**, then a status query returns 404. The request
+logs keep a permanent record (see [GETTING_STARTED.md](GETTING_STARTED.md#5-where-to-look-logs)).
 
 ---
 
-## FAQ
+## 6. Stopping a measurement
 
-**Q: How long can a measurement run?**
-A: Up to 3600 seconds (1 hour). Longer times are not recommended. Contact support for special cases.
+```bash
+curl -X DELETE http://localhost:8000/api/v1/measurements/<measurement_id> \
+  -H "Authorization: Bearer $TOKEN"
+```
 
-**Q: Can I run multiple measurements at once?**
-A: Yes! That's a key feature. Start as many as you need, they run concurrently.
-
-**Q: What happens if I stop the web server?**
-A: Active measurements will be interrupted. Status will remain in Redis for 1 hour. Restart the web server and query the status to see what happened.
-
-**Q: Can I customize the metadata fields?**
-A: Yes! You can add any fields to the metadata dict. The system doesn't restrict custom fields.
-
-**Q: How often should I poll for status?**
-A: Every 1-5 seconds is reasonable. More frequent polling won't make results available faster.
-
-**Q: Can I see historical measurements?**
-A: Status is stored in Redis for 1 hour, then auto-deleted. For longer retention, save results to your own database.
-
-**Q: What's the maximum number of concurrent measurements?**
-A: System-dependent, but typically 100+ concurrent measurements are supported.
-
-**Q: Can I run measurements without querying status?**
-A: Yes, but you won't know when they complete. Always query status to know the results.
+- A `queued` or `active` measurement becomes `stopped`.
+- **Any data file it has already written is deleted.** Use a shorter `duration_seconds` instead
+  of stopping early if you want to keep the data.
+- Channels stay booked; release them separately.
+- Calling it on a measurement that has already finished returns its current status and changes
+  nothing.
 
 ---
 
-## Getting Help
+## 7. Live data (WebSocket)
 
-1. **Documentation**: Check README files in the project
-2. **API Docs**: Visit `http://localhost:8000/docs` 
-3. **Error Messages**: Read HTTP error responses carefully
-4. **Logs**: Check server logs for detailed error messages
-5. **Health Check**: Run `curl http://localhost:8000/health` to verify system
+Live measurements publish updates at `refresh_rate` to:
+
+```
+ws://localhost:8000/api/v1/measurements/stream/<measurement_id>
+```
+
+Authenticate with an `Authorization: Bearer <token>` header or, if your client can't set headers,
+`?token=<token>`. Without a valid token the connection is closed with code 1008.
+
+Each message is a JSON object with `type`, `status_id`, `timestamp` and:
+
+| Type | Fields |
+|------|--------|
+| `count_rate` (count-rate-live) | `data`: counts per channel for the last `n_values` bins; `final`: `true` on the last update of a timed run |
+| `histogram_live`, `startstop_live`, `correlation_live` | `data`: counts per bin; `index`: bin times in ps |
+| `coincidences_live` | `streams`: one entry per coincidence group with `coincidence`, `virtual_channel`, `rate` (latest bin, counts/s) and `data` (last `n_values` bins) |
 
 ---
 
-## Next Steps
+## 8. Errors
 
-- Try the quick start measurements
-- Integrate MaaS into your application
-- Read [README_DEVELOPER_GUIDE.md](README_DEVELOPER_GUIDE.md) for debugging
-- Contact your administrator for production setup
+Errors return JSON with a `detail` field.
+
+| HTTP | Typical `detail` | Cause |
+|------|------------------|-------|
+| 400 | `Invalid channel numbers: [999]. Valid channels: [...]` | Channel outside 1–16, 101–116, 201–216 |
+| 401 | `Not authenticated` / `Invalid token` / `Token expired` | Missing, bad or expired token |
+| 401 | `Invalid credentials` | Wrong username or password at login |
+| 403 | `Channel 3 is not booked by user 'alice'` | Measurement uses a channel you haven't booked |
+| 403 | `You can only book channels under your own username` | `user_name` differs from the logged-in user |
+| 403 | `You can only release your own channels` | Non-admin releasing someone else's channels |
+| 404 | `Measurement '...' not found` | Wrong ID, or status already expired (1 hour) |
+| 409 | `Cannot book channels [1, 2] - already booked` | Another user holds the channel |
+| 409 | `Cannot release channels [5] - not booked by alice` | Releasing channels the user doesn't hold |
+| 422 | List of `Field required` / type errors | Missing or wrongly typed field in the request body |
+| 500 | Error text | Unexpected server error, see `logs/services/main.log` |
+
+---
+
+## 9. Python example
+
+```python
+import time
+import requests
+
+BASE = "http://localhost:8000"
+USER = "alice"
+
+token = requests.post(f"{BASE}/auth/login",
+                      json={"username": USER, "password": "secret"}).json()["token"]
+s = requests.Session()
+s.headers["Authorization"] = f"Bearer {token}"
+
+s.post(f"{BASE}/api/v1/channels/book",
+       json={"user_name": USER, "channel_numbers": [1, 2]}).raise_for_status()
+try:
+    r = s.post(f"{BASE}/api/v1/measurements/count-rate", json={
+        "duration_seconds": 10,
+        "metadata": {"user_name": USER, "channels": [1, 2], "n_values": 10},
+    })
+    r.raise_for_status()
+    mid = r.json()["measurement_id"]
+
+    while True:
+        st = s.get(f"{BASE}/api/v1/measurements/{mid}/status").json()
+        if st["status"] in ("completed", "stopped", "failed"):
+            break
+        time.sleep(1)
+    print(st["status"], st["message"], st["results"])
+finally:
+    s.post(f"{BASE}/api/v1/channels/release/{USER}",
+           json={"channel_numbers": [1, 2]})
+```
